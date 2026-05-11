@@ -32,6 +32,22 @@ BuildQuote internal users (reviewers, admins) log in via the same auth system bu
 
 ---
 
+## Phase 1c — Supabase Local Setup
+
+Before building upload or extraction flows, the local (and eventually hosted) Data Studio Supabase project must be initialised and migrations applied.
+
+This is a prerequisite for all phases that follow.
+
+See [`docs/supabase-local-setup.md`](./supabase-local-setup.md) for:
+- The safety boundary between Data Studio Supabase and production Supabase
+- Required environment variables and placeholders
+- Local setup commands (`supabase init`, `supabase start`, `supabase db reset`) and when to run them
+- Migration order
+
+**Exit criteria:** local Supabase is running, all three migrations are applied, and `.env.local` is populated with local credentials.
+
+---
+
 ## Phase 2 — Upload and Storage
 
 - Manufacturer login (Supabase Auth)

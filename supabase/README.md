@@ -1,5 +1,15 @@
 # supabase
 
+> **SAFETY WARNING — READ BEFORE RUNNING ANY SUPABASE COMMANDS**
+>
+> This folder is for the **Data Studio Supabase project only**.
+> It is **not** the production BuildQuote Supabase project.
+> Never run these migrations against the production Supabase project.
+> Never store production service role keys in this repo.
+> See [`docs/supabase-local-setup.md`](../docs/supabase-local-setup.md) before initialising or running anything.
+
+---
+
 Supabase configuration for the Data Studio **staging** project.
 
 **This is NOT the production Supabase project.**

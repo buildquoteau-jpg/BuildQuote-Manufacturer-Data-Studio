@@ -94,6 +94,16 @@ The API skeleton lives in [`services/api/`](./services/api/) but is not wired in
 
 ---
 
+## Supabase Setup
+
+Data Studio uses its own Supabase project, separate from the production BuildQuote Supabase. Before running any Supabase commands, read:
+
+**[`docs/supabase-local-setup.md`](./docs/supabase-local-setup.md)**
+
+This covers the safety boundary between Data Studio and production, required environment variables, local setup steps, and migration order.
+
+---
+
 ## Docs
 
 See [`docs/`](./docs/) for full architecture, workflow, repo boundaries, storage design, parser contracts, and build plan.
