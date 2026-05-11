@@ -51,13 +51,21 @@ See [`docs/upload-flow.md`](./upload-flow.md) and [`docs/storage-architecture.md
 
 ---
 
-## Phase 3 — Extraction
+## Phase 3 — Docling Extraction and Chunk Classification
 
-- Run Docling against the stored PDF
-- Save page-level and chunk-level extraction records to staging DB
-- Classify chunks by content type (system description, component table, colour chart, etc.)
+- Download source PDF from R2 to a temporary local path
+- Run Docling extraction (pipeline stage 3): save `document_pages` and `document_chunks` rows
+- Store raw Docling JSON in `document_pages.docling_json` and `document_chunks.docling_json`
+- Preserve page numbers accurately (1-indexed) — page number is the visual anchor for verification
+- Store tables as JSON in `document_chunks.table_json`
+- Generate page preview images and store in R2 under `page-previews/` (separate step)
+- Run chunk classification (pipeline stage 4): assign `chunk_type` to each chunk
+- `extraction_runs` rows created for both the Docling run and the classification run
 
-**Exit criteria:** raw extracted content is queryable per page and per chunk.
+See `docs/docling-strategy.md` for page number, table preservation and confidence rules.
+See `pipelines/docling/run_docling_extract.py` and `pipelines/chunking/chunk_document.py`.
+
+**Exit criteria:** raw extracted content is queryable per page and per chunk, with chunk types assigned.
 
 ---
 

@@ -77,9 +77,13 @@ See [`docs/auth-and-workspaces.md`](./auth-and-workspaces.md) for roles, permiss
 
 The Data Studio Supabase project is organised into five logical layers. Each layer feeds the next.
 
+Each database layer corresponds to a pipeline stage. See [`docs/extraction-pipeline.md`](./extraction-pipeline.md) for stage-by-stage input/output contracts.
+
 ### 1. Source Layer
 
 Tables: `source_documents`, `document_pages`
+
+Pipeline stages: 1 (ingest), 2 (R2 storage), 3 (Docling extraction — page records)
 
 Stores the original uploaded manufacturer PDF metadata and rendered page images (images stored in R2, referenced by key). Every downstream record must be traceable back to a row in `source_documents`.
 
@@ -87,17 +91,23 @@ Stores the original uploaded manufacturer PDF metadata and rendered page images 
 
 Tables: `extraction_runs`, `document_chunks`
 
+Pipeline stages: 3 (Docling extraction — chunk records), 4 (chunk classification), 5 & 6 (AI parsing runs)
+
 Records each pipeline run (Docling extraction, chunking, classification) and the chunk-level output. Chunks are typed by content (system_description, product_table, specification_table, etc.) so the correct parsing prompt can be selected.
 
 ### 3. Staging Layer
 
 Tables: `staged_systems`, `staged_components`, `staged_system_components`, `staged_system_colours`, `staged_system_profiles`
 
+Pipeline stages: 5 (parse systems), 6 (parse components/colours/profiles)
+
 Holds AI/agent-generated draft records. All records start with `verification_status = 'pending_review'`. No staged record may be exported until a human sets it to `approved`.
 
 ### 4. Verification Layer
 
 Tables: `verification_events`, `field_verifications`
+
+Pipeline stage: 7 (verification prep — seeds field_verifications rows for the UI)
 
 Two tables work together here with distinct responsibilities:
 
@@ -110,6 +120,8 @@ The UI drives off `field_verifications`. The audit trail lives in `verification_
 ### 5. Publishing Layer
 
 Tables: `publish_batches`, `publish_batch_items`
+
+Pipeline stage: 8 (export/publish — server-side only, service role key)
 
 Tracks controlled exports from Data Studio staging into production Supabase. A publish batch groups approved records for export. Each item tracks the production table it maps to and the production ID assigned after export.
 
