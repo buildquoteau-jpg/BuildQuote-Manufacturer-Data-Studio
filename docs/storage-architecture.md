@@ -53,6 +53,23 @@ manufacturers/{manufacturer_slug}/branding/logo.{ext}
 manufacturers/{manufacturer_slug}/branding/hero.{ext}
 ```
 
+---
+
+## Image Asset Types
+
+Four image asset types must be supported. R2 stores the binary; Supabase stores only the URL or storage key. Image upload is not yet implemented — these fields and key paths are reserved.
+
+| Image type | R2 key path | Supabase field |
+|---|---|---|
+| Manufacturer logo | `…/branding/logo.{ext}` | `data_studio_manufacturers.logo_url` |
+| Manufacturer hero image | `…/branding/hero.{ext}` | `data_studio_manufacturers.hero_image_url` |
+| System / product hero image | `…/approved-images/systems/{staged_system_id}/hero.{ext}` | `staged_systems.hero_image_url` |
+| Approved product / card images | `…/approved-images/components/{staged_component_id}/{filename}` | `staged_system_colours.image_url` |
+
+These are website-style presentation assets. The manufacturer and system hero images function as full-width page header banners, not thumbnails. Approved product/card images are per-colour/per-component assets confirmed during verification.
+
+---
+
 ### Key design notes
 
 - `manufacturer_slug` at the root makes it easy to see all objects for a manufacturer and to scope access policies per manufacturer.
