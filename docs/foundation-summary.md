@@ -153,6 +153,8 @@ Dimension fields to preserve in staged components (they feed `rfq_draft_items` d
 
 Do not build the whole palace. Build one strong room first.
 
+First implementation slice:
+
 ```
 One manufacturer
   → one login / workspace path
