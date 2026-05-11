@@ -56,6 +56,44 @@ This is the recommended starting point for any new Claude Code session working i
 
 ---
 
+## Local Development
+
+### Install dependencies
+
+```powershell
+pnpm install
+```
+
+### Run the web app
+
+```powershell
+pnpm dev
+```
+
+Opens at [http://localhost:3000](http://localhost:3000).
+
+### Windows PowerShell — execution policy
+
+If PowerShell blocks pnpm with:
+
+```
+running scripts is disabled on this system
+```
+
+Run this **for the current terminal session only** — it does not permanently change your machine policy:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Then rerun `pnpm dev`.
+
+### Python API
+
+The API skeleton lives in [`services/api/`](./services/api/) but is not wired into the root dev command yet. See [`services/api/README.md`](./services/api/README.md) for planned routes and structure.
+
+---
+
 ## Docs
 
 See [`docs/`](./docs/) for full architecture, workflow, repo boundaries, storage design, parser contracts, and build plan.
