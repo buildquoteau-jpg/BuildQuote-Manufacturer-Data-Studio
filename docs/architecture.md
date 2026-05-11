@@ -59,6 +59,20 @@ R2 objects are referenced from Supabase via `storage_key` (the full R2 object ke
 
 See [`docs/storage-architecture.md`](./storage-architecture.md) for the full R2 key structure and access policy notes.
 
+## Auth and Workspace Layer
+
+Data Studio uses Supabase Auth for authentication. Every authenticated user has a row in `data_studio_user_profiles` which carries their `global_role` (`manufacturer_user`, `buildquote_reviewer`, or `buildquote_admin`).
+
+Manufacturer users belong to one or more workspaces via `manufacturer_users` membership rows. Within a workspace, their `role` is either `manufacturer_admin` or `manufacturer_reviewer`. BuildQuote internal users (`buildquote_reviewer`, `buildquote_admin`) access all workspaces via their global role.
+
+New users are invited via `workspace_invitations`. Invitations are token-based and server-validated. Acceptance creates a `manufacturer_users` row linking the new user's profile to the workspace.
+
+RLS (row-level security) will enforce that manufacturer users can only access rows scoped to their active workspace memberships. BuildQuote admins may access all workspaces. Production migration is server-side only using the service role key — no browser client may trigger a production write.
+
+See [`docs/auth-and-workspaces.md`](./auth-and-workspaces.md) for roles, permissions, and RLS intent.
+
+---
+
 ## Data Studio Database Layers
 
 The Data Studio Supabase project is organised into five logical layers. Each layer feeds the next.

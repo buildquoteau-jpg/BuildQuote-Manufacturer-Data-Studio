@@ -16,6 +16,22 @@ Each phase delivers a working vertical slice. Do not start a phase until the pre
 
 ---
 
+## Phase 1b — Manufacturer Login and Workspace Selection
+
+Before uploading anything, the manufacturer must:
+
+1. Sign up or log in via Supabase Auth.
+2. Have a `data_studio_user_profiles` row created on first login (global_role = `manufacturer_user`).
+3. Either accept a workspace invitation (creating a `manufacturer_users` row) or be manually assigned to a workspace by a BuildQuote admin.
+4. Select their active workspace (manufacturer account) from their dashboard.
+5. All subsequent actions (uploads, verification, review) are scoped to the selected workspace's `manufacturer_id`.
+
+BuildQuote internal users (reviewers, admins) log in via the same auth system but their `global_role` grants cross-workspace access without workspace selection.
+
+**Exit criteria:** a manufacturer user can log in, land in their workspace dashboard, and see their (empty) document list.
+
+---
+
 ## Phase 2 — Upload and Storage
 
 - Manufacturer login (Supabase Auth)
