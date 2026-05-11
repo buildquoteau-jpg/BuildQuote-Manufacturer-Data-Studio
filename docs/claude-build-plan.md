@@ -22,3 +22,15 @@ Nothing else matters until that loop closes end-to-end.
 - AI suggestions are drafts. Humans close the loop.
 - Do not touch production until Phase 6 and only with explicit confirmation.
 - If a decision is uncertain, document it in the relevant doc and flag it — do not guess silently.
+
+---
+
+## Starting a New Claude Session
+
+Every new Claude Code session working in this repo should begin by reading:
+
+**[`docs/foundation-summary.md`](./foundation-summary.md)**
+
+It contains the canonical project briefing: three-repo boundaries, storage rules, database layers, parser contract rules, uom naming, dimension fields, the first implementation slice, and Claude Code safety rules.
+
+Do not begin implementation work without reading it first.

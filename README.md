@@ -46,6 +46,16 @@ Source documents (PDFs, product guides) are stored in **Cloudflare R2**. Supabas
 
 ---
 
+## Foundation Summary
+
+For a concise project briefing — including architecture boundaries, database layers, parser rules, safety constraints, and the first implementation slice — start here:
+
+**[`docs/foundation-summary.md`](./docs/foundation-summary.md)**
+
+This is the recommended starting point for any new Claude Code session working in this repo.
+
+---
+
 ## Docs
 
-See [`docs/`](./docs/) for architecture, workflow, repo boundaries, storage design, and build plan.
+See [`docs/`](./docs/) for full architecture, workflow, repo boundaries, storage design, parser contracts, and build plan.
