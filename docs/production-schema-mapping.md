@@ -2,7 +2,22 @@
 
 This document tracks how Data Studio staged records map to production Supabase tables.
 
-**Status: updated — aligned with `001_initial_extraction_schema.sql` and `002_field_verification_state.sql`.**
+**Status: updated — aligned with `001_initial_extraction_schema.sql`, `002_field_verification_state.sql`, and parser contracts.**
+
+## Parser Output and Production Names
+
+Parser output (`parse_systems.py`, `parse_components.py`) always uses Data Studio staging names.
+The export step in `pipelines/publishing/export_publish_batch.py` handles all production name mapping.
+
+The most important mapping to remember:
+
+| Parser / staged table | Production table | Field rename |
+|---|---|---|
+| `staged_components.uom` | `components.unit` | `uom` → `unit` |
+
+All other field names in the parser output match the staging table columns exactly.
+The staging table columns map to production as documented below.
+Do not rename `uom` to `unit` during extraction, staging, or verification — only during export.
 
 ---
 

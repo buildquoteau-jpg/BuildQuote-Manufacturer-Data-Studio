@@ -25,4 +25,18 @@ Stages 5 and 6 of the Data Studio extraction pipeline.
 - `staged_system_profiles`
 - `field_verifications` seeded per field
 
-**Status:** Placeholder only. See `docs/extraction-pipeline.md` and `prompts/`.
+## Contract Validation
+
+Parser modules must validate AI output against the defined contracts **before** inserting any staged rows into Supabase.
+
+Validation rules (from `docs/parser-contracts.md`):
+1. Reject records missing a required `name` field.
+2. Reject records where a numeric field contains a non-numeric value.
+3. Reject records where `extraction_confidence` is absent or outside 0.0–1.0.
+4. Strip unknown fields before insert — do not pass unrecognised keys to Supabase.
+5. If the AI returns prose instead of JSON, log to `extraction_runs.error_message` and set status to `failed`.
+6. Warn (do not reject) if `field_sources` is empty — flag the record as low-confidence.
+
+See `docs/parser-contracts.md` for full contracts and example outputs in `samples/expected-outputs/`.
+
+**Status:** Contracts defined. Implementation pending.

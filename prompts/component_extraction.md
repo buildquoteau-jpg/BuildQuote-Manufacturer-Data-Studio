@@ -1,65 +1,127 @@
 # Prompt: Component Extraction
 
-**Status: placeholder — refine after first real extraction run.**
+**Status: contract defined — refine wording after first real extraction run.**
+
+See `docs/parser-contracts.md` Contract 2 for the full JSON output specification.
 
 ---
 
 ## Purpose
 
-Extract component records and dimension data from a specification table or component list chunk.
+Extract component records, system-component relationships, colour options, and profile variants from classified manufacturer product guide content.
 
-## Expected Input
+A "component" in BuildQuote is an individual product line item — a sheet, flashing, clip, fastener, ridge cap, trim piece, or accessory — that can be added to a system and quoted.
 
-- `manufacturer_name`: string
-- `system_name`: string (parent system this chunk belongs to)
-- `chunk_text`: the classified text/table content
-- `chunk_type`: "component_list" | "specification_table"
+---
 
-## Expected Output
+## Input Variables
 
-A JSON array of staged component objects:
+| Variable | Type | Description |
+|---|---|---|
+| `{{manufacturer_name}}` | string | Manufacturer name |
+| `{{source_document_id}}` | uuid string | Supabase source_documents.id |
+| `{{source_chunk_id}}` | uuid string | Supabase document_chunks.id |
+| `{{source_page_number}}` | integer | Page number (1-indexed) |
+| `{{chunk_type}}` | string | `product_table` \| `specification_table` \| `accessory_list` \| `colour_chart` |
+| `{{chunk_text}}` | string | Extracted text content of the chunk |
+| `{{table_json}}` | JSON or null | Structured table data (prefer for specification tables) |
+| `{{system_context}}` | JSON or null | Known system records to link components to (name, product_code) |
+
+---
+
+## Output Contract
+
+Return a single JSON object. No markdown. No prose. No text before or after the JSON.
 
 ```json
-[
-  {
-    "name": "Component name",
-    "sku": "SKU or product code if present",
-    "uom": "unit of measure (e.g. lm, m2, each, roll)",
-    "description": "Description if present",
-    "length_mm": null,
-    "width_mm": null,
-    "height_mm": null,
-    "thickness_mm": null,
-    "depth_mm": null,
-    "gauge_mm": null,
-    "diameter_mm": null,
-    "roll_m": null,
-    "weight_kg": null,
-    "pieces": null,
-    "notes": "Extraction uncertainty or caveats"
-  }
-]
+{
+  "components": [...],
+  "system_components": [...],
+  "system_colours": [...],
+  "system_profiles": [...],
+  "warnings": [...],
+  "ignored_content_notes": [...]
+}
 ```
 
-## Dimension Extraction Note
+Full field specification: see `docs/parser-contracts.md` — Contract 2: Component Extraction.
 
-Populate dimension fields only when the source document explicitly states the value.
-Do not estimate or calculate dimensions. Leave null if not present.
-Use `uom` (unit of measure) not `unit` — the export step handles the rename to production schema.
+---
 
 ## Prompt Template
 
 ```
-You are extracting structured component data from a BuildQuote manufacturer product guide section.
+You are a structured data extraction assistant for BuildQuote, a construction product platform.
+
+Your task is to extract component records, colour options, profile variants, and system-component relationships from a manufacturer product guide section.
 
 Manufacturer: {{manufacturer_name}}
-System: {{system_name}}
+Source document ID: {{source_document_id}}
+Source chunk ID: {{source_chunk_id}}
+Source page number: {{source_page_number}}
 Section type: {{chunk_type}}
 
-Content:
+Section content:
 {{chunk_text}}
 
-Extract all components listed in this section.
-For each component, capture: name, SKU (if present), unit of measure (uom), description, and any dimension values (length_mm, width_mm, height_mm, thickness_mm, depth_mm, gauge_mm, diameter_mm, roll_m, weight_kg, pieces).
-Return a JSON array. Do not invent data. If a field is not in the source, set it to null.
+{% if table_json %}
+Structured table data (prefer this over plain text for dimensions and product codes):
+{{table_json}}
+{% endif %}
+
+{% if system_context %}
+Known systems to link components to (match by name or product_code where possible):
+{{system_context}}
+{% endif %}
+
+RULES — read carefully before extracting:
+
+1. Return JSON only. No markdown. No prose. No text outside the JSON object.
+2. Do not invent products. Only extract components explicitly named in the source content.
+3. If a field value is not clearly present in the source, set it to null.
+4. Do not estimate, convert, or calculate dimensions. Extract only values explicitly stated in the source.
+5. All dimension fields must be numeric. Do not include units inside the value — units belong in uom.
+6. Use uom (unit of measure) not unit. Examples: lm, m2, each, roll, sheet, kg, pack.
+7. For each component, populate field_sources with one entry per extracted non-null field.
+8. Set extraction_confidence to your overall confidence in the component record (0.0–1.0).
+9. List uncertain fields in uncertain_fields.
+10. Separate component descriptions from marketing language.
+
+DIMENSION GUIDANCE:
+- length_mm, width_mm, height_mm, thickness_mm, depth_mm, gauge_mm, diameter_mm — all in millimetres
+- roll_m — roll length in metres
+- weight_kg — weight in kilograms
+- pieces — integer count per pack or bundle
+- Do not convert between units. If the source states metres, do not convert to mm — flag as uncertain instead.
+
+COMPONENT ROLE GUIDANCE (for system_components):
+Use the most specific role that matches the component's function:
+  primary_cladding, decking_board, trim, starter, corner, clip, fastener, sealant, adhesive,
+  required, optional, accessory, other
+
+COLOUR CHART GUIDANCE:
+- Extract one system_colours entry per colour row.
+- colour_name must be the colour name exactly as printed.
+- sku should be the colour-specific product code if listed separately.
+- is_stocked: true if stocked, false if order-only, null if not stated.
+
+PROFILE/SIZE VARIANT GUIDANCE:
+- Extract one system_profiles entry per distinct profile or size variant.
+- dimensions should be the human-readable dimension string as printed.
+
+SOURCE REFERENCES:
+- Set source_document_id to: {{source_document_id}}
+- Set source_chunk_id to: {{source_chunk_id}}
+- Set source_page_number to: {{source_page_number}}
+
+Return the JSON object now.
 ```
+
+---
+
+## Notes for Implementers
+
+- If the AI returns anything other than a JSON object, log the raw response to `extraction_runs.error_message` and set `extraction_runs.status = 'failed'`.
+- Validate the response against the contract before writing to Supabase. See `docs/parser-contracts.md` — Contract Validation Rules.
+- `uom` in parser output maps to `components.unit` in production — the export step handles this rename. Do not rename during extraction or staging.
+- `system_components` uses `staged_system_match` (name/product_code) for linking — app code resolves to actual UUIDs after staged records are inserted.

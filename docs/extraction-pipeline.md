@@ -137,10 +137,11 @@ manufacturers/{manufacturer_slug}/source-documents/{source_document_id}/{origina
 ## Stage 5 — AI Parse: Systems
 
 **Module:** `pipelines/parsing/parse_systems.py`
-
 **Prompt:** `prompts/manufacturer_system_extraction.md`
+**Output contract:** `docs/parser-contracts.md` — Contract 1
+**Example output:** `samples/expected-outputs/system_extraction_example.json`
 
-**Purpose:** Send classified chunks to the Claude API and generate draft staged system records.
+**Purpose:** Send classified chunks to the Claude API and generate draft staged system records. Parser output must be validated against the contract before any DB insert.
 
 **Inputs:**
 - `source_document_id` (uuid)
@@ -159,10 +160,11 @@ manufacturers/{manufacturer_slug}/source-documents/{source_document_id}/{origina
 ## Stage 6 — AI Parse: Components
 
 **Module:** `pipelines/parsing/parse_components.py`
-
 **Prompt:** `prompts/component_extraction.md`
+**Output contract:** `docs/parser-contracts.md` — Contract 2
+**Example output:** `samples/expected-outputs/component_extraction_example.json`
 
-**Purpose:** Send classified chunks to the Claude API and generate draft staged component, colour, profile and relationship records.
+**Purpose:** Send classified chunks to the Claude API and generate draft staged component, colour, profile and relationship records. Parser output must be validated against the contract before any DB insert.
 
 **Inputs:**
 - `source_document_id` (uuid)
@@ -185,8 +187,10 @@ manufacturers/{manufacturer_slug}/source-documents/{source_document_id}/{origina
 ## Stage 7 — Verification Prep
 
 **Module:** `pipelines/verification/prepare_field_verifications.py`
+**Seed contract:** `docs/parser-contracts.md` — Contract 3
+**Example output:** `samples/expected-outputs/verification_seed_example.json`
 
-**Purpose:** Ensure all extractable fields on staged records have a corresponding `field_verifications` row ready for the UI.
+**Purpose:** Ensure all extractable fields on staged records have a corresponding `field_verifications` row ready for the UI. Uses `field_sources` from parser output to populate source references per field.
 
 **Inputs:**
 - `staged_system_id` or `staged_component_id` (uuid)
