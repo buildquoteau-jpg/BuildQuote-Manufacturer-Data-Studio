@@ -73,9 +73,15 @@ Holds AI/agent-generated draft records. All records start with `verification_sta
 
 ### 4. Verification Layer
 
-Tables: `verification_events`
+Tables: `verification_events`, `field_verifications`
 
-Append-only audit log of every human review action. Records who approved, rejected, or edited each field and when. This log is the proof chain from raw PDF to approved export.
+Two tables work together here with distinct responsibilities:
+
+- **`field_verifications`** — the current state of each field on a staged record. One row per `(entity_type, entity_id, field_name)`. This is what the verification UI reads and writes. It tells you right now whether a given field is pending, approved, rejected, edited, or flagged for source checking.
+
+- **`verification_events`** — an append-only audit log of everything that happened over time. Every time a reviewer changes a field's state, a new event row is written. This is the proof chain from raw PDF to approved export and must never be updated or deleted.
+
+The UI drives off `field_verifications`. The audit trail lives in `verification_events`.
 
 ### 5. Publishing Layer
 

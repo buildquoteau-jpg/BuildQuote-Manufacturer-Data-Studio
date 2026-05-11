@@ -54,6 +54,8 @@ Each phase delivers a working vertical slice. Do not start a phase until the pre
 - Approved records flagged as `status: human_verified`
 - Rejected records flagged with rejection reason
 
+The reviewer verifies fields, not just whole records. Each field on a staged system or component can be individually approved, rejected, edited, or flagged for source checking. The `field_verifications` table tracks the current state of each field. The `verification_events` table logs every action taken. A staged record is only eligible for export once all its fields have been reviewed.
+
 **Exit criteria:** a human can review and approve a full system card without leaving the browser.
 
 ---

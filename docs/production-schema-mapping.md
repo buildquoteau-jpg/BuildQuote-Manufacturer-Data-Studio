@@ -2,7 +2,7 @@
 
 This document tracks how Data Studio staged records map to production Supabase tables.
 
-**Status: first draft — aligned with `001_initial_extraction_schema.sql`.**
+**Status: updated — aligned with `001_initial_extraction_schema.sql` and `002_field_verification_state.sql`.**
 
 ---
 
@@ -187,6 +187,20 @@ These fields are stored on `staged_components` and map to production `components
 | `roll_m` | metres | `components.roll_m` |
 | `weight_kg` | kilograms | `components.weight_kg` |
 | `pieces` | integer count | `components.pieces` |
+
+---
+
+## Data Studio Trust Layer Tables (no production mapping)
+
+### `field_verifications` — does not map to production
+
+`field_verifications` is a Data Studio internal trust layer table. It does not export to any production table.
+
+Its purpose is to prove that each individual field on a staged record was seen, checked, and actioned by a human reviewer before the record was approved for publishing. The UI reads and writes this table during the verification workflow.
+
+When a staged record is exported, the `field_verifications` rows for that record remain in Data Studio as the evidence trail. They are not migrated to production.
+
+The companion table `verification_events` is similarly Data Studio-internal — it is the append-only audit log of what happened over time, while `field_verifications` holds the current state.
 
 ---
 
