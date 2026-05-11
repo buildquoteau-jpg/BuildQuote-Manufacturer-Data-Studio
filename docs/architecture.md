@@ -49,6 +49,16 @@ Manufacturer PDF / Product Guide
 - Source documents must be traceable from every exported record (catalogue_sources linkage).
 - The R2 bucket stores originals; the staging DB stores extracted and parsed derivatives.
 
+## Storage Split
+
+**Cloudflare R2** stores all file objects: source PDFs, page preview images, extracted images, approved product images, and manufacturer branding assets.
+
+**Supabase** stores all metadata, structured records, and state: document metadata, extraction runs, page/chunk records, staged systems and components, verification state, and publish batches. Supabase never holds raw file blobs.
+
+R2 objects are referenced from Supabase via `storage_key` (the full R2 object key). Signed URLs are generated server-side for private file access during verification. R2 credentials are server-side only and must never reach the browser.
+
+See [`docs/storage-architecture.md`](./storage-architecture.md) for the full R2 key structure and access policy notes.
+
 ## Data Studio Database Layers
 
 The Data Studio Supabase project is organised into five logical layers. Each layer feeds the next.

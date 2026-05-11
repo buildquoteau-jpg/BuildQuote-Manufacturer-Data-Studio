@@ -40,6 +40,12 @@ Manufacturer PDF/Product Guide
 
 ---
 
+## Storage
+
+Source documents (PDFs, product guides) are stored in **Cloudflare R2**. Supabase stores metadata, extraction records, staged data, verification state, and publish records — never raw file blobs. See [`docs/storage-architecture.md`](./docs/storage-architecture.md) for the full storage design.
+
+---
+
 ## Docs
 
-See [`docs/`](./docs/) for architecture, workflow, repo boundaries, and build plan.
+See [`docs/`](./docs/) for architecture, workflow, repo boundaries, storage design, and build plan.

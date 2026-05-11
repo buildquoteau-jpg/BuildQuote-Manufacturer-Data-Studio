@@ -20,10 +20,18 @@ Each phase delivers a working vertical slice. Do not start a phase until the pre
 
 - Manufacturer login (Supabase Auth)
 - Upload one manufacturer PDF via web UI
-- Store source file in Cloudflare R2
-- Write source document metadata to staging DB (`catalogue_sources` equivalent)
+- Validate file type and size server-side
+- Create `source_documents` row in Supabase with `status = 'uploading'`
+- Store file in Cloudflare R2 using structured key: `manufacturers/{slug}/source-documents/{id}/{filename}`
+- Update `source_documents` with storage metadata and `status = 'uploaded'`
+- Create queued `extraction_runs` row ready for manual trigger
+- Document visible in dashboard as uploaded and ready for extraction
 
-**Exit criteria:** a PDF is uploaded, stored in R2, and traceable in the staging DB.
+R2 credentials are server-side only. File access during verification uses signed URLs with short TTL.
+
+See [`docs/upload-flow.md`](./upload-flow.md) and [`docs/storage-architecture.md`](./storage-architecture.md) for full detail.
+
+**Exit criteria:** a PDF is uploaded, stored in R2, and traceable in the staging DB via `source_documents`.
 
 ---
 
