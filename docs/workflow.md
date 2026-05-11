@@ -66,3 +66,19 @@ Each phase delivers a working vertical slice. Do not start a phase until the pre
 - `catalogue_sources` linkage verified before any export
 
 **Exit criteria:** one verified system card is live in production Supabase and visible in the Manufacturer Portal.
+
+---
+
+## First Database Milestone
+
+The first database milestone is not to build the whole platform.
+
+It is to support:
+- one manufacturer
+- one uploaded product guide
+- one extraction run
+- one draft system card
+- one human verification flow
+- one approved export package
+
+Every table in `001_initial_extraction_schema.sql` exists to serve that loop. Nothing more yet.

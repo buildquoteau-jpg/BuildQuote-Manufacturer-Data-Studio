@@ -49,6 +49,42 @@ Manufacturer PDF / Product Guide
 - Source documents must be traceable from every exported record (catalogue_sources linkage).
 - The R2 bucket stores originals; the staging DB stores extracted and parsed derivatives.
 
+## Data Studio Database Layers
+
+The Data Studio Supabase project is organised into five logical layers. Each layer feeds the next.
+
+### 1. Source Layer
+
+Tables: `source_documents`, `document_pages`
+
+Stores the original uploaded manufacturer PDF metadata and rendered page images (images stored in R2, referenced by key). Every downstream record must be traceable back to a row in `source_documents`.
+
+### 2. Extraction Layer
+
+Tables: `extraction_runs`, `document_chunks`
+
+Records each pipeline run (Docling extraction, chunking, classification) and the chunk-level output. Chunks are typed by content (system_description, product_table, specification_table, etc.) so the correct parsing prompt can be selected.
+
+### 3. Staging Layer
+
+Tables: `staged_systems`, `staged_components`, `staged_system_components`, `staged_system_colours`, `staged_system_profiles`
+
+Holds AI/agent-generated draft records. All records start with `verification_status = 'pending_review'`. No staged record may be exported until a human sets it to `approved`.
+
+### 4. Verification Layer
+
+Tables: `verification_events`
+
+Append-only audit log of every human review action. Records who approved, rejected, or edited each field and when. This log is the proof chain from raw PDF to approved export.
+
+### 5. Publishing Layer
+
+Tables: `publish_batches`, `publish_batch_items`
+
+Tracks controlled exports from Data Studio staging into production Supabase. A publish batch groups approved records for export. Each item tracks the production table it maps to and the production ID assigned after export.
+
+---
+
 ## Tech Stack (planned)
 
 | Layer | Technology |
