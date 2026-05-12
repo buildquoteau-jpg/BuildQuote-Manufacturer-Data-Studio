@@ -203,13 +203,13 @@ export default async function DocumentDetail({ params }: Props) {
 
     supabase
       .from('staged_systems')
-      .select('id, name, product_code, category, subcategory, verification_status, extraction_confidence, created_at')
+      .select('id, name, product_code, category, subcategory, description, verification_status, extraction_confidence, created_at')
       .eq('source_document_id', doc.id)
       .order('sort_order', { ascending: true }),
 
     supabase
       .from('staged_components')
-      .select('id, name, sku, category, uom, verification_status, extraction_confidence')
+      .select('id, name, sku, category, uom, description, verification_status, extraction_confidence')
       .eq('source_document_id', doc.id)
       .order('sort_order', { ascending: true }),
   ])
@@ -370,7 +370,14 @@ export default async function DocumentDetail({ params }: Props) {
             <tbody>
               {stagedSystems.map((sys) => (
                 <tr key={sys.id}>
-                  <td style={{ ...TD, fontWeight: 500 }}>{sys.name}</td>
+                  <td style={{ ...TD, fontWeight: 500 }}>
+                    {sys.name}
+                    {sys.description && (
+                      <div style={{ fontWeight: 400, fontSize: '0.77rem', color: '#9ca3af', marginTop: '0.15rem' }}>
+                        {sys.description}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...TD, color: '#6b7280' }}>{sys.product_code ?? '—'}</td>
                   <td style={{ ...TD, color: '#6b7280' }}>{sys.category ?? '—'}</td>
                   <td style={{ ...TD, color: '#6b7280' }}>{sys.subcategory ?? '—'}</td>
@@ -406,7 +413,14 @@ export default async function DocumentDetail({ params }: Props) {
             <tbody>
               {stagedComponents.map((comp) => (
                 <tr key={comp.id}>
-                  <td style={{ ...TD, fontWeight: 500 }}>{comp.name}</td>
+                  <td style={{ ...TD, fontWeight: 500 }}>
+                    {comp.name}
+                    {comp.description && (
+                      <div style={{ fontWeight: 400, fontSize: '0.77rem', color: '#9ca3af', marginTop: '0.15rem' }}>
+                        {comp.description}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...TD, color: '#6b7280' }}>{comp.sku ?? '—'}</td>
                   <td style={{ ...TD, color: '#6b7280' }}>{comp.category ?? '—'}</td>
                   <td style={{ ...TD, color: '#6b7280' }}>{comp.uom ?? '—'}</td>
@@ -447,7 +461,48 @@ export default async function DocumentDetail({ params }: Props) {
         </>
       )}
 
-      {/* I — Extraction preview placeholder (updated) */}
+      {/* I — Catalogue code check */}
+      {((stagedSystems && stagedSystems.length > 0) || (stagedComponents && stagedComponents.length > 0)) && (() => {
+        const systemsWithCode    = (stagedSystems ?? []).filter((s) => s.product_code).length
+        const systemsMissing     = (stagedSystems ?? []).length - systemsWithCode
+        const componentsWithSku  = (stagedComponents ?? []).filter((c) => c.sku).length
+        const componentsMissing  = (stagedComponents ?? []).length - componentsWithSku
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Catalogue code check</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              Read-only summary of code coverage across staged data for this document.
+            </p>
+            <SectionCard>
+              <table style={{ borderCollapse: 'collapse', fontSize: '0.9rem', margin: '0.5rem 1rem 0.25rem' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Systems with product code</td>
+                    <td style={{ ...VAL, fontWeight: 600, color: systemsWithCode > 0 ? '#166534' : '#374151' }}>{systemsWithCode}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Systems missing product code</td>
+                    <td style={{ ...VAL, fontWeight: 600, color: '#374151' }}>{systemsMissing}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Components with SKU</td>
+                    <td style={{ ...VAL, fontWeight: 600, color: componentsWithSku > 0 ? '#166534' : '#374151' }}>{componentsWithSku}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Components missing SKU</td>
+                    <td style={{ ...VAL, fontWeight: 600, color: '#374151' }}>{componentsMissing}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p style={{ margin: '0.5rem 1rem 0.75rem', fontSize: '0.82rem', color: '#9ca3af' }}>
+                Missing codes are expected for staged data until catalogue verification is complete.
+              </p>
+            </SectionCard>
+          </>
+        )
+      })()}
+
+      {/* J — Extraction preview */}
       <h2 style={{ marginBottom: '0.4rem' }}>Extraction preview</h2>
       <div style={{
         border: '1px dashed #d1d5db',
@@ -463,7 +518,7 @@ export default async function DocumentDetail({ params }: Props) {
         </p>
       </div>
 
-      {/* J — Verification checklist */}
+      {/* K — Verification checklist */}
       <h2 style={{ marginBottom: '0.4rem' }}>Verification checklist</h2>
       <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
         Future workflow steps — none of these are interactive yet.
@@ -505,7 +560,7 @@ export default async function DocumentDetail({ params }: Props) {
         ))}
       </div>
 
-      {/* K — Safe metadata */}
+      {/* L — Safe metadata */}
       <h2 style={{ marginBottom: '0.4rem' }}>Safe metadata</h2>
       <table style={{ borderCollapse: 'collapse', fontSize: '0.88rem', marginBottom: '1.5rem' }}>
         <tbody>
@@ -536,7 +591,7 @@ export default async function DocumentDetail({ params }: Props) {
         </tbody>
       </table>
 
-      {/* L — Not available yet */}
+      {/* M — Not available yet */}
       <p style={{
         fontSize: '0.82rem',
         color: '#9ca3af',
