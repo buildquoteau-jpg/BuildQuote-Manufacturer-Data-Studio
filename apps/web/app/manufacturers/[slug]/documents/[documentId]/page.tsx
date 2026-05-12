@@ -407,7 +407,96 @@ export default async function DocumentDetail({ params }: Props) {
             </tr>
           </tbody>
         </table>
+        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid #e5e7eb' }}>
+          {([
+            { label: 'Extraction runs',   value: runs?.length ?? 0 },
+            { label: 'Chunks',            value: chunkCount },
+            { label: 'Systems',           value: stagedSystems?.length ?? 0 },
+            { label: 'Components',        value: stagedComponents?.length ?? 0 },
+            { label: 'Relationships',     value: relationshipCount },
+            { label: 'Field verifications', value: fieldVerifications?.length ?? 0 },
+          ] as { label: string; value: number }[]).map((s) => (
+            <span key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem' }}>
+              <strong style={{ color: '#374151', fontSize: '1.15rem' }}>{s.value}</strong>
+              <span style={{ fontSize: '0.7rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{s.label}</span>
+            </span>
+          ))}
+        </div>
       </div>
+
+      {/* B_sum — Extraction summary */}
+      {(() => {
+        const sysN  = stagedSystems?.length  ?? 0
+        const compN = stagedComponents?.length ?? 0
+        const fvN   = fieldVerifications?.length ?? 0
+        const runsN = runs?.length ?? 0
+        const fvWithChunkN   = (fieldVerifications ?? []).filter((r) => r.source_chunk_id != null).length
+        const sysApprovedN   = (stagedSystems ?? []).filter((s) => s.verification_status === 'approved').length
+        const sysRejectedN   = (stagedSystems ?? []).filter((s) => s.verification_status === 'rejected').length
+        const sysPendN       = sysN - sysApprovedN - sysRejectedN
+        const compApprovedN  = (stagedComponents ?? []).filter((c) => c.verification_status === 'approved').length
+        const compRejectedN  = (stagedComponents ?? []).filter((c) => c.verification_status === 'rejected').length
+        const compPendN      = compN - compApprovedN - compRejectedN
+
+        const summaryRows: { label: string; primary: string; secondary: string; dim: boolean }[] = [
+          {
+            label:     'Staged systems',
+            primary:   sysN === 0 ? '—' : String(sysN),
+            secondary: sysN === 0
+              ? 'None extracted yet — normal before a run'
+              : `${sysApprovedN} approved · ${sysPendN} pending${sysRejectedN > 0 ? ` · ${sysRejectedN} rejected` : ''}`,
+            dim: sysN === 0,
+          },
+          {
+            label:     'Staged components',
+            primary:   compN === 0 ? '—' : String(compN),
+            secondary: compN === 0
+              ? 'None extracted yet'
+              : `${compApprovedN} approved · ${compPendN} pending${compRejectedN > 0 ? ` · ${compRejectedN} rejected` : ''}`,
+            dim: compN === 0,
+          },
+          {
+            label:     'Evidence chunks',
+            primary:   chunkCount === 0 ? '—' : String(chunkCount),
+            secondary: chunkCount === 0
+              ? 'No text chunks available yet'
+              : `From ${runsN} extraction run${runsN !== 1 ? 's' : ''}`,
+            dim: chunkCount === 0,
+          },
+          {
+            label:     'Field verifications',
+            primary:   fvN === 0 ? '—' : String(fvN),
+            secondary: fvN === 0
+              ? 'No field records yet'
+              : `${fvWithChunkN} of ${fvN} linked to source chunk`,
+            dim: fvN === 0,
+          },
+        ]
+
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Extraction summary</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              What this document has produced so far. All data is staged — not yet in production.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1px', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: '1.5rem', background: '#e5e7eb' }}>
+              {summaryRows.map((item) => (
+                <div key={item.label} style={{ padding: '0.9rem 1rem', background: '#fff' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: item.dim ? '#d1d5db' : '#374151', lineHeight: 1.1, marginBottom: '0.25rem' }}>
+                    {item.primary}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', lineHeight: 1.4 }}>
+                    {item.secondary}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )
+      })()}
 
       {/* C — Document lifecycle */}
       <h2 style={{ marginBottom: '0.4rem' }}>Document lifecycle</h2>
@@ -427,7 +516,12 @@ export default async function DocumentDetail({ params }: Props) {
       </p>
       <SectionCard>
         {!runs || runs.length === 0 ? (
-          <EmptyNote text="No extraction run has been created for this document yet." />
+          <div style={{ padding: '0.85rem 1rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No extraction runs recorded yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+              Extraction runs are created when an AI pipeline processes this document. They will appear here once an operator triggers a run against this document.
+            </p>
+          </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -463,7 +557,12 @@ export default async function DocumentDetail({ params }: Props) {
       </p>
       <SectionCard>
         {chunkCount === 0 ? (
-          <EmptyNote text="No document chunks have been created yet." />
+          <div style={{ padding: '0.85rem 1rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No document chunks yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+              Chunks are sections of the document text created during extraction. They appear here once an extraction run has processed this document and split the content into reviewable segments.
+            </p>
+          </div>
         ) : (
           <>
             <p style={{ margin: '0.75rem 1rem 0.5rem', fontSize: '0.9rem', color: '#374151' }}>
@@ -515,7 +614,12 @@ export default async function DocumentDetail({ params }: Props) {
       </p>
       <SectionCard>
         {!stagedSystems || stagedSystems.length === 0 ? (
-          <EmptyNote text="No staged systems have been extracted yet." />
+          <div style={{ padding: '0.85rem 1rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No staged systems yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+              Staged systems are AI-drafted product system cards created during extraction. They will appear here once an extraction run produces system records from this document. Systems must pass human verification before they can be published to BuildQuote.
+            </p>
+          </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -558,7 +662,12 @@ export default async function DocumentDetail({ params }: Props) {
       </p>
       <SectionCard>
         {!stagedComponents || stagedComponents.length === 0 ? (
-          <EmptyNote text="No staged components have been extracted yet." />
+          <div style={{ padding: '0.85rem 1rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No staged components yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+              Staged components are AI-drafted component rows — the individual parts that make up a system. They appear here once an extraction run produces component records. Components are linked to systems and must be verified before publishing.
+            </p>
+          </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -790,6 +899,110 @@ export default async function DocumentDetail({ params }: Props) {
                 Missing codes are expected for staged data until catalogue verification is complete.
               </p>
             </SectionCard>
+          </>
+        )
+      })()}
+
+      {/* I_review — Review priorities */}
+      {(() => {
+        const systems    = stagedSystems    ?? []
+        const components = stagedComponents ?? []
+        const fvAll      = fieldVerifications ?? []
+        if (systems.length === 0 && components.length === 0) return null
+
+        const sysRejN    = systems.filter((s) => s.verification_status === 'rejected').length
+        const compRejN   = components.filter((c) => c.verification_status === 'rejected').length
+        const linkRejN   = sscLinks.filter((l) => l.verification_status === 'rejected').length
+        const fvNeedsSrc = fvAll.filter((r) => r.status === 'needs_source_check').length
+        const fvNoChunkN = fvAll.filter((r) => !r.source_chunk_id).length
+
+        const sysMissingCode  = systems.filter((s) => !s.product_code && s.verification_status !== 'rejected').length
+        const compMissingSku  = components.filter((c) => !c.sku && c.verification_status !== 'rejected').length
+        const sysNoLinksN     = sysNoLinksCount
+
+        const sysPendingMap   = systems.filter((s) => !s.production_system_id).length
+        const compPendingMap  = components.filter((c) => !c.production_component_id).length
+
+        const sysApprovedN    = systems.filter((s) => s.verification_status === 'approved').length
+        const compApprovedN   = components.filter((c) => c.verification_status === 'approved').length
+        const fvApprovedN     = fvAll.filter((r) => r.status === 'approved').length
+
+        const groups: {
+          title: string; color: string; bg: string; borderColor: string; dot: string
+          items: string[]; empty: string
+        }[] = [
+          {
+            title: 'Needs attention',
+            color: '#991b1b', bg: '#fef2f2', borderColor: '#fca5a5', dot: '#ef4444',
+            items: [
+              ...(sysRejN  > 0 ? [`${sysRejN} system${sysRejN > 1 ? 's' : ''} marked rejected`]                                                    : []),
+              ...(compRejN > 0 ? [`${compRejN} component${compRejN > 1 ? 's' : ''} marked rejected`]                                               : []),
+              ...(linkRejN > 0 ? [`${linkRejN} system–component link${linkRejN > 1 ? 's' : ''} marked rejected`]                                   : []),
+              ...(fvNeedsSrc > 0 ? [`${fvNeedsSrc} field verification${fvNeedsSrc > 1 ? 's' : ''} need source check`]                              : []),
+            ],
+            empty: 'No flagged items',
+          },
+          {
+            title: 'Catalogue check needed',
+            color: '#92400e', bg: '#fffbeb', borderColor: '#fcd34d', dot: '#f59e0b',
+            items: [
+              ...(sysMissingCode > 0 ? [`${sysMissingCode} system${sysMissingCode > 1 ? 's' : ''} missing product code`]                           : []),
+              ...(compMissingSku > 0 ? [`${compMissingSku} component${compMissingSku > 1 ? 's' : ''} missing SKU`]                                 : []),
+              ...(sysNoLinksN > 0    ? [`${sysNoLinksN} system${sysNoLinksN > 1 ? 's' : ''} with no linked components`]                            : []),
+              ...(fvNoChunkN > 0     ? [`${fvNoChunkN} field row${fvNoChunkN > 1 ? 's' : ''} not linked to a source chunk`]                        : []),
+            ],
+            empty: 'No catalogue issues',
+          },
+          {
+            title: 'Pending export mapping',
+            color: '#374151', bg: '#f9fafb', borderColor: '#e5e7eb', dot: '#9ca3af',
+            items: [
+              ...(sysPendingMap  > 0 ? [`${sysPendingMap} system${sysPendingMap > 1 ? 's' : ''} awaiting production ID — normal until exported`]    : []),
+              ...(compPendingMap > 0 ? [`${compPendingMap} component${compPendingMap > 1 ? 's' : ''} awaiting production ID — normal until exported`]: []),
+            ],
+            empty: 'All items have production IDs',
+          },
+          {
+            title: 'Ready items',
+            color: '#166534', bg: '#f0fdf4', borderColor: '#86efac', dot: '#22c55e',
+            items: [
+              ...(sysApprovedN  > 0 ? [`${sysApprovedN} system${sysApprovedN > 1 ? 's' : ''} approved`]                                            : []),
+              ...(compApprovedN > 0 ? [`${compApprovedN} component${compApprovedN > 1 ? 's' : ''} approved`]                                        : []),
+              ...(fvApprovedN   > 0 ? [`${fvApprovedN} field verification${fvApprovedN > 1 ? 's' : ''} approved`]                                   : []),
+            ],
+            empty: 'No approved items yet — review pending',
+          },
+        ]
+
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Review priorities</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              Where to focus human review first. Pending mapping is a normal staging state — it means an item has not been exported to production yet.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+              {groups.map((g) => (
+                <div key={g.title} style={{ border: `1px solid ${g.borderColor}`, borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{ padding: '0.5rem 0.75rem', background: g.bg, borderBottom: `1px solid ${g.borderColor}` }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: g.color }}>{g.title}</span>
+                  </div>
+                  <div style={{ padding: '0.35rem 0' }}>
+                    {g.items.length === 0 ? (
+                      <div style={{ padding: '0.3rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                        {g.empty}
+                      </div>
+                    ) : (
+                      g.items.map((item, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.3rem 0.75rem', borderBottom: i < g.items.length - 1 ? '1px solid #f9fafb' : 'none', fontSize: '0.82rem', color: '#374151' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: g.dot, flexShrink: 0, marginTop: '0.35rem' }} />
+                          {item}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </>
         )
       })()}
@@ -1368,22 +1581,6 @@ export default async function DocumentDetail({ params }: Props) {
           </>
         )
       })()}
-
-      {/* J — Extraction preview */}
-      <h2 style={{ marginBottom: '0.4rem' }}>Extraction preview</h2>
-      <div style={{
-        border: '1px dashed #d1d5db',
-        borderRadius: 8,
-        padding: '1.25rem 1.5rem',
-        background: '#f9fafb',
-        marginBottom: '1.5rem',
-      }}>
-        <p style={{ color: '#6b7280', margin: 0, fontSize: '0.9rem' }}>
-          When extraction runs complete, staged systems, components, dimensions, roles, and
-          confidence flags will appear in the sections above. Field-level verification and
-          approval controls will be added in a future milestone.
-        </p>
-      </div>
 
       {/* K — Verification checklist */}
       <h2 style={{ marginBottom: '0.4rem' }}>Verification checklist</h2>
