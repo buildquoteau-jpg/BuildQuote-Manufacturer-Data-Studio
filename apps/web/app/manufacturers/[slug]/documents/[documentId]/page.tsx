@@ -226,7 +226,7 @@ export default async function DocumentDetail({ params }: Props) {
   // --- Manufacturer lookup ---
   const { data: manufacturer, error: mfrError } = await supabase
     .from('data_studio_manufacturers')
-    .select('id, name, slug')
+    .select('id, name, slug, production_manufacturer_id')
     .eq('slug', params.slug)
     .single()
 
@@ -326,6 +326,28 @@ export default async function DocumentDetail({ params }: Props) {
     sscLinks       = sscData     ?? []
     sysColourRows  = colourData  ?? []
     sysProfileRows = profileData ?? []
+  }
+
+  // --- Publish planning: read-only queries scoped to this manufacturer ---
+  const allEntityIds = [
+    ...systemIds,
+    ...(stagedComponents ?? []).map((c) => c.id),
+  ]
+
+  const { data: publishBatchRows } = await supabase
+    .from('publish_batches')
+    .select('id, status, created_at, notes')
+    .eq('manufacturer_id', manufacturer.id)
+    .order('created_at', { ascending: false })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let publishBatchItemRows: any[] = []
+  if (allEntityIds.length > 0) {
+    const { data: pbiData } = await supabase
+      .from('publish_batch_items')
+      .select('entity_id, entity_type, status')
+      .in('entity_id', allEntityIds)
+    publishBatchItemRows = pbiData ?? []
   }
 
   const relationshipCount = sscLinks.length
@@ -1549,6 +1571,376 @@ export default async function DocumentDetail({ params }: Props) {
               </div>
               <p style={{ margin: '0.5rem 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
                 Studio data stays separate from RFQ/MFP production until a deliberate verified publish/migration step is built.
+              </p>
+            </SectionCard>
+          </>
+        )
+      })()}
+
+      {/* N — Publish planning preview */}
+      {(() => {
+        const systems    = stagedSystems    ?? []
+        const components = stagedComponents ?? []
+        const fvRows     = fieldVerifications ?? []
+        const links      = sscLinks
+
+        // Payload counts
+        const totalSystems    = systems.length
+        const totalComponents = components.length
+        const totalLinks      = links.length
+        const totalColours    = sysColourRows.length
+        const totalProfiles   = sysProfileRows.length
+
+        // Verification breakdowns
+        const sysApproved  = systems.filter((s) => s.verification_status === 'approved').length
+        const sysRejected  = systems.filter((s) => s.verification_status === 'rejected').length
+        const sysPending   = totalSystems - sysApproved - sysRejected
+
+        const compApproved = components.filter((c) => c.verification_status === 'approved').length
+        const compRejected = components.filter((c) => c.verification_status === 'rejected').length
+        const compPending  = totalComponents - compApproved - compRejected
+
+        const linkApproved   = links.filter((l) => l.verification_status === 'approved').length
+        const linkRejectedCt = links.filter((l) => l.verification_status === 'rejected').length
+        const linkPendingCt  = links.filter((l) => ['pending_review', 'in_review'].includes(l.verification_status || '')).length
+
+        const fvApproved         = fvRows.filter((r) => r.status === 'approved').length
+        const fvPending          = fvRows.filter((r) => r.status === 'pending').length
+        const fvRejected         = fvRows.filter((r) => r.status === 'rejected').length
+        const fvNeedsSourceCheck = fvRows.filter((r) => r.status === 'needs_source_check').length
+
+        // Eligibility: systems
+        const sysCandidates        = systems.filter((s) => s.name?.trim() && s.verification_status !== 'rejected').length
+        const sysNeedsCode         = systems.filter((s) => s.name?.trim() && s.verification_status !== 'rejected' && !s.product_code).length
+        const sysNeedsRelationship = systems.filter((s) => s.name?.trim() && s.verification_status !== 'rejected' && !links.some((l) => l.staged_system_id === s.id)).length
+        const sysBlockedCt         = sysRejected
+
+        // Eligibility: components
+        const compCandidates = components.filter((c) => c.name?.trim() && c.verification_status !== 'rejected').length
+        const compNeedsSku   = components.filter((c) => c.name?.trim() && c.verification_status !== 'rejected' && !c.sku).length
+        const compBlockedCt  = compRejected
+
+        // Eligibility: relationships
+        const linkCandidates    = links.filter((l) => l.verification_status !== 'rejected').length
+        const linkNeedsReviewCt = linkPendingCt
+        const linkBlockedCt     = linkRejectedCt
+
+        // Publish batch status
+        const batches      = publishBatchRows ?? []
+        const batchCount   = batches.length
+        const batchedIds   = new Set(publishBatchItemRows.map((i: { entity_id: string }) => i.entity_id))
+        const itemsInBatch = allEntityIds.filter((id) => batchedIds.has(id)).length
+
+        // Missing codes / evidence gaps
+        const systemsMissingCode = systems.filter((s) => !s.product_code).length
+        const compsMissingSku    = components.filter((c) => !c.sku).length
+        const fvNoChunk          = fvRows.filter((r) => !r.source_chunk_id).length
+        const runsCountN         = runs?.length ?? 0
+
+        // Payload breakdown strings
+        const sysBreak  = [
+          sysApproved > 0 ? `${sysApproved} approved` : '',
+          sysPending  > 0 ? `${sysPending} pending`   : '',
+          sysRejected > 0 ? `${sysRejected} rejected` : '',
+        ].filter(Boolean).join(' · ')
+        const compBreak = [
+          compApproved > 0 ? `${compApproved} approved` : '',
+          compPending  > 0 ? `${compPending} pending`   : '',
+          compRejected > 0 ? `${compRejected} rejected` : '',
+        ].filter(Boolean).join(' · ')
+        const linkBreak = [
+          linkApproved   > 0 ? `${linkApproved} approved`  : '',
+          linkPendingCt  > 0 ? `${linkPendingCt} pending`  : '',
+          linkRejectedCt > 0 ? `${linkRejectedCt} rejected`: '',
+        ].filter(Boolean).join(' · ')
+        const fvBreak   = [
+          fvApproved         > 0 ? `${fvApproved} approved`                 : '',
+          fvPending          > 0 ? `${fvPending} pending`                   : '',
+          fvRejected         > 0 ? `${fvRejected} rejected`                 : '',
+          fvNeedsSourceCheck > 0 ? `${fvNeedsSourceCheck} needs source check` : '',
+        ].filter(Boolean).join(' · ')
+
+        // Blockers
+        type BloSev = 'blocker' | 'warning' | 'future_step' | 'info'
+        const BLO: Record<BloSev, { label: string; dot: string; lc: string; lb: string }> = {
+          blocker:     { label: 'Blocker',     dot: '#ef4444', lc: '#991b1b', lb: '#fee2e2' },
+          warning:     { label: 'Warning',     dot: '#f59e0b', lc: '#92400e', lb: '#fef3c7' },
+          future_step: { label: 'Future step', dot: '#9ca3af', lc: '#6b7280', lb: '#f3f4f6' },
+          info:        { label: 'Info',        dot: '#60a5fa', lc: '#1d4ed8', lb: '#dbeafe' },
+        }
+        const blockers: { sev: BloSev; text: string }[] = []
+
+        if (runsCountN === 0)       blockers.push({ sev: 'blocker',     text: 'No extraction run recorded for this document' })
+        if (chunkCount === 0)       blockers.push({ sev: 'blocker',     text: 'No document chunks extracted' })
+        if (totalSystems === 0)     blockers.push({ sev: 'blocker',     text: 'No staged systems — extraction has not produced system records' })
+        if (totalComponents === 0)  blockers.push({ sev: 'blocker',     text: 'No staged components — extraction has not produced component records' })
+        if (sysRejected > 0)        blockers.push({ sev: 'blocker',     text: `${sysRejected} staged system${sysRejected > 1 ? 's' : ''} marked rejected` })
+        if (compRejected > 0)       blockers.push({ sev: 'blocker',     text: `${compRejected} staged component${compRejected > 1 ? 's' : ''} marked rejected` })
+        if (linkRejectedCt > 0)     blockers.push({ sev: 'blocker',     text: `${linkRejectedCt} system–component link${linkRejectedCt > 1 ? 's' : ''} marked rejected` })
+        if (sysNoLinksCount > 0)    blockers.push({ sev: 'warning',     text: `${sysNoLinksCount} system${sysNoLinksCount > 1 ? 's' : ''} with no linked components` })
+        if (fvPending > 0)          blockers.push({ sev: 'warning',     text: `${fvPending} field verification${fvPending > 1 ? 's' : ''} pending review` })
+        if (fvNeedsSourceCheck > 0) blockers.push({ sev: 'warning',     text: `${fvNeedsSourceCheck} field verification${fvNeedsSourceCheck > 1 ? 's' : ''} need source check` })
+        if (fvNoChunk > 0)          blockers.push({ sev: 'warning',     text: `${fvNoChunk} field row${fvNoChunk > 1 ? 's' : ''} not linked to a source chunk` })
+        if (systemsMissingCode > 0 || compsMissingSku > 0) {
+          blockers.push({ sev: 'warning', text: `Catalogue codes/SKUs incomplete: ${systemsMissingCode} system${systemsMissingCode !== 1 ? 's' : ''} without product code, ${compsMissingSku} component${compsMissingSku !== 1 ? 's' : ''} without SKU — needs human catalogue review` })
+        }
+        blockers.push({ sev: 'future_step', text: 'Publish batch workflow not enabled — publish_batches table exists in schema but no create/approve actions are built yet' })
+        blockers.push({ sev: 'future_step', text: 'Production migration not enabled — no write path to RFQ/MFP production Supabase exists on this page' })
+        blockers.push({ sev: 'info', text: 'production_system_id and production_component_id fields exist in schema but are not selected in current page queries' })
+
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Publish planning preview</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              Read-only diagnostic preview of staged data and what must be resolved before a future controlled migration to RFQ/MFP production.
+            </p>
+
+            {/* Safety notice */}
+            <div style={{ border: '1px solid #fca5a5', background: '#fff5f5', borderRadius: 8, padding: '0.85rem 1rem', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#7f1d1d', lineHeight: 1.6 }}>
+              <strong>Studio safety boundary</strong><br />
+              Nothing on this page writes to RFQ/MFP production. Future publishing must be a separate controlled migration step after explicit human verification.
+              Studio staged data is not production data. This section is a diagnostic preview only.
+            </div>
+
+            {/* Would-be publish payload */}
+            <SectionCard>
+              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Would-be publish payload
+                </span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 360 }}>
+                  <thead>
+                    <tr>
+                      <th style={TH}>Record type</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>Count</th>
+                      <th style={TH}>Breakdown</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { label: 'Staged systems',              count: totalSystems,    breakdown: sysBreak  },
+                      { label: 'Staged components',           count: totalComponents, breakdown: compBreak },
+                      { label: 'System–component links',      count: totalLinks,      breakdown: linkBreak },
+                      { label: 'Colour variants',             count: totalColours,    breakdown: ''        },
+                      { label: 'Profile variants',            count: totalProfiles,   breakdown: ''        },
+                      { label: 'Field verifications tracked', count: fvRows.length,   breakdown: fvBreak   },
+                    ].map((row) => (
+                      <tr key={row.label}>
+                        <td style={TD}>{row.label}</td>
+                        <td style={{ ...TD, fontWeight: 600, textAlign: 'right' }}>{row.count}</td>
+                        <td style={{ ...TD, fontSize: '0.78rem', color: '#9ca3af' }}>{row.breakdown || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+
+            {/* Eligibility categories */}
+            {(totalSystems > 0 || totalComponents > 0 || totalLinks > 0) && (
+              <SectionCard>
+                <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    Eligibility categories
+                  </span>
+                </div>
+                {totalSystems > 0 && (
+                  <div style={{ borderBottom: totalComponents > 0 || totalLinks > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                    <div style={{ padding: '0.4rem 0.75rem 0.2rem', fontSize: '0.75rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Systems</div>
+                    {[
+                      { label: 'Candidate (has name, not rejected)',                  count: sysCandidates,        bg: '#dcfce7', color: '#166534' },
+                      { label: 'Needs catalogue code (missing product_code)',          count: sysNeedsCode,         bg: '#fef3c7', color: '#92400e' },
+                      { label: 'Needs relationship review (no linked components)',     count: sysNeedsRelationship, bg: '#ffedd5', color: '#9a3412' },
+                      { label: 'Blocked (rejected status)',                           count: sysBlockedCt,         bg: '#fee2e2', color: '#991b1b' },
+                    ].map((row) => (
+                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.3rem 0.75rem', borderBottom: '1px solid #f9fafb', fontSize: '0.85rem' }}>
+                        <span style={{ color: '#374151' }}>{row.label}</span>
+                        <span style={{ fontWeight: 600, fontSize: '0.78rem', color: row.color, background: row.bg, padding: '0.1rem 0.45rem', borderRadius: 4 }}>{row.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {totalComponents > 0 && (
+                  <div style={{ borderBottom: totalLinks > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                    <div style={{ padding: '0.4rem 0.75rem 0.2rem', fontSize: '0.75rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Components</div>
+                    {[
+                      { label: 'Candidate (has name, not rejected)', count: compCandidates, bg: '#dcfce7', color: '#166534' },
+                      { label: 'Needs SKU check (missing sku)',      count: compNeedsSku,   bg: '#fef3c7', color: '#92400e' },
+                      { label: 'Blocked (rejected status)',          count: compBlockedCt,  bg: '#fee2e2', color: '#991b1b' },
+                    ].map((row) => (
+                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.3rem 0.75rem', borderBottom: '1px solid #f9fafb', fontSize: '0.85rem' }}>
+                        <span style={{ color: '#374151' }}>{row.label}</span>
+                        <span style={{ fontWeight: 600, fontSize: '0.78rem', color: row.color, background: row.bg, padding: '0.1rem 0.45rem', borderRadius: 4 }}>{row.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {totalLinks > 0 && (
+                  <div>
+                    <div style={{ padding: '0.4rem 0.75rem 0.2rem', fontSize: '0.75rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Relationships</div>
+                    {[
+                      { label: 'Candidate (link exists, not rejected)',   count: linkCandidates,    bg: '#dcfce7', color: '#166534' },
+                      { label: 'Needs review (pending/in_review status)', count: linkNeedsReviewCt, bg: '#f3f4f6', color: '#6b7280' },
+                      { label: 'Blocked (rejected status)',               count: linkBlockedCt,     bg: '#fee2e2', color: '#991b1b' },
+                    ].map((row) => (
+                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.3rem 0.75rem', borderBottom: '1px solid #f9fafb', fontSize: '0.85rem' }}>
+                        <span style={{ color: '#374151' }}>{row.label}</span>
+                        <span style={{ fontWeight: 600, fontSize: '0.78rem', color: row.color, background: row.bg, padding: '0.1rem 0.45rem', borderRadius: 4 }}>{row.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </SectionCard>
+            )}
+
+            {/* Production mapping diagnostics */}
+            <SectionCard>
+              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Production mapping diagnostics
+                </span>
+              </div>
+              <div style={{ padding: '0.25rem 0.75rem 0.25rem' }}>
+                {[
+                  {
+                    field: 'production_manufacturer_id',
+                    note: manufacturer.production_manufacturer_id
+                      ? `Set on this manufacturer (${String(manufacturer.production_manufacturer_id).slice(0, 8)}…)`
+                      : 'Not set — manufacturer not yet mapped to a production ID',
+                    available: !!manufacturer.production_manufacturer_id,
+                  },
+                  {
+                    field: 'production_system_id (per system)',
+                    note: 'Not loaded — field exists in staged_systems schema but is not selected in current page queries',
+                    available: null as boolean | null,
+                  },
+                  {
+                    field: 'production_component_id (per component)',
+                    note: 'Not loaded — field exists in staged_components schema but is not selected in current page queries',
+                    available: null as boolean | null,
+                  },
+                ].map((row) => (
+                  <div key={row.field} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid #f9fafb' }}>
+                    <code style={{ fontSize: '0.78rem', background: '#f3f4f6', padding: '0.1rem 0.35rem', borderRadius: 3, flexShrink: 0, color: '#374151' }}>
+                      {row.field}
+                    </code>
+                    <span style={{ fontSize: '0.78rem', color: row.available === null ? '#9ca3af' : row.available ? '#166534' : '#92400e', flex: 1 }}>
+                      {row.note}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p style={{ margin: '0 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Production IDs are populated only after a successful controlled migration. Do not invent or hardcode production IDs from this page.
+              </p>
+            </SectionCard>
+
+            {/* Publish batch status */}
+            <SectionCard>
+              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Publish batch status
+                </span>
+              </div>
+              {batchCount === 0 ? (
+                <p style={{ margin: '0.5rem 0.75rem 0.5rem', fontSize: '0.85rem', color: '#9ca3af' }}>
+                  No publish batches exist for this manufacturer yet. Batch creation is a future workflow step — not available on this page.
+                </p>
+              ) : (
+                <>
+                  <table style={{ borderCollapse: 'collapse', fontSize: '0.88rem', margin: '0.25rem 1rem 0.25rem' }}>
+                    <tbody>
+                      <tr>
+                        <td style={{ ...CELL, fontSize: '0.85rem' }}>Publish batches for this manufacturer</td>
+                        <td style={{ ...VAL, fontWeight: 600 }}>{batchCount}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ ...CELL, fontSize: '0.85rem' }}>Staged items (this document) in any batch</td>
+                        <td style={{ ...VAL, fontWeight: 600 }}>{itemsInBatch}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 300 }}>
+                      <thead>
+                        <tr>
+                          <th style={TH}>Status</th>
+                          <th style={TH}>Created</th>
+                          <th style={TH}>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(batches as { id: string; status: string; created_at: string; notes: string | null }[]).map((b) => (
+                          <tr key={b.id}>
+                            <td style={TD}><StatusBadge status={b.status} /></td>
+                            <td style={{ ...TD, color: '#6b7280' }}>{fmtDate(b.created_at)}</td>
+                            <td style={{ ...TD, color: '#9ca3af', fontSize: '0.8rem' }}>{b.notes ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+              <p style={{ margin: '0 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Publish batches are scoped to the manufacturer. No batch creation, approval, or migration is possible from this page.
+              </p>
+            </SectionCard>
+
+            {/* Publish blockers */}
+            <SectionCard>
+              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Publish blockers
+                </span>
+              </div>
+              {blockers.map((b, i) => {
+                const s = BLO[b.sev]
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.4rem 0.75rem', borderBottom: i < blockers.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.dot, flexShrink: 0, marginTop: '0.4rem' }} />
+                    <div style={{ flex: 1, fontSize: '0.85rem', color: '#374151' }}>{b.text}</div>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: s.lc, background: s.lb, padding: '0.1rem 0.45rem', borderRadius: 4, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {s.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </SectionCard>
+
+            {/* Future publish sequence */}
+            <SectionCard>
+              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Future publish sequence
+                </span>
+              </div>
+              {([
+                { label: 'Verify all fields (field_verifications → approved)',   built: true  },
+                { label: 'Resolve catalogue codes and SKUs',                     built: true  },
+                { label: 'Confirm all system–component relationships',           built: true  },
+                { label: 'Build publish batch',                                  built: false },
+                { label: 'Preview production diff',                              built: false },
+                { label: 'Admin confirms migration',                             built: false },
+                { label: 'Write to RFQ/MFP production Supabase',                built: false },
+                { label: 'Record publish result',                                built: false },
+              ] as { label: string; built: boolean }[]).map((step, i, arr) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.4rem 0.75rem', borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: '50%', fontSize: '0.72rem', fontWeight: 700, background: step.built ? '#dcfce7' : '#f3f4f6', color: step.built ? '#166534' : '#d1d5db', flexShrink: 0 }}>
+                    {i + 1}
+                  </span>
+                  <span style={{ flex: 1, fontSize: '0.85rem', color: step.built ? '#374151' : '#9ca3af' }}>{step.label}</span>
+                  {!step.built && (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', background: '#f3f4f6', padding: '0.1rem 0.45rem', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                      Not built yet
+                    </span>
+                  )}
+                </div>
+              ))}
+              <p style={{ margin: '0.5rem 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Steps 1–3 are visible in the sections above. Steps 4–8 are future milestones that must not be triggered from this page.
               </p>
             </SectionCard>
           </>
