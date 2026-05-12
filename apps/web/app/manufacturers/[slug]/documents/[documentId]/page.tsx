@@ -111,6 +111,29 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+function RoleBadge({ role }: { role: string }) {
+  const map: Record<string, { bg: string; color: string }> = {
+    required:  { bg: '#f3f4f6', color: '#374151' },
+    optional:  { bg: '#dbeafe', color: '#1d4ed8' },
+    accessory: { bg: '#fef9c3', color: '#854d0e' },
+  }
+  const c = map[role] ?? { bg: '#f3f4f6', color: '#6b7280' }
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '0.12rem 0.45rem',
+      borderRadius: 4,
+      fontSize: '0.78rem',
+      fontWeight: 500,
+      background: c.bg,
+      color: c.color,
+      whiteSpace: 'nowrap',
+    }}>
+      {role}
+    </span>
+  )
+}
+
 const CELL: React.CSSProperties = { padding: '0.4rem 1rem 0.4rem 0', color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }
 const VAL: React.CSSProperties  = { padding: '0.4rem 0' }
 
@@ -218,20 +241,39 @@ export default async function DocumentDetail({ params }: Props) {
   const systemIds = stagedSystems?.map((s) => s.id) ?? []
 
   // --- Variant counts (only if systems exist) ---
-  let relationshipCount = 0
-  let colourCount = 0
-  let profileCount = 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let sscLinks:       any[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let sysColourRows:  any[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let sysProfileRows: any[] = []
 
   if (systemIds.length > 0) {
-    const [{ data: sscRows }, { data: colourRows }, { data: profileRows }] = await Promise.all([
-      supabase.from('staged_system_components').select('id').in('staged_system_id', systemIds),
-      supabase.from('staged_system_colours').select('id').in('staged_system_id', systemIds),
-      supabase.from('staged_system_profiles').select('id').in('staged_system_id', systemIds),
+    const [{ data: sscData }, { data: colourData }, { data: profileData }] = await Promise.all([
+      supabase.from('staged_system_components')
+        .select('staged_system_id, staged_component_id, role, notes, sort_order, verification_status')
+        .in('staged_system_id', systemIds)
+        .order('sort_order', { ascending: true }),
+      supabase.from('staged_system_colours')
+        .select('staged_system_id, colour_name, is_stocked, sort_order')
+        .in('staged_system_id', systemIds)
+        .order('sort_order', { ascending: true }),
+      supabase.from('staged_system_profiles')
+        .select('staged_system_id, name, dimensions, sort_order, verification_status')
+        .in('staged_system_id', systemIds)
+        .order('sort_order', { ascending: true }),
     ])
-    relationshipCount = sscRows?.length ?? 0
-    colourCount = colourRows?.length ?? 0
-    profileCount = profileRows?.length ?? 0
+    sscLinks       = sscData     ?? []
+    sysColourRows  = colourData  ?? []
+    sysProfileRows = profileData ?? []
   }
+
+  const relationshipCount = sscLinks.length
+  const colourCount       = sysColourRows.length
+  const profileCount      = sysProfileRows.length
+  const compById          = new Map((stagedComponents ?? []).map((c) => [c.id, c]))
+  const sysWithLinksCount = new Set(sscLinks.map((l) => l.staged_system_id)).size
+  const sysNoLinksCount   = systemIds.length - sysWithLinksCount
 
   const activeStep = LIFECYCLE_STEPS.findIndex((s) => s.key === doc.status)
 
@@ -433,19 +475,33 @@ export default async function DocumentDetail({ params }: Props) {
         )}
       </SectionCard>
 
-      {/* H — Variants/relationships summary (only shown when systems exist) */}
+      {/* H — System composition */}
       {systemIds.length > 0 && (
         <>
-          <h2 style={{ marginBottom: '0.4rem' }}>Staged variants and relationships</h2>
+          <h2 style={{ marginBottom: '0.4rem' }}>System composition</h2>
           <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
-            Counts across all staged systems for this document. Read-only.
+            Each system with its linked components, colours, and profiles. Read-only.
           </p>
+
+          {/* Relationship coverage summary */}
           <SectionCard>
-            <table style={{ borderCollapse: 'collapse', fontSize: '0.9rem', margin: '0.5rem 1rem 0.75rem' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: '0.9rem', margin: '0.5rem 1rem 0.25rem' }}>
               <tbody>
                 <tr>
-                  <td style={{ ...CELL, fontSize: '0.85rem' }}>System–component relationships</td>
+                  <td style={{ ...CELL, fontSize: '0.85rem' }}>Systems</td>
+                  <td style={{ ...VAL, fontWeight: 600 }}>{systemIds.length}</td>
+                </tr>
+                <tr>
+                  <td style={{ ...CELL, fontSize: '0.85rem' }}>System–component links</td>
                   <td style={{ ...VAL, fontWeight: 600 }}>{relationshipCount}</td>
+                </tr>
+                <tr>
+                  <td style={{ ...CELL, fontSize: '0.85rem' }}>Systems with linked components</td>
+                  <td style={{ ...VAL, fontWeight: 600, color: sysWithLinksCount > 0 ? '#166534' : '#374151' }}>{sysWithLinksCount}</td>
+                </tr>
+                <tr>
+                  <td style={{ ...CELL, fontSize: '0.85rem' }}>Systems with no linked components</td>
+                  <td style={{ ...VAL, fontWeight: 600, color: sysNoLinksCount > 0 ? '#92400e' : '#374151' }}>{sysNoLinksCount}</td>
                 </tr>
                 <tr>
                   <td style={{ ...CELL, fontSize: '0.85rem' }}>Colour variants</td>
@@ -457,7 +513,124 @@ export default async function DocumentDetail({ params }: Props) {
                 </tr>
               </tbody>
             </table>
+            <p style={{ margin: '0 1rem 0.75rem', fontSize: '0.82rem', color: '#9ca3af' }}>
+              Relationship data is staged and must be checked against the manufacturer catalogue before publishing.
+            </p>
           </SectionCard>
+
+          {/* Per-system breakdown */}
+          {(stagedSystems ?? []).map((sys) => {
+            const links      = sscLinks.filter((l) => l.staged_system_id === sys.id)
+            const sysColours = sysColourRows.filter((c) => c.staged_system_id === sys.id)
+            const sysProfs   = sysProfileRows.filter((p) => p.staged_system_id === sys.id)
+            const hasVariants = sysColours.length > 0 || sysProfs.length > 0
+            return (
+              <div key={sys.id} style={{
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                marginBottom: '1rem',
+                overflow: 'hidden',
+              }}>
+                {/* System header */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  flexWrap: 'wrap',
+                  padding: '0.65rem 1rem',
+                  background: '#fafafa',
+                  borderBottom: '1px solid #f3f4f6',
+                }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{sys.name}</span>
+                  {sys.product_code && (
+                    <code style={{ fontSize: '0.8rem', color: '#374151', background: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
+                      {sys.product_code}
+                    </code>
+                  )}
+                  <StatusBadge status={sys.verification_status} />
+                </div>
+
+                {/* Linked components */}
+                {links.length > 0 ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 400 }}>
+                      <thead>
+                        <tr>
+                          <th style={TH}>Component</th>
+                          <th style={TH}>SKU</th>
+                          <th style={TH}>Role</th>
+                          <th style={TH}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {links.map((link) => {
+                          const comp = compById.get(link.staged_component_id)
+                          return (
+                            <tr key={link.staged_component_id}>
+                              <td style={{ ...TD, fontWeight: 500 }}>{comp?.name ?? '—'}</td>
+                              <td style={{
+                                ...TD,
+                                color: '#6b7280',
+                                fontFamily: comp?.sku ? 'monospace' : undefined,
+                                fontSize: comp?.sku ? '0.82rem' : undefined,
+                              }}>
+                                {comp?.sku ?? '—'}
+                              </td>
+                              <td style={TD}><RoleBadge role={link.role} /></td>
+                              <td style={TD}><StatusBadge status={link.verification_status} /></td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p style={{ margin: '0.6rem 1rem', fontSize: '0.85rem', color: '#9ca3af' }}>
+                    No linked components staged yet.
+                  </p>
+                )}
+
+                {/* Colours and profiles */}
+                {hasVariants && (
+                  <div style={{
+                    padding: '0.5rem 1rem 0.65rem',
+                    borderTop: '1px solid #f3f4f6',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.4rem',
+                  }}>
+                    {sysColours.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        <span style={{ fontSize: '0.78rem', color: '#9ca3af', flexShrink: 0 }}>Colours:</span>
+                        {sysColours.map((col) => (
+                          <span key={col.colour_name} style={{
+                            fontSize: '0.78rem',
+                            padding: '0.1rem 0.45rem',
+                            borderRadius: 4,
+                            background: col.is_stocked ? '#f3f4f6' : 'transparent',
+                            color: col.is_stocked ? '#374151' : '#9ca3af',
+                            border: col.is_stocked ? '1px solid #e5e7eb' : '1px dashed #d1d5db',
+                          }}>
+                            {col.colour_name}{!col.is_stocked && ' (not stocked)'}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {sysProfs.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', color: '#9ca3af', flexShrink: 0 }}>Profiles:</span>
+                        {sysProfs.map((p, i) => (
+                          <span key={i} style={{ fontSize: '0.78rem', color: '#374151' }}>
+                            {p.name ?? '—'}{p.dimensions ? ` — ${p.dimensions}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </>
       )}
 
