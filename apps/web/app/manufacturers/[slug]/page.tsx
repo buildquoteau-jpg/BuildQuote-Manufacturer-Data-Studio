@@ -68,7 +68,9 @@ export default async function ManufacturerDetail({ params }: Props) {
           <tbody>
             {docs.map((doc) => (
               <tr key={doc.id} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '0.5rem 0.75rem' }}>{doc.document_name}</td>
+                <td style={{ padding: '0.5rem 0.75rem' }}>
+                  <a href={`/manufacturers/${data.slug}/documents/${doc.id}`}>{doc.document_name}</a>
+                </td>
                 <td style={{ padding: '0.5rem 0.75rem', color: '#555' }}>{doc.document_type ?? '—'}</td>
                 <td style={{ padding: '0.5rem 0.75rem', color: '#555' }}>{doc.document_date ?? '—'}</td>
                 <td style={{ padding: '0.5rem 0.75rem' }}>{doc.status}</td>
