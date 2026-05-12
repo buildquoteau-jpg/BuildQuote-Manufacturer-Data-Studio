@@ -74,7 +74,9 @@ export default async function Home() {
           <tbody>
             {manufacturers.data.map((m) => (
               <tr key={m.id} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '0.5rem 0.75rem' }}>{m.name}</td>
+                <td style={{ padding: '0.5rem 0.75rem' }}>
+                  <a href={`/manufacturers/${m.slug}`}>{m.name}</a>
+                </td>
                 <td style={{ padding: '0.5rem 0.75rem', color: '#555' }}>{m.slug}</td>
                 <td style={{ padding: '0.5rem 0.75rem' }}>{m.status}</td>
                 <td style={{ padding: '0.5rem 0.75rem', color: '#888' }}>
