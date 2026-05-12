@@ -278,13 +278,13 @@ export default async function DocumentDetail({ params }: Props) {
 
     supabase
       .from('staged_systems')
-      .select('id, name, product_code, category, subcategory, description, verification_status, extraction_confidence, created_at')
+      .select('id, name, product_code, category, subcategory, description, verification_status, extraction_confidence, production_system_id, created_at')
       .eq('source_document_id', doc.id)
       .order('sort_order', { ascending: true }),
 
     supabase
       .from('staged_components')
-      .select('id, name, sku, category, uom, description, verification_status, extraction_confidence')
+      .select('id, name, sku, category, uom, description, verification_status, extraction_confidence, production_component_id')
       .eq('source_document_id', doc.id)
       .order('sort_order', { ascending: true }),
 
@@ -1634,6 +1634,10 @@ export default async function DocumentDetail({ params }: Props) {
         // Missing codes / evidence gaps
         const systemsMissingCode = systems.filter((s) => !s.product_code).length
         const compsMissingSku    = components.filter((c) => !c.sku).length
+
+        // Production ID mapping counts (NULL = not yet exported, not an error)
+        const sysMappedCount  = systems.filter((s) => s.production_system_id).length
+        const compMappedCount = components.filter((c) => c.production_component_id).length
         const fvNoChunk          = fvRows.filter((r) => !r.source_chunk_id).length
         const runsCountN         = runs?.length ?? 0
 
@@ -1686,7 +1690,6 @@ export default async function DocumentDetail({ params }: Props) {
         }
         blockers.push({ sev: 'future_step', text: 'Publish batch workflow not enabled — publish_batches table exists in schema but no create/approve actions are built yet' })
         blockers.push({ sev: 'future_step', text: 'Production migration not enabled — no write path to RFQ/MFP production Supabase exists on this page' })
-        blockers.push({ sev: 'info', text: 'production_system_id and production_component_id fields exist in schema but are not selected in current page queries' })
 
         return (
           <>
@@ -1813,13 +1816,25 @@ export default async function DocumentDetail({ params }: Props) {
                   },
                   {
                     field: 'production_system_id (per system)',
-                    note: 'Not loaded — field exists in staged_systems schema but is not selected in current page queries',
-                    available: null as boolean | null,
+                    note: totalSystems === 0
+                      ? '—'
+                      : sysMappedCount === totalSystems
+                        ? `All ${totalSystems} system${totalSystems !== 1 ? 's' : ''} mapped to production`
+                        : sysMappedCount === 0
+                          ? `— not yet mapped (${totalSystems} system${totalSystems !== 1 ? 's' : ''} pending export)`
+                          : `${sysMappedCount} of ${totalSystems} mapped; ${totalSystems - sysMappedCount} not yet mapped`,
+                    available: totalSystems === 0 ? null as boolean | null : sysMappedCount === totalSystems ? true : null,
                   },
                   {
                     field: 'production_component_id (per component)',
-                    note: 'Not loaded — field exists in staged_components schema but is not selected in current page queries',
-                    available: null as boolean | null,
+                    note: totalComponents === 0
+                      ? '—'
+                      : compMappedCount === totalComponents
+                        ? `All ${totalComponents} component${totalComponents !== 1 ? 's' : ''} mapped to production`
+                        : compMappedCount === 0
+                          ? `— not yet mapped (${totalComponents} component${totalComponents !== 1 ? 's' : ''} pending export)`
+                          : `${compMappedCount} of ${totalComponents} mapped; ${totalComponents - compMappedCount} not yet mapped`,
+                    available: totalComponents === 0 ? null as boolean | null : compMappedCount === totalComponents ? true : null,
                   },
                 ].map((row) => (
                   <div key={row.field} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid #f9fafb' }}>
