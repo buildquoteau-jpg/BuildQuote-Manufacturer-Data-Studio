@@ -958,6 +958,156 @@ export default async function DocumentDetail({ params }: Props) {
         ))}
       </div>
 
+      {/* K_post — Review workflow */}
+      {(() => {
+        type WFStatus = 'complete' | 'needs_review' | 'check_catalogue' | 'locked'
+
+        interface WFStep {
+          label: string
+          status: WFStatus
+          note?: string
+        }
+
+        const WF_STYLE: Record<WFStatus, { label: string; bg: string; color: string }> = {
+          complete:        { label: 'Done',             bg: '#dcfce7', color: '#166534' },
+          needs_review:    { label: 'Needs review',     bg: '#fef3c7', color: '#92400e' },
+          check_catalogue: { label: 'Check catalogue',  bg: '#fef3c7', color: '#92400e' },
+          locked:          { label: 'Not enabled yet',  bg: '#f3f4f6', color: '#9ca3af' },
+        }
+
+        const runsCount       = runs?.length ?? 0
+        const systemsCount    = stagedSystems?.length ?? 0
+        const componentsCount = stagedComponents?.length ?? 0
+        const systemsMissingCode  = systemsCount - (stagedSystems ?? []).filter((s) => s.product_code).length
+        const componentsMissingSku = componentsCount - (stagedComponents ?? []).filter((c) => c.sku).length
+
+        const steps: WFStep[] = [
+          {
+            label: 'Document registered',
+            status: 'complete',
+          },
+          {
+            label: 'Extraction run recorded',
+            status: runsCount > 0 ? 'complete' : 'needs_review',
+            note: runsCount > 0 ? `${runsCount} run${runsCount > 1 ? 's' : ''}` : 'No runs yet',
+          },
+          {
+            label: 'Text chunks available',
+            status: chunkCount > 0 ? 'complete' : 'needs_review',
+            note: chunkCount > 0 ? `${chunkCount} chunk${chunkCount > 1 ? 's' : ''}` : 'No chunks yet',
+          },
+          {
+            label: 'Staged systems and components extracted',
+            status: systemsCount > 0 && componentsCount > 0 ? 'complete' : 'needs_review',
+            note: systemsCount > 0 || componentsCount > 0
+              ? `${systemsCount} system${systemsCount !== 1 ? 's' : ''}, ${componentsCount} component${componentsCount !== 1 ? 's' : ''}`
+              : 'None yet',
+          },
+          {
+            label: 'System composition reviewed',
+            status: sysWithLinksCount > 0 && sysNoLinksCount === 0 ? 'complete'
+              : systemsCount > 0 ? 'needs_review'
+              : 'needs_review',
+            note: sysNoLinksCount > 0 ? `${sysNoLinksCount} system${sysNoLinksCount > 1 ? 's' : ''} unlinked` : undefined,
+          },
+          {
+            label: 'Catalogue codes checked',
+            status: systemsCount === 0 && componentsCount === 0 ? 'needs_review'
+              : systemsMissingCode === 0 && componentsMissingSku === 0 ? 'complete'
+              : 'check_catalogue',
+            note: systemsMissingCode > 0 || componentsMissingSku > 0 ? 'Missing codes — expected at this stage' : undefined,
+          },
+          {
+            label: 'Human verification',
+            status: 'locked',
+            note: 'Requires explicit field-by-field review — not available yet',
+          },
+          {
+            label: 'Publish batch',
+            status: 'locked',
+            note: 'Future controlled step — not available on this page',
+          },
+          {
+            label: 'Production migration',
+            status: 'locked',
+            note: 'Will not run from this page — requires separate deliberate migration',
+          },
+        ]
+
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Review workflow</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              Read-only summary of where this document sits in the staged review process.
+            </p>
+            <SectionCard>
+              <div>
+                {steps.map((step, i) => {
+                  const s = WF_STYLE[step.status]
+                  return (
+                    <div key={step.label} style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.65rem',
+                      padding: '0.5rem 0.75rem',
+                      borderBottom: i < steps.length - 1 ? '1px solid #f3f4f6' : 'none',
+                    }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        marginTop: '0.1rem',
+                        background: step.status === 'locked' ? '#f3f4f6'
+                          : step.status === 'complete' ? '#dcfce7'
+                          : '#fef3c7',
+                        color: step.status === 'locked' ? '#d1d5db'
+                          : step.status === 'complete' ? '#166534'
+                          : '#92400e',
+                      }}>
+                        {i + 1}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontSize: '0.88rem',
+                          color: step.status === 'locked' ? '#9ca3af' : '#374151',
+                          fontWeight: step.status === 'locked' ? 400 : 500,
+                        }}>
+                          {step.label}
+                        </div>
+                        {step.note && (
+                          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.1rem' }}>{step.note}</div>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: s.color,
+                        background: s.bg,
+                        padding: '0.1rem 0.45rem',
+                        borderRadius: 4,
+                        whiteSpace: 'nowrap',
+                        marginTop: '0.1rem',
+                      }}>
+                        {s.label}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <p style={{ margin: '0.5rem 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Studio data stays separate from RFQ/MFP production until a deliberate verified publish/migration step is built.
+              </p>
+            </SectionCard>
+          </>
+        )
+      })()}
+
       {/* L — Safe metadata */}
       <h2 style={{ marginBottom: '0.4rem' }}>Safe metadata</h2>
       <table style={{ borderCollapse: 'collapse', fontSize: '0.88rem', marginBottom: '1.5rem' }}>
