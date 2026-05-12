@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 type Manufacturer = {
   id: string
   name: string
