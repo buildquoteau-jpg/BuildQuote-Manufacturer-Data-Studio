@@ -26,7 +26,7 @@ function fmtConfidence(value: number | null | undefined): string {
 const LIFECYCLE_STEPS = [
   { key: 'uploaded',   label: 'Uploaded' },
   { key: 'queued',     label: 'Queued for extraction' },
-  { key: 'extracting', label: 'Extraction preview' },
+  { key: 'extracting', label: 'Extracting' },
   { key: 'review',     label: 'Human verification' },
   { key: 'approved',   label: 'Approved for BuildQuote' },
 ]
@@ -357,6 +357,15 @@ export default async function DocumentDetail({ params }: Props) {
   const sysWithLinksCount = new Set(sscLinks.map((l) => l.staged_system_id)).size
   const sysNoLinksCount   = systemIds.length - sysWithLinksCount
 
+  const fvTotalByEntityId     = new Map<string, number>()
+  const fvWithChunkByEntityId = new Map<string, number>()
+  ;(fieldVerifications ?? []).forEach((fv) => {
+    fvTotalByEntityId.set(fv.entity_id, (fvTotalByEntityId.get(fv.entity_id) ?? 0) + 1)
+    if (fv.source_chunk_id) {
+      fvWithChunkByEntityId.set(fv.entity_id, (fvWithChunkByEntityId.get(fv.entity_id) ?? 0) + 1)
+    }
+  })
+
   const activeStep = LIFECYCLE_STEPS.findIndex((s) => s.key === doc.status)
 
   return (
@@ -630,10 +639,14 @@ export default async function DocumentDetail({ params }: Props) {
                 <th style={TH}>Subcategory</th>
                 <th style={TH}>Verification</th>
                 <th style={TH}>Confidence</th>
+                <th style={TH}>Evidence</th>
               </tr>
             </thead>
             <tbody>
-              {stagedSystems.map((sys) => (
+              {stagedSystems.map((sys) => {
+                const fvTotal     = fvTotalByEntityId.get(sys.id) ?? 0
+                const fvWithChunk = fvWithChunkByEntityId.get(sys.id) ?? 0
+                return (
                 <tr key={sys.id}>
                   <td style={{ ...TD, fontWeight: 500 }}>
                     {sys.name}
@@ -648,8 +661,12 @@ export default async function DocumentDetail({ params }: Props) {
                   <td style={{ ...TD, color: '#6b7280' }}>{sys.subcategory ?? '—'}</td>
                   <td style={TD}><StatusBadge status={sys.verification_status} /></td>
                   <td style={{ ...TD, color: '#6b7280' }}>{fmtConfidence(sys.extraction_confidence)}</td>
+                  <td style={{ ...TD, fontSize: '0.78rem', color: fvTotal === 0 ? '#d1d5db' : fvWithChunk < fvTotal ? '#92400e' : '#166534' }}>
+                    {fvTotal === 0 ? '—' : `${fvWithChunk}/${fvTotal} linked`}
+                  </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}
@@ -678,10 +695,14 @@ export default async function DocumentDetail({ params }: Props) {
                 <th style={TH}>UOM</th>
                 <th style={TH}>Verification</th>
                 <th style={TH}>Confidence</th>
+                <th style={TH}>Evidence</th>
               </tr>
             </thead>
             <tbody>
-              {stagedComponents.map((comp) => (
+              {stagedComponents.map((comp) => {
+                const fvTotal     = fvTotalByEntityId.get(comp.id) ?? 0
+                const fvWithChunk = fvWithChunkByEntityId.get(comp.id) ?? 0
+                return (
                 <tr key={comp.id}>
                   <td style={{ ...TD, fontWeight: 500 }}>
                     {comp.name}
@@ -696,8 +717,12 @@ export default async function DocumentDetail({ params }: Props) {
                   <td style={{ ...TD, color: '#6b7280' }}>{comp.uom ?? '—'}</td>
                   <td style={TD}><StatusBadge status={comp.verification_status} /></td>
                   <td style={{ ...TD, color: '#6b7280' }}>{fmtConfidence(comp.extraction_confidence)}</td>
+                  <td style={{ ...TD, fontSize: '0.78rem', color: fvTotal === 0 ? '#d1d5db' : fvWithChunk < fvTotal ? '#92400e' : '#166534' }}>
+                    {fvTotal === 0 ? '—' : `${fvWithChunk}/${fvTotal} linked`}
+                  </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}
@@ -1015,6 +1040,8 @@ export default async function DocumentDetail({ params }: Props) {
         // Build lookup maps from already-loaded arrays
         const sysNameById  = new Map((stagedSystems ?? []).map((s) => [s.id, s.name]))
         const compNameById = new Map((stagedComponents ?? []).map((c) => [c.id, c.name]))
+        const sysCodeById  = new Map((stagedSystems ?? []).map((s) => [s.id, s.product_code ?? null]))
+        const compSkuById  = new Map((stagedComponents ?? []).map((c) => [c.id, c.sku ?? null]))
 
         // Group rows by entity_type then entity_id, preserving insertion order
         const sysRows  = fvRows.filter((r) => r.entity_type === 'staged_system')
@@ -1053,10 +1080,11 @@ export default async function DocumentDetail({ params }: Props) {
           )
         }
 
-        function EntityTable({ entityId, rows, entityName }: {
+        function EntityTable({ entityId, rows, entityName, entityCode }: {
           entityId: string
           rows: typeof fvRows
           entityName: string
+          entityCode?: string | null
         }) {
           return (
             <div style={{ marginBottom: '0.1rem' }}>
@@ -1068,8 +1096,16 @@ export default async function DocumentDetail({ params }: Props) {
                 fontSize: '0.82rem',
                 fontWeight: 600,
                 color: '#374151',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
               }}>
                 {entityName || entityId}
+                {entityCode && (
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.76rem', fontWeight: 400, color: '#6b7280', background: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
+                    {entityCode}
+                  </span>
+                )}
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
@@ -1139,6 +1175,7 @@ export default async function DocumentDetail({ params }: Props) {
                       entityId={eid}
                       rows={sysRows.filter((r) => r.entity_id === eid)}
                       entityName={sysNameById.get(eid) ?? eid}
+                      entityCode={sysCodeById.get(eid)}
                     />
                   ))}
                 </div>
@@ -1155,6 +1192,7 @@ export default async function DocumentDetail({ params }: Props) {
                       entityId={eid}
                       rows={compRows.filter((r) => r.entity_id === eid)}
                       entityName={compNameById.get(eid) ?? eid}
+                      entityCode={compSkuById.get(eid)}
                     />
                   ))}
                 </div>
@@ -1432,90 +1470,110 @@ export default async function DocumentDetail({ params }: Props) {
         const linkRejected = sscLinks.filter((l) => l.verification_status === 'rejected').length
         const anyRejected  = sysRejected > 0 || compRejected > 0 || linkRejected > 0
 
-        const checks: ReadinessCheck[] = [
+        const readinessGroups: { title: string; checks: ReadinessCheck[] }[] = [
           {
-            label: 'Extraction run exists',
-            status: runsCount > 0 ? 'ready' : 'missing',
-            detail: runsCount > 0 ? `${runsCount} run${runsCount > 1 ? 's' : ''}` : undefined,
+            title: 'Extraction completeness',
+            checks: [
+              {
+                label: 'Extraction run exists',
+                status: runsCount > 0 ? 'ready' : 'missing',
+                detail: runsCount > 0 ? `${runsCount} run${runsCount > 1 ? 's' : ''}` : undefined,
+              },
+              {
+                label: 'Document chunks extracted',
+                status: chunkCount > 0 ? 'ready' : 'missing',
+                detail: chunkCount > 0 ? `${chunkCount} chunk${chunkCount > 1 ? 's' : ''}` : undefined,
+              },
+              {
+                label: 'Staged systems present',
+                status: systemsCount > 0 ? 'ready' : 'missing',
+                detail: systemsCount > 0 ? `${systemsCount} system${systemsCount > 1 ? 's' : ''}` : undefined,
+              },
+              {
+                label: 'All staged systems have names',
+                status: systemsCount === 0 ? 'not_required_yet' : systemsUnnamed === 0 ? 'ready' : 'needs_review',
+                detail: systemsUnnamed > 0 ? `${systemsUnnamed} unnamed` : undefined,
+              },
+              {
+                label: 'Staged components present',
+                status: componentsCount > 0 ? 'ready' : 'missing',
+                detail: componentsCount > 0 ? `${componentsCount} component${componentsCount > 1 ? 's' : ''}` : undefined,
+              },
+              {
+                label: 'All staged components have names',
+                status: componentsCount === 0 ? 'not_required_yet' : componentsUnnamed === 0 ? 'ready' : 'needs_review',
+                detail: componentsUnnamed > 0 ? `${componentsUnnamed} unnamed` : undefined,
+              },
+            ],
           },
           {
-            label: 'Document chunks extracted',
-            status: chunkCount > 0 ? 'ready' : 'missing',
-            detail: chunkCount > 0 ? `${chunkCount} chunk${chunkCount > 1 ? 's' : ''}` : undefined,
+            title: 'Relationships & composition',
+            checks: [
+              {
+                label: 'At least one system has linked components',
+                status: systemsCount === 0 ? 'not_required_yet' : sysWithLinksCount > 0 ? 'ready' : 'needs_review',
+                detail: systemsCount > 0 ? `${sysWithLinksCount} of ${systemsCount} linked` : undefined,
+              },
+              {
+                label: 'Systems with no linked components',
+                status: sysNoLinksCount === 0 ? 'ready' : 'needs_review',
+                detail: sysNoLinksCount > 0 ? `${sysNoLinksCount} unlinked — needs review` : undefined,
+              },
+            ],
           },
           {
-            label: 'Staged systems present',
-            status: systemsCount > 0 ? 'ready' : 'missing',
-            detail: systemsCount > 0 ? `${systemsCount} system${systemsCount > 1 ? 's' : ''}` : undefined,
+            title: 'Catalogue & codes',
+            checks: [
+              {
+                label: 'Catalogue codes / product codes',
+                status: systemsCount === 0
+                  ? 'not_required_yet'
+                  : systemsWithCode > 0 && systemsMissingCode === 0
+                    ? 'ready'
+                    : 'check_catalogue',
+                detail: systemsMissingCode > 0 ? `${systemsMissingCode} missing — expected at this stage` : undefined,
+              },
+              {
+                label: 'Component SKUs',
+                status: componentsCount === 0
+                  ? 'not_required_yet'
+                  : componentsWithSku > 0 && componentsMissingSku === 0
+                    ? 'ready'
+                    : 'check_catalogue',
+                detail: componentsMissingSku > 0 ? `${componentsMissingSku} missing — expected at this stage` : undefined,
+              },
+            ],
           },
           {
-            label: 'All staged systems have names',
-            status: systemsCount === 0 ? 'not_required_yet' : systemsUnnamed === 0 ? 'ready' : 'needs_review',
-            detail: systemsUnnamed > 0 ? `${systemsUnnamed} unnamed` : undefined,
-          },
-          {
-            label: 'Staged components present',
-            status: componentsCount > 0 ? 'ready' : 'missing',
-            detail: componentsCount > 0 ? `${componentsCount} component${componentsCount > 1 ? 's' : ''}` : undefined,
-          },
-          {
-            label: 'All staged components have names',
-            status: componentsCount === 0 ? 'not_required_yet' : componentsUnnamed === 0 ? 'ready' : 'needs_review',
-            detail: componentsUnnamed > 0 ? `${componentsUnnamed} unnamed` : undefined,
-          },
-          {
-            label: 'At least one system has linked components',
-            status: systemsCount === 0 ? 'not_required_yet' : sysWithLinksCount > 0 ? 'ready' : 'needs_review',
-            detail: systemsCount > 0 ? `${sysWithLinksCount} of ${systemsCount} linked` : undefined,
-          },
-          {
-            label: 'Systems with no linked components',
-            status: sysNoLinksCount === 0 ? 'ready' : 'needs_review',
-            detail: sysNoLinksCount > 0 ? `${sysNoLinksCount} unlinked — needs review` : undefined,
-          },
-          {
-            label: 'Catalogue codes / product codes',
-            status: systemsCount === 0
-              ? 'not_required_yet'
-              : systemsWithCode > 0 && systemsMissingCode === 0
-                ? 'ready'
-                : 'check_catalogue',
-            detail: systemsMissingCode > 0 ? `${systemsMissingCode} missing — expected at this stage` : undefined,
-          },
-          {
-            label: 'Component SKUs',
-            status: componentsCount === 0
-              ? 'not_required_yet'
-              : componentsWithSku > 0 && componentsMissingSku === 0
-                ? 'ready'
-                : 'check_catalogue',
-            detail: componentsMissingSku > 0 ? `${componentsMissingSku} missing — expected at this stage` : undefined,
-          },
-          {
-            label: 'System verification statuses',
-            status: systemsCount === 0
-              ? 'not_required_yet'
-              : sysRejected > 0
-                ? 'flagged'
-                : sysApproved === systemsCount
-                  ? 'ready'
-                  : 'pending',
-            detail: systemsCount > 0
-              ? `${sysApproved} approved, ${sysPending} pending${sysRejected > 0 ? `, ${sysRejected} rejected` : ''}`
-              : undefined,
-          },
-          {
-            label: 'Component verification statuses',
-            status: componentsCount === 0
-              ? 'not_required_yet'
-              : compRejected > 0
-                ? 'flagged'
-                : compApproved === componentsCount
-                  ? 'ready'
-                  : 'pending',
-            detail: componentsCount > 0
-              ? `${compApproved} approved, ${compPending} pending${compRejected > 0 ? `, ${compRejected} rejected` : ''}`
-              : undefined,
+            title: 'Staged verification status',
+            checks: [
+              {
+                label: 'System verification statuses',
+                status: systemsCount === 0
+                  ? 'not_required_yet'
+                  : sysRejected > 0
+                    ? 'flagged'
+                    : sysApproved === systemsCount
+                      ? 'ready'
+                      : 'pending',
+                detail: systemsCount > 0
+                  ? `${sysApproved} approved, ${sysPending} pending${sysRejected > 0 ? `, ${sysRejected} rejected` : ''}`
+                  : undefined,
+              },
+              {
+                label: 'Component verification statuses',
+                status: componentsCount === 0
+                  ? 'not_required_yet'
+                  : compRejected > 0
+                    ? 'flagged'
+                    : compApproved === componentsCount
+                      ? 'ready'
+                      : 'pending',
+                detail: componentsCount > 0
+                  ? `${compApproved} approved, ${compPending} pending${compRejected > 0 ? `, ${compRejected} rejected` : ''}`
+                  : undefined,
+              },
+            ],
           },
         ]
 
@@ -1570,9 +1628,42 @@ export default async function DocumentDetail({ params }: Props) {
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: overallColor }}>{overallState}</span>
               </div>
               <div>
-                {checks.map((check) => (
-                  <ReadinessRow key={check.label} check={check} />
+                {readinessGroups.map((group) => (
+                  <div key={group.title}>
+                    <div style={{
+                      padding: '0.35rem 0.75rem',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      color: '#9ca3af',
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      borderBottom: '1px solid #f3f4f6',
+                      background: '#fafafa',
+                    }}>
+                      {group.title}
+                    </div>
+                    {group.checks.map((check) => (
+                      <ReadinessRow key={check.label} check={check} />
+                    ))}
+                  </div>
                 ))}
+                {/* Production mapping note — not required yet at staging */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.5rem',
+                  padding: '0.5rem 0.75rem',
+                  borderTop: '1px solid #f3f4f6',
+                  fontSize: '0.82rem',
+                  color: '#9ca3af',
+                }}>
+                  <span style={{ marginTop: '0.1rem', flexShrink: 0, fontSize: '0.8rem' }}>ℹ</span>
+                  <span>
+                    <strong style={{ color: '#6b7280' }}>Production ID mapping</strong> — not required yet.
+                    Production system and component IDs are populated after staged data is exported to production.
+                    Missing IDs are normal while data remains in staging.
+                  </span>
+                </div>
               </div>
               <p style={{ margin: '0.5rem 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
                 Readiness is a guide only. Publishing will require explicit verification and a separate controlled migration step.
@@ -1600,7 +1691,7 @@ export default async function DocumentDetail({ params }: Props) {
           'Review extracted systems',
           'Review extracted components',
           'Check required accessories and fixings',
-          'Approve for BuildQuote',
+          'Approve staged data for production (verify first — future step)',
         ].map((item) => (
           <div key={item} style={{
             display: 'flex',
