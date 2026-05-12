@@ -35,13 +35,13 @@ Three distinct credential sets are needed at different stages:
 
 | Variable | Purpose | Where used |
 |---|---|---|
-| `NEXT_PUBLIC_DATA_STUDIO_SUPABASE_URL` | Data Studio Supabase URL | Browser + server |
-| `NEXT_PUBLIC_DATA_STUDIO_SUPABASE_ANON_KEY` | Data Studio anon key (safe for browser) | Browser + server |
-| `DATA_STUDIO_SUPABASE_SERVICE_ROLE_KEY` | Data Studio service role (admin operations) | Server-side only |
+| `NEXT_PUBLIC_SUPABASE_URL` | Data Studio Supabase URL | Browser + server |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Data Studio anon key (safe for browser) | Browser + server |
+| `SUPABASE_SERVICE_ROLE_KEY` | Data Studio service role (admin operations) | Server-side only |
 | `PRODUCTION_SUPABASE_URL` | Production Supabase URL | Server-side export only (future) |
 | `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` | Production service role key | Server-side export only (future) |
 
-`PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` is for a future server-side export step only. It must never be used in browser code or passed to `NEXT_PUBLIC_*` variables.
+`SUPABASE_SERVICE_ROLE_KEY` must never be used in browser code or passed to `NEXT_PUBLIC_*` variables. `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` is for a future server-side export step only and must never appear in browser code.
 
 ---
 
@@ -69,7 +69,7 @@ supabase start
 
 Starts a local Supabase stack (Postgres, Auth, Storage, Studio) using Docker. On first run this will pull Docker images — allow a few minutes.
 
-Once started, Supabase will print local credentials including `API URL`, `anon key`, and `service_role key`. Use these in a `.env.local` file (never commit this file).
+Once started, Supabase will print local credentials including `Project URL`, `Publishable` key (anon key), and `Secret` key (service role). Use these in a `.env.local` file (never commit this file).
 
 ### Step 3 — Apply migrations
 
@@ -91,7 +91,7 @@ See Section 4 below for migration order details.
 
 ### Step 4 — Create your `.env.local` file
 
-After `supabase start`, copy the printed credentials into a new file called `.env.local` at the repo root. Use the placeholder names from Section 2. This file must not be committed — it is listed in `.gitignore`.
+After `supabase start`, copy the printed credentials into a new file called `.env.local` at the repo root. Use the placeholder names from Section 6 (which match `.env.example`). This file must not be committed — it is listed in `.gitignore`.
 
 ---
 
@@ -128,9 +128,9 @@ Controlled export from Data Studio into production happens only after all fields
 
 ```env
 # Data Studio Supabase — local or hosted Data Studio project only
-NEXT_PUBLIC_DATA_STUDIO_SUPABASE_URL=
-NEXT_PUBLIC_DATA_STUDIO_SUPABASE_ANON_KEY=
-DATA_STUDIO_SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
 # Production Supabase — server-side export only, future use
 # NEVER expose these to the browser or NEXT_PUBLIC_ variables
