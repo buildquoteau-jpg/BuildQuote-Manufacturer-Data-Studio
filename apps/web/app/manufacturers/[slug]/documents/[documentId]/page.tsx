@@ -272,8 +272,9 @@ export default async function DocumentDetail({ params }: Props) {
 
     supabase
       .from('document_chunks')
-      .select('id')
-      .eq('source_document_id', doc.id),
+      .select('id, chunk_index, page_number, heading, chunk_type, raw_text, confidence')
+      .eq('source_document_id', doc.id)
+      .order('chunk_index', { ascending: true }),
 
     supabase
       .from('staged_systems')
@@ -436,15 +437,52 @@ export default async function DocumentDetail({ params }: Props) {
       {/* E — Document chunks */}
       <h2 style={{ marginBottom: '0.4rem' }}>Document chunks</h2>
       <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
-        Text and table chunks extracted from this document.
+        Text and table chunks extracted from this document. Preview limited to first 10.
       </p>
       <SectionCard>
         {chunkCount === 0 ? (
           <EmptyNote text="No document chunks have been created yet." />
         ) : (
-          <p style={{ margin: '0.75rem 1rem', fontSize: '0.9rem', color: '#374151' }}>
-            Document chunks: <strong>{chunkCount}</strong>
-          </p>
+          <>
+            <p style={{ margin: '0.75rem 1rem 0.5rem', fontSize: '0.9rem', color: '#374151' }}>
+              Total chunks: <strong>{chunkCount}</strong>
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 400 }}>
+                <thead>
+                  <tr>
+                    <th style={TH}>#</th>
+                    <th style={TH}>Heading</th>
+                    <th style={TH}>Type</th>
+                    <th style={TH}>Page</th>
+                    <th style={TH}>Preview</th>
+                    <th style={TH}>Conf.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(chunkRows ?? []).slice(0, 10).map((chunk) => (
+                    <tr key={chunk.id}>
+                      <td style={{ ...TD, color: '#9ca3af', fontSize: '0.78rem' }}>{chunk.chunk_index}</td>
+                      <td style={{ ...TD, fontWeight: 500, fontSize: '0.82rem' }}>{chunk.heading ?? '—'}</td>
+                      <td style={{ ...TD, color: '#6b7280', fontSize: '0.78rem', fontFamily: 'monospace' }}>{chunk.chunk_type ?? '—'}</td>
+                      <td style={{ ...TD, color: '#6b7280' }}>{chunk.page_number != null ? `p.${chunk.page_number}` : '—'}</td>
+                      <td style={{ ...TD, color: '#6b7280', fontSize: '0.78rem' }}>
+                        {chunk.raw_text
+                          ? chunk.raw_text.slice(0, 100) + (chunk.raw_text.length > 100 ? '…' : '')
+                          : '—'}
+                      </td>
+                      <td style={{ ...TD, color: '#6b7280' }}>{fmtConfidence(chunk.confidence)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {chunkCount > 10 && (
+              <p style={{ margin: '0.5rem 1rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Showing 10 of {chunkCount} chunks.
+              </p>
+            )}
+          </>
         )}
       </SectionCard>
 
@@ -891,6 +929,245 @@ export default async function DocumentDetail({ params }: Props) {
                 Field verification records are staged trust-layer data. No edits or approvals are available on this page.
               </p>
             </SectionCard>
+          </>
+        )
+      })()}
+
+      {/* I_evidence — Extraction evidence trail */}
+      {(() => {
+        const fvRows    = fieldVerifications ?? []
+        const chunks    = chunkRows ?? []
+        const chunkById = new Map(chunks.map((c) => [c.id, c]))
+
+        const chunksWithPage      = chunks.filter((c) => c.page_number != null).length
+        const fvWithChunk         = fvRows.filter((r) => r.source_chunk_id != null).length
+        const fvWithoutChunk      = fvRows.length - fvWithChunk
+        const fvChunkResolvable   = fvRows.filter((r) => r.source_chunk_id != null && chunkById.has(r.source_chunk_id)).length
+
+        const sysNameById  = new Map((stagedSystems  ?? []).map((s) => [s.id, s.name]))
+        const compNameById = new Map((stagedComponents ?? []).map((c) => [c.id, c.name]))
+
+        type DiagStatus = 'available' | 'missing' | 'partial' | 'not_linked_yet' | 'ready_for_review' | 'needs_source_link'
+        type DiagRow = { label: string; status: DiagStatus; detail?: string }
+
+        const DIAG_STYLE: Record<DiagStatus, { label: string; bg: string; color: string }> = {
+          available:         { label: 'Available',         bg: '#dcfce7', color: '#166534' },
+          missing:           { label: 'Missing',           bg: '#fee2e2', color: '#991b1b' },
+          partial:           { label: 'Partial',           bg: '#fef3c7', color: '#92400e' },
+          not_linked_yet:    { label: 'Not linked yet',    bg: '#f3f4f6', color: '#6b7280' },
+          ready_for_review:  { label: 'Ready for review',  bg: '#dbeafe', color: '#1d4ed8' },
+          needs_source_link: { label: 'Needs source link', bg: '#ffedd5', color: '#9a3412' },
+        }
+
+        const diags: DiagRow[] = [
+          {
+            label: 'Document chunks',
+            status: chunkCount === 0 ? 'missing' : 'available',
+            detail: chunkCount > 0 ? `${chunkCount} chunk${chunkCount > 1 ? 's' : ''}` : undefined,
+          },
+          {
+            label: 'Chunks with page number',
+            status: chunkCount === 0 ? 'missing'
+              : chunksWithPage === chunkCount ? 'available'
+              : chunksWithPage > 0 ? 'partial'
+              : 'not_linked_yet',
+            detail: chunkCount > 0 ? `${chunksWithPage} of ${chunkCount}` : undefined,
+          },
+          {
+            label: 'Field verification rows',
+            status: fvRows.length === 0 ? 'missing' : 'available',
+            detail: fvRows.length > 0 ? `${fvRows.length} field${fvRows.length > 1 ? 's' : ''}` : undefined,
+          },
+          {
+            label: 'Field verifications linked to source chunks',
+            status: fvRows.length === 0 ? 'missing'
+              : fvWithChunk === fvRows.length ? 'available'
+              : fvWithChunk > 0 ? 'partial'
+              : 'needs_source_link',
+            detail: fvRows.length > 0 ? `${fvWithChunk} of ${fvRows.length} linked` : undefined,
+          },
+          {
+            label: 'Field rows without source chunk',
+            status: fvWithoutChunk === 0 ? 'available'
+              : fvWithoutChunk === fvRows.length ? 'not_linked_yet'
+              : 'partial',
+            detail: fvWithoutChunk > 0
+              ? `${fvWithoutChunk} field${fvWithoutChunk > 1 ? 's' : ''} without source chunk`
+              : 'None — all fields linked',
+          },
+          {
+            label: 'Source chunk text resolvable',
+            status: fvWithChunk === 0 ? 'not_linked_yet'
+              : fvChunkResolvable === fvWithChunk ? 'ready_for_review'
+              : fvChunkResolvable > 0 ? 'partial'
+              : 'needs_source_link',
+            detail: fvWithChunk > 0 ? `${fvChunkResolvable} of ${fvWithChunk} chunk texts loaded` : undefined,
+          },
+        ]
+
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Extraction evidence trail</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              Traceability is read-only. Extraction evidence must be checked before any future publish/migration step.
+            </p>
+
+            {/* A — Source coverage summary */}
+            <SectionCard>
+              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Source coverage
+                </span>
+              </div>
+              <table style={{ borderCollapse: 'collapse', fontSize: '0.88rem', margin: '0.25rem 1rem 0.25rem' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Total chunks</td>
+                    <td style={{ ...VAL, fontWeight: 600 }}>{chunkCount}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Chunks with page number</td>
+                    <td style={{ ...VAL, fontWeight: 600 }}>{chunksWithPage}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Field verification rows</td>
+                    <td style={{ ...VAL, fontWeight: 600 }}>{fvRows.length}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Field rows linked to source chunk</td>
+                    <td style={{ ...VAL, fontWeight: 600, color: fvWithChunk === fvRows.length && fvRows.length > 0 ? '#166534' : '#374151' }}>
+                      {fvWithChunk}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...CELL, fontSize: '0.85rem' }}>Field rows without source chunk</td>
+                    <td style={{ ...VAL, fontWeight: 600, color: fvWithoutChunk > 0 ? '#92400e' : '#374151' }}>
+                      {fvWithoutChunk}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              {fvWithoutChunk > 0 && (
+                <p style={{ margin: '0 1rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                  Some fields are not linked to source chunks yet. That is acceptable for seeded staging data but should be required before production publishing.
+                </p>
+              )}
+            </SectionCard>
+
+            {/* B — Traceability diagnostics */}
+            <SectionCard>
+              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Traceability diagnostics
+                </span>
+              </div>
+              {diags.map((d, i) => {
+                const s = DIAG_STYLE[d.status]
+                return (
+                  <div key={d.label} style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.6rem',
+                    padding: '0.4rem 0.75rem',
+                    borderBottom: i < diags.length - 1 ? '1px solid #f3f4f6' : 'none',
+                    fontSize: '0.88rem',
+                  }}>
+                    <div style={{ flex: 1, color: '#374151' }}>{d.label}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem' }}>
+                      <span style={{
+                        fontSize: '0.75rem', fontWeight: 600,
+                        color: s.color, background: s.bg,
+                        padding: '0.1rem 0.45rem', borderRadius: 4, whiteSpace: 'nowrap',
+                      }}>
+                        {s.label}
+                      </span>
+                      {d.detail && <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{d.detail}</span>}
+                    </div>
+                  </div>
+                )
+              })}
+            </SectionCard>
+
+            {/* C — Field-to-evidence map */}
+            {fvRows.length > 0 && (
+              <SectionCard>
+                <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    Field-to-evidence map
+                  </span>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 540 }}>
+                    <thead>
+                      <tr>
+                        <th style={TH}>Entity</th>
+                        <th style={TH}>Field</th>
+                        <th style={TH}>Extracted value</th>
+                        <th style={TH}>Status</th>
+                        <th style={TH}>Source ref.</th>
+                        <th style={TH}>Evidence preview</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fvRows.map((row) => {
+                        const entityName = row.entity_type === 'staged_system'
+                          ? (sysNameById.get(row.entity_id) ?? row.entity_id.slice(0, 8))
+                          : (compNameById.get(row.entity_id) ?? row.entity_id.slice(0, 8))
+                        const chunk = row.source_chunk_id ? chunkById.get(row.source_chunk_id) : undefined
+                        const sourceRef = row.source_chunk_id
+                          ? (row.source_page_number != null
+                              ? `p.${row.source_page_number}`
+                              : `chunk ${chunk?.chunk_index ?? '?'}`)
+                          : null
+                        const evidenceText = chunk?.raw_text
+                          ? chunk.raw_text.slice(0, 90) + (chunk.raw_text.length > 90 ? '…' : '')
+                          : null
+                        return (
+                          <tr key={row.id}>
+                            <td style={{ ...TD, fontSize: '0.8rem' }}>
+                              <div style={{ fontWeight: 500 }}>{entityName}</div>
+                              <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                                {row.entity_type === 'staged_system' ? 'system' : 'component'}
+                              </div>
+                            </td>
+                            <td style={{ ...TD, fontFamily: 'monospace', fontSize: '0.78rem', color: '#374151' }}>
+                              {row.field_name}
+                            </td>
+                            <td style={{ ...TD, color: row.extracted_value ? '#374151' : '#9ca3af', fontSize: '0.82rem' }}>
+                              {row.extracted_value ?? '—'}
+                            </td>
+                            <td style={TD}>
+                              <StatusBadge status={row.status} />
+                            </td>
+                            <td style={{ ...TD, fontSize: '0.78rem', color: '#6b7280' }}>
+                              {sourceRef ?? <span style={{ color: '#d1d5db' }}>—</span>}
+                            </td>
+                            <td style={{ ...TD, fontSize: '0.75rem', color: '#6b7280' }}>
+                              {evidenceText
+                                ? <span style={{ fontStyle: 'italic' }}>{evidenceText}</span>
+                                : row.source_chunk_id
+                                  ? <span style={{ color: '#d1d5db' }}>Chunk text not loaded</span>
+                                  : <span style={{ color: '#d1d5db' }}>No source chunk linked</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </SectionCard>
+            )}
+
+            <p style={{
+              fontSize: '0.82rem', color: '#6b7280',
+              padding: '0.6rem 0.85rem', marginBottom: '1.5rem',
+              border: '1px solid #e5e7eb', borderRadius: 6, background: '#fafafa',
+            }}>
+              Traceability is read-only. Extraction evidence must be checked before any future publish/migration step.
+              {fvWithoutChunk > 0 && (
+                <> Some fields are not linked to source chunks yet. That is acceptable for seeded staging data but should be required before production publishing.</>
+              )}
+            </p>
           </>
         )
       })()}
