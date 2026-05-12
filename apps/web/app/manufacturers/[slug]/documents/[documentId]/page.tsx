@@ -172,6 +172,56 @@ function EmptyNote({ text }: { text: string }) {
   )
 }
 
+type ReadinessStatus = 'ready' | 'needs_review' | 'missing' | 'pending' | 'check_catalogue' | 'flagged' | 'not_required_yet'
+
+interface ReadinessCheck {
+  label: string
+  status: ReadinessStatus
+  detail?: string
+}
+
+const READINESS_STYLE: Record<ReadinessStatus, { dot: string; label: string; textColor: string; bg: string }> = {
+  ready:            { dot: '#22c55e', label: 'Ready',             textColor: '#166534', bg: '#dcfce7' },
+  needs_review:     { dot: '#f59e0b', label: 'Needs review',      textColor: '#92400e', bg: '#fef3c7' },
+  missing:          { dot: '#ef4444', label: 'Missing',           textColor: '#991b1b', bg: '#fee2e2' },
+  pending:          { dot: '#6b7280', label: 'Pending',           textColor: '#374151', bg: '#f3f4f6' },
+  check_catalogue:  { dot: '#f59e0b', label: 'Check catalogue',   textColor: '#92400e', bg: '#fef3c7' },
+  flagged:          { dot: '#ef4444', label: 'Flagged',           textColor: '#991b1b', bg: '#fee2e2' },
+  not_required_yet: { dot: '#d1d5db', label: 'Not required yet',  textColor: '#9ca3af', bg: '#f3f4f6' },
+}
+
+function ReadinessRow({ check }: { check: ReadinessCheck }) {
+  const s = READINESS_STYLE[check.status]
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '0.6rem',
+      padding: '0.45rem 0.75rem',
+      borderBottom: '1px solid #f3f4f6',
+      fontSize: '0.88rem',
+    }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: '50%',
+        background: s.dot, flexShrink: 0, marginTop: '0.35rem',
+      }} />
+      <div style={{ flex: 1, color: '#374151' }}>{check.label}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+        <span style={{
+          fontSize: '0.78rem', fontWeight: 600,
+          color: s.textColor, background: s.bg,
+          padding: '0.1rem 0.45rem', borderRadius: 4, whiteSpace: 'nowrap',
+        }}>
+          {s.label}
+        </span>
+        {check.detail && (
+          <span style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'right' }}>{check.detail}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default async function DocumentDetail({ params }: Props) {
   // --- Manufacturer lookup ---
   const { data: manufacturer, error: mfrError } = await supabase
@@ -669,6 +719,181 @@ export default async function DocumentDetail({ params }: Props) {
               </table>
               <p style={{ margin: '0.5rem 1rem 0.75rem', fontSize: '0.82rem', color: '#9ca3af' }}>
                 Missing codes are expected for staged data until catalogue verification is complete.
+              </p>
+            </SectionCard>
+          </>
+        )
+      })()}
+
+      {/* J_pre — Verification readiness */}
+      {(() => {
+        const runsCount      = runs?.length ?? 0
+        const systemsCount   = stagedSystems?.length ?? 0
+        const componentsCount = stagedComponents?.length ?? 0
+
+        const systemsWithCode   = (stagedSystems ?? []).filter((s) => s.product_code).length
+        const systemsMissingCode = systemsCount - systemsWithCode
+        const componentsWithSku  = (stagedComponents ?? []).filter((c) => c.sku).length
+        const componentsMissingSku = componentsCount - componentsWithSku
+
+        const systemsUnnamed    = (stagedSystems ?? []).filter((s) => !s.name?.trim()).length
+        const componentsUnnamed = (stagedComponents ?? []).filter((c) => !c.name?.trim()).length
+
+        const sysApproved  = (stagedSystems ?? []).filter((s) => s.verification_status === 'approved').length
+        const sysRejected  = (stagedSystems ?? []).filter((s) => s.verification_status === 'rejected').length
+        const sysPending   = (stagedSystems ?? []).filter((s) => ['pending_review', 'in_review'].includes(s.verification_status)).length
+
+        const compApproved = (stagedComponents ?? []).filter((c) => c.verification_status === 'approved').length
+        const compRejected = (stagedComponents ?? []).filter((c) => c.verification_status === 'rejected').length
+        const compPending  = (stagedComponents ?? []).filter((c) => ['pending_review', 'in_review'].includes(c.verification_status)).length
+
+        const linkRejected = sscLinks.filter((l) => l.verification_status === 'rejected').length
+        const anyRejected  = sysRejected > 0 || compRejected > 0 || linkRejected > 0
+
+        const checks: ReadinessCheck[] = [
+          {
+            label: 'Extraction run exists',
+            status: runsCount > 0 ? 'ready' : 'missing',
+            detail: runsCount > 0 ? `${runsCount} run${runsCount > 1 ? 's' : ''}` : undefined,
+          },
+          {
+            label: 'Document chunks extracted',
+            status: chunkCount > 0 ? 'ready' : 'missing',
+            detail: chunkCount > 0 ? `${chunkCount} chunk${chunkCount > 1 ? 's' : ''}` : undefined,
+          },
+          {
+            label: 'Staged systems present',
+            status: systemsCount > 0 ? 'ready' : 'missing',
+            detail: systemsCount > 0 ? `${systemsCount} system${systemsCount > 1 ? 's' : ''}` : undefined,
+          },
+          {
+            label: 'All staged systems have names',
+            status: systemsCount === 0 ? 'not_required_yet' : systemsUnnamed === 0 ? 'ready' : 'needs_review',
+            detail: systemsUnnamed > 0 ? `${systemsUnnamed} unnamed` : undefined,
+          },
+          {
+            label: 'Staged components present',
+            status: componentsCount > 0 ? 'ready' : 'missing',
+            detail: componentsCount > 0 ? `${componentsCount} component${componentsCount > 1 ? 's' : ''}` : undefined,
+          },
+          {
+            label: 'All staged components have names',
+            status: componentsCount === 0 ? 'not_required_yet' : componentsUnnamed === 0 ? 'ready' : 'needs_review',
+            detail: componentsUnnamed > 0 ? `${componentsUnnamed} unnamed` : undefined,
+          },
+          {
+            label: 'At least one system has linked components',
+            status: systemsCount === 0 ? 'not_required_yet' : sysWithLinksCount > 0 ? 'ready' : 'needs_review',
+            detail: systemsCount > 0 ? `${sysWithLinksCount} of ${systemsCount} linked` : undefined,
+          },
+          {
+            label: 'Systems with no linked components',
+            status: sysNoLinksCount === 0 ? 'ready' : 'needs_review',
+            detail: sysNoLinksCount > 0 ? `${sysNoLinksCount} unlinked — needs review` : undefined,
+          },
+          {
+            label: 'Catalogue codes / product codes',
+            status: systemsCount === 0
+              ? 'not_required_yet'
+              : systemsWithCode > 0 && systemsMissingCode === 0
+                ? 'ready'
+                : 'check_catalogue',
+            detail: systemsMissingCode > 0 ? `${systemsMissingCode} missing — expected at this stage` : undefined,
+          },
+          {
+            label: 'Component SKUs',
+            status: componentsCount === 0
+              ? 'not_required_yet'
+              : componentsWithSku > 0 && componentsMissingSku === 0
+                ? 'ready'
+                : 'check_catalogue',
+            detail: componentsMissingSku > 0 ? `${componentsMissingSku} missing — expected at this stage` : undefined,
+          },
+          {
+            label: 'System verification statuses',
+            status: systemsCount === 0
+              ? 'not_required_yet'
+              : sysRejected > 0
+                ? 'flagged'
+                : sysApproved === systemsCount
+                  ? 'ready'
+                  : 'pending',
+            detail: systemsCount > 0
+              ? `${sysApproved} approved, ${sysPending} pending${sysRejected > 0 ? `, ${sysRejected} rejected` : ''}`
+              : undefined,
+          },
+          {
+            label: 'Component verification statuses',
+            status: componentsCount === 0
+              ? 'not_required_yet'
+              : compRejected > 0
+                ? 'flagged'
+                : compApproved === componentsCount
+                  ? 'ready'
+                  : 'pending',
+            detail: componentsCount > 0
+              ? `${compApproved} approved, ${compPending} pending${compRejected > 0 ? `, ${compRejected} rejected` : ''}`
+              : undefined,
+          },
+        ]
+
+        let overallState: string
+        let overallBg: string
+        let overallColor: string
+
+        if (anyRejected) {
+          overallState = 'Has flagged items'
+          overallBg    = '#fee2e2'
+          overallColor = '#991b1b'
+        } else if (runsCount === 0 || systemsCount === 0) {
+          overallState = 'Early staging'
+          overallBg    = '#f3f4f6'
+          overallColor = '#6b7280'
+        } else if (systemsCount > 0 && componentsCount > 0 && sysWithLinksCount === 0) {
+          overallState = 'Relationship review needed'
+          overallBg    = '#ffedd5'
+          overallColor = '#9a3412'
+        } else if (sysWithLinksCount > 0 && (systemsMissingCode > 0 || componentsMissingSku > 0)) {
+          overallState = 'Needs catalogue review'
+          overallBg    = '#fef9c3'
+          overallColor = '#854d0e'
+        } else if (runsCount > 0 && chunkCount > 0 && systemsCount > 0 && componentsCount > 0 && sysWithLinksCount > 0) {
+          overallState = 'Ready for human verification'
+          overallBg    = '#dcfce7'
+          overallColor = '#166534'
+        } else {
+          overallState = 'In progress'
+          overallBg    = '#f3f4f6'
+          overallColor = '#6b7280'
+        }
+
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Verification readiness</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              Read-only guide to staging completeness for this document.
+            </p>
+            <SectionCard>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.4rem',
+                padding: '0.65rem 0.75rem',
+                background: overallBg,
+                borderBottom: '1px solid #e5e7eb',
+              }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>Overall readiness</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: overallColor }}>{overallState}</span>
+              </div>
+              <div>
+                {checks.map((check) => (
+                  <ReadinessRow key={check.label} check={check} />
+                ))}
+              </div>
+              <p style={{ margin: '0.5rem 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Readiness is a guide only. Publishing will require explicit verification and a separate controlled migration step.
               </p>
             </SectionCard>
           </>
