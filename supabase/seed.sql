@@ -526,3 +526,141 @@ VALUES
   -- JH Linea (b004)
   ('b0000000-0000-0000-0000-000000000004', '180mm Exposure', '180mm face exposure', 1, 'approved'),
   ('b0000000-0000-0000-0000-000000000004', '230mm Exposure', '230mm face exposure', 2, 'pending_review');
+
+-- ============================================================
+-- FIELD VERIFICATIONS
+-- One row per (entity_type, entity_id, field_name).
+-- Covers key fields for NTW and JH staged entities to demonstrate
+-- the field-level verification viewer.
+-- Status: pending | approved | rejected | needs_source_check
+--
+-- UUID legend:
+--   Field verifications: e0000000-0000-0000-0000-00000000000{1..17}
+-- ============================================================
+
+WITH docs AS (
+  SELECT
+    (SELECT sd.id FROM source_documents sd
+       JOIN data_studio_manufacturers m ON m.id = sd.manufacturer_id
+      WHERE m.slug = 'newtechwood'
+        AND sd.document_name = 'NewTechWood Product Guide 2026')        AS ntw_doc,
+    (SELECT sd.id FROM source_documents sd
+       JOIN data_studio_manufacturers m ON m.id = sd.manufacturer_id
+      WHERE m.slug = 'james-hardie'
+        AND sd.document_name = 'James Hardie Installation Guide 2026') AS jh_doc
+)
+INSERT INTO field_verifications
+  (id, entity_type, entity_id, field_name,
+   extracted_value, verified_value,
+   source_document_id, source_chunk_id, source_page_number,
+   status, confidence)
+-- NTW Avenue Range (b001) — approved system
+SELECT 'e0000000-0000-0000-0000-000000000001'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000001'::uuid,
+  'name', 'Avenue Range', 'Avenue Range',
+  ntw_doc, 'd0000000-0000-0000-0000-000000000001'::uuid, 1, 'approved', 0.91
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000002'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000001'::uuid,
+  'product_code', 'US92', 'US92',
+  ntw_doc, 'd0000000-0000-0000-0000-000000000002'::uuid, 3, 'approved', 0.88
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000003'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000001'::uuid,
+  'category', 'Decking', 'Decking',
+  ntw_doc, 'd0000000-0000-0000-0000-000000000001'::uuid, 1, 'approved', 0.95
+FROM docs
+-- NTW Terrace Range (b002) — in_review; product_code needs source check
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000004'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000002'::uuid,
+  'name', 'Terrace Range', NULL,
+  ntw_doc, 'd0000000-0000-0000-0000-000000000001'::uuid, 2, 'pending', 0.88
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000005'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000002'::uuid,
+  'product_code', NULL, NULL,
+  ntw_doc, 'd0000000-0000-0000-0000-000000000002'::uuid, 3, 'needs_source_check', 0.47
+FROM docs
+-- NTW Coastal Range (b003) — pending
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000006'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000003'::uuid,
+  'name', 'Coastal Range', NULL,
+  ntw_doc, 'd0000000-0000-0000-0000-000000000001'::uuid, 4, 'pending', 0.84
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000007'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000003'::uuid,
+  'product_code', NULL, NULL,
+  ntw_doc, 'd0000000-0000-0000-0000-000000000002'::uuid, 5, 'needs_source_check', 0.43
+FROM docs
+-- NTW Avenue Decking Board (c001) — approved
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000008'::uuid,
+  'staged_component', 'c0000000-0000-0000-0000-000000000001'::uuid,
+  'name', 'Avenue Decking Board', 'Avenue Decking Board',
+  ntw_doc, 'd0000000-0000-0000-0000-000000000002'::uuid, 5, 'approved', 0.93
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000009'::uuid,
+  'staged_component', 'c0000000-0000-0000-0000-000000000001'::uuid,
+  'uom', 'lm', 'lm',
+  ntw_doc, 'd0000000-0000-0000-0000-000000000002'::uuid, 5, 'approved', 0.97
+FROM docs
+-- NTW TC28 Timber Fix Clip (c004) — approved with confirmed SKU
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000010'::uuid,
+  'staged_component', 'c0000000-0000-0000-0000-000000000004'::uuid,
+  'name', 'TC28 Timber Fix Decking Clip', 'TC28 Timber Fix Decking Clip',
+  ntw_doc, 'd0000000-0000-0000-0000-000000000003'::uuid, 8, 'approved', 0.91
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000011'::uuid,
+  'staged_component', 'c0000000-0000-0000-0000-000000000004'::uuid,
+  'sku', 'TC28T', 'TC28T',
+  ntw_doc, 'd0000000-0000-0000-0000-000000000003'::uuid, 8, 'approved', 0.95
+FROM docs
+-- NTW TC45 Joist Clip (c005) — pending; SKU needs source check
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000012'::uuid,
+  'staged_component', 'c0000000-0000-0000-0000-000000000005'::uuid,
+  'name', 'TC45 Composite Joist Clip', NULL,
+  ntw_doc, 'd0000000-0000-0000-0000-000000000003'::uuid, 9, 'pending', 0.87
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000013'::uuid,
+  'staged_component', 'c0000000-0000-0000-0000-000000000005'::uuid,
+  'sku', NULL, NULL,
+  ntw_doc, 'd0000000-0000-0000-0000-000000000003'::uuid, 9, 'needs_source_check', 0.38
+FROM docs
+-- JH Linea Weatherboard System (b004) — approved
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000014'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000004'::uuid,
+  'name', 'Linea Weatherboard System', 'Linea Weatherboard System',
+  jh_doc, 'd0000000-0000-0000-0000-000000000004'::uuid, 1, 'approved', 0.94
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000015'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000004'::uuid,
+  'category', 'Cladding', 'Cladding',
+  jh_doc, 'd0000000-0000-0000-0000-000000000004'::uuid, 1, 'approved', 0.96
+FROM docs
+-- JH Axon Cladding System (b005) — pending; product_code needs source check
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000016'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000005'::uuid,
+  'name', 'Axon Cladding System', NULL,
+  jh_doc, 'd0000000-0000-0000-0000-000000000004'::uuid, 2, 'pending', 0.89
+FROM docs
+UNION ALL
+SELECT 'e0000000-0000-0000-0000-000000000017'::uuid,
+  'staged_system', 'b0000000-0000-0000-0000-000000000005'::uuid,
+  'product_code', NULL, NULL,
+  jh_doc, 'd0000000-0000-0000-0000-000000000005'::uuid, 4, 'needs_source_check', 0.41
+FROM docs
+ON CONFLICT (entity_type, entity_id, field_name) DO NOTHING;

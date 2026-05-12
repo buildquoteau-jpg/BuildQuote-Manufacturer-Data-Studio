@@ -262,6 +262,7 @@ export default async function DocumentDetail({ params }: Props) {
     { data: chunkRows },
     { data: stagedSystems },
     { data: stagedComponents },
+    { data: fieldVerifications },
   ] = await Promise.all([
     supabase
       .from('extraction_runs')
@@ -285,6 +286,14 @@ export default async function DocumentDetail({ params }: Props) {
       .select('id, name, sku, category, uom, description, verification_status, extraction_confidence')
       .eq('source_document_id', doc.id)
       .order('sort_order', { ascending: true }),
+
+    supabase
+      .from('field_verifications')
+      .select('id, entity_type, entity_id, field_name, extracted_value, verified_value, status, confidence, source_chunk_id, source_page_number')
+      .eq('source_document_id', doc.id)
+      .order('entity_type', { ascending: true })
+      .order('entity_id',   { ascending: true })
+      .order('field_name',  { ascending: true }),
   ])
 
   const chunkCount = chunkRows?.length ?? 0
@@ -719,6 +728,167 @@ export default async function DocumentDetail({ params }: Props) {
               </table>
               <p style={{ margin: '0.5rem 1rem 0.75rem', fontSize: '0.82rem', color: '#9ca3af' }}>
                 Missing codes are expected for staged data until catalogue verification is complete.
+              </p>
+            </SectionCard>
+          </>
+        )
+      })()}
+
+      {/* I_post — Field verification state */}
+      {(() => {
+        const fvRows = fieldVerifications ?? []
+        if (fvRows.length === 0) return null
+
+        // Build lookup maps from already-loaded arrays
+        const sysNameById  = new Map((stagedSystems ?? []).map((s) => [s.id, s.name]))
+        const compNameById = new Map((stagedComponents ?? []).map((c) => [c.id, c.name]))
+
+        // Group rows by entity_type then entity_id, preserving insertion order
+        const sysRows  = fvRows.filter((r) => r.entity_type === 'staged_system')
+        const compRows = fvRows.filter((r) => r.entity_type === 'staged_component')
+
+        // Distinct ordered entity IDs (avoid Set spread — tsconfig target)
+        const sysEntityIds  = sysRows.reduce<string[]>((acc, r) => acc.includes(r.entity_id)  ? acc : [...acc, r.entity_id],  [])
+        const compEntityIds = compRows.reduce<string[]>((acc, r) => acc.includes(r.entity_id) ? acc : [...acc, r.entity_id], [])
+
+        const hasSys  = sysEntityIds.length > 0
+        const hasComp = compEntityIds.length > 0
+
+        const FV_STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+          approved:          { bg: '#dcfce7', color: '#166534' },
+          pending:           { bg: '#f3f4f6', color: '#374151' },
+          rejected:          { bg: '#fee2e2', color: '#991b1b' },
+          edited:            { bg: '#ede9fe', color: '#5b21b6' },
+          needs_source_check:{ bg: '#fef3c7', color: '#92400e' },
+        }
+
+        function FVStatusBadge({ status }: { status: string }) {
+          const s = FV_STATUS_STYLE[status] ?? { bg: '#f3f4f6', color: '#6b7280' }
+          return (
+            <span style={{
+              display: 'inline-block',
+              padding: '0.1rem 0.45rem',
+              borderRadius: 4,
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              background: s.bg,
+              color: s.color,
+              whiteSpace: 'nowrap',
+            }}>
+              {status}
+            </span>
+          )
+        }
+
+        function EntityTable({ entityId, rows, entityName }: {
+          entityId: string
+          rows: typeof fvRows
+          entityName: string
+        }) {
+          return (
+            <div style={{ marginBottom: '0.1rem' }}>
+              <div style={{
+                padding: '0.45rem 0.75rem',
+                background: '#fafafa',
+                borderBottom: '1px solid #f3f4f6',
+                borderTop: '1px solid #f3f4f6',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                color: '#374151',
+              }}>
+                {entityName || entityId}
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                  <thead>
+                    <tr>
+                      <th style={TH}>Field</th>
+                      <th style={TH}>Extracted value</th>
+                      <th style={TH}>Verified value</th>
+                      <th style={TH}>Status</th>
+                      <th style={TH}>Confidence</th>
+                      <th style={TH}>Chunk</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.id}>
+                        <td style={{ ...TD, fontFamily: 'monospace', fontSize: '0.8rem', color: '#374151' }}>
+                          {row.field_name}
+                        </td>
+                        <td style={{ ...TD, color: row.extracted_value ? '#374151' : '#9ca3af' }}>
+                          {row.extracted_value ?? '—'}
+                        </td>
+                        <td style={{ ...TD, color: row.verified_value ? '#374151' : '#9ca3af' }}>
+                          {row.verified_value ?? '—'}
+                        </td>
+                        <td style={TD}><FVStatusBadge status={row.status} /></td>
+                        <td style={{ ...TD, color: '#6b7280' }}>{fmtConfidence(row.confidence)}</td>
+                        <td style={{ ...TD, color: '#9ca3af', fontSize: '0.78rem' }}>
+                          {row.source_chunk_id
+                            ? (row.source_page_number ? `p.${row.source_page_number}` : 'linked')
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        }
+
+        return (
+          <>
+            <h2 style={{ marginBottom: '0.4rem' }}>Field verification state</h2>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+              Per-field extraction state for staged records in this document. Read-only — no edits are possible here.
+            </p>
+            <SectionCard>
+              <div style={{ padding: '0.5rem 0.75rem 0.25rem', display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.82rem', color: '#6b7280' }}>
+                <span>Fields tracked: <strong style={{ color: '#374151' }}>{fvRows.length}</strong></span>
+                <span>Approved: <strong style={{ color: '#166534' }}>{fvRows.filter((r) => r.status === 'approved').length}</strong></span>
+                <span>Pending: <strong style={{ color: '#374151' }}>{fvRows.filter((r) => r.status === 'pending').length}</strong></span>
+                <span>Needs source check: <strong style={{ color: '#92400e' }}>{fvRows.filter((r) => r.status === 'needs_source_check').length}</strong></span>
+                {fvRows.some((r) => r.status === 'rejected') && (
+                  <span>Rejected: <strong style={{ color: '#991b1b' }}>{fvRows.filter((r) => r.status === 'rejected').length}</strong></span>
+                )}
+              </div>
+
+              {hasSys && (
+                <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '0.5rem' }}>
+                  <div style={{ padding: '0.45rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    Systems ({sysEntityIds.length})
+                  </div>
+                  {sysEntityIds.map((eid) => (
+                    <EntityTable
+                      key={eid}
+                      entityId={eid}
+                      rows={sysRows.filter((r) => r.entity_id === eid)}
+                      entityName={sysNameById.get(eid) ?? eid}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {hasComp && (
+                <div style={{ borderTop: '1px solid #e5e7eb', marginTop: hasSys ? '0.75rem' : '0.5rem' }}>
+                  <div style={{ padding: '0.45rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    Components ({compEntityIds.length})
+                  </div>
+                  {compEntityIds.map((eid) => (
+                    <EntityTable
+                      key={eid}
+                      entityId={eid}
+                      rows={compRows.filter((r) => r.entity_id === eid)}
+                      entityName={compNameById.get(eid) ?? eid}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <p style={{ margin: '0.5rem 0.75rem 0.75rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Field verification records are staged trust-layer data. No edits or approvals are available on this page.
               </p>
             </SectionCard>
           </>
