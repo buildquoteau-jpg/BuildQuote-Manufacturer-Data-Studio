@@ -264,45 +264,45 @@ INSERT INTO staged_systems
    verification_status, extraction_confidence, sort_order)
 -- NTW systems
 SELECT 'b0000000-0000-0000-0000-000000000001'::uuid, ntw_mfr, ntw_doc,
-  'Avenue Range', 'NTW-AVE', 'Decking', 'Composite Decking',
+  'Avenue Range', 'US92', 'Decking', 'Composite Decking',
   'Grooved-profile composite decking with UV-stable finish.',
   'approved', 0.91, 1
 FROM mfrs, docs
 UNION ALL
 SELECT 'b0000000-0000-0000-0000-000000000002'::uuid, ntw_mfr, ntw_doc,
-  'Terrace Range', 'NTW-TER', 'Decking', 'Composite Decking',
+  'Terrace Range', NULL, 'Decking', 'Composite Decking',
   'Wide-board grooved composite decking for open terraces.',
   'in_review', 0.88, 2
 FROM mfrs, docs
 UNION ALL
 SELECT 'b0000000-0000-0000-0000-000000000003'::uuid, ntw_mfr, ntw_doc,
-  'Coastal Range', 'NTW-CST', 'Decking', 'Composite Decking',
+  'Coastal Range', NULL, 'Decking', 'Composite Decking',
   'Salt-resistant composite decking for coastal environments.',
   'pending_review', 0.84, 3
 FROM mfrs, docs
 -- JH systems
 UNION ALL
 SELECT 'b0000000-0000-0000-0000-000000000004'::uuid, jh_mfr, jh_doc,
-  'Linea Weatherboard System', 'JH-LIN', 'Cladding', 'Fibre Cement Weatherboard',
+  'Linea Weatherboard System', NULL, 'Cladding', 'Fibre Cement Weatherboard',
   'Horizontal lapped fibre cement weatherboard cladding system.',
   'approved', 0.94, 1
 FROM mfrs, docs
 UNION ALL
 SELECT 'b0000000-0000-0000-0000-000000000005'::uuid, jh_mfr, jh_doc,
-  'Axon Cladding System', 'JH-AXN', 'Cladding', 'Fibre Cement Panel',
+  'Axon Cladding System', NULL, 'Cladding', 'Fibre Cement Panel',
   'Vertical channel fibre cement panel cladding system.',
   'pending_review', 0.89, 2
 FROM mfrs, docs
 -- MW systems
 UNION ALL
 SELECT 'b0000000-0000-0000-0000-000000000006'::uuid, mw_mfr, mw_doc,
-  'Xtreme Guard Decking', 'MW-XTR', 'Decking', 'Composite Decking',
+  'Xtreme Guard Decking', NULL, 'Decking', 'Composite Decking',
   'High-impact composite decking with concealed fixing system.',
   'pending_review', 0.86, 1
 FROM mfrs, docs
 UNION ALL
 SELECT 'b0000000-0000-0000-0000-000000000007'::uuid, mw_mfr, mw_doc,
-  'Flame Shield Decking', 'MW-FLM', 'Decking', 'Composite Decking',
+  'Flame Shield Decking', NULL, 'Decking', 'Composite Decking',
   'Fire-resistant composite decking for bushfire-prone areas.',
   'needs_source_check', 0.78, 2
 FROM mfrs, docs
@@ -340,42 +340,42 @@ INSERT INTO staged_components
    verification_status, extraction_confidence, sort_order)
 -- NTW components
 SELECT 'c0000000-0000-0000-0000-000000000001'::uuid, ntw_mfr, ntw_doc,
-  'Avenue Decking Board', 'NTW-AVE-138',
+  'Avenue Decking Board', NULL,
   'Grooved composite decking board 138×29mm.',
   'Decking Board', 'lm', 'Composite',
   'approved', 0.93, 1
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000002'::uuid, ntw_mfr, ntw_doc,
-  'Terrace Decking Board', 'NTW-TER-138',
+  'Terrace Decking Board', NULL,
   'Wide-board grooved composite decking board 138×29mm.',
   'Decking Board', 'lm', 'Composite',
   'in_review', 0.89, 2
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000003'::uuid, ntw_mfr, ntw_doc,
-  'Coastal Decking Board', 'NTW-CST-138',
+  'Coastal Decking Board', NULL,
   'Salt-resistant composite decking board 138×29mm.',
   'Decking Board', 'lm', 'Composite',
   'pending_review', 0.85, 3
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000004'::uuid, ntw_mfr, ntw_doc,
-  'TC28 Timber Fix Decking Clip', 'NTW-TC28',
+  'TC28 Timber Fix Decking Clip', 'TC28T',
   'Decking clip for timber joist installation.',
   'Fixing', 'pk100', 'Stainless Steel',
   'approved', 0.91, 4
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000005'::uuid, ntw_mfr, ntw_doc,
-  'TC45 Composite Joist Clip', 'NTW-TC45',
+  'TC45 Composite Joist Clip', 'TC45',
   'Decking clip for composite joist installation.',
   'Fixing', 'pk100', 'Stainless Steel',
   'pending_review', 0.87, 5
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000006'::uuid, ntw_mfr, ntw_doc,
-  'End Trim Profile', 'NTW-TRIM',
+  'End Trim Profile', NULL,
   'Composite end trim to finish decking edges.',
   'Trim', 'lm', 'Composite',
   'pending_review', 0.82, 6
@@ -383,28 +383,28 @@ FROM mfrs, docs
 -- JH components
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000007'::uuid, jh_mfr, jh_doc,
-  'Linea Weatherboard', 'JH-LIN-WB',
+  'Linea Weatherboard', NULL,
   'Fibre cement weatherboard for horizontal lapped cladding.',
   'Cladding Panel', 'lm', 'Fibre Cement',
   'approved', 0.95, 1
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000008'::uuid, jh_mfr, jh_doc,
-  'Axon Cladding Panel', 'JH-AXN-P',
+  'Axon Cladding Panel', NULL,
   'Vertical channel fibre cement cladding panel.',
   'Cladding Panel', 'lm', 'Fibre Cement',
   'pending_review', 0.90, 2
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000009'::uuid, jh_mfr, jh_doc,
-  'Cavity Batten', 'JH-BATT',
+  'Cavity Batten', NULL,
   'Treated timber cavity batten for cladding substrate.',
   'Installation Accessory', 'lm', 'Treated Timber',
   'approved', 0.88, 3
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000010'::uuid, jh_mfr, jh_doc,
-  'HardieDrive Screw', 'JH-SCRW',
+  'HardieDrive Screw', NULL,
   'Corrosion-resistant screw for fibre cement fixing.',
   'Fixing', 'pk250', 'Stainless Steel',
   'pending_review', 0.84, 4
@@ -412,28 +412,28 @@ FROM mfrs, docs
 -- MW components
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000011'::uuid, mw_mfr, mw_doc,
-  'Xtreme Guard Decking Board', 'MW-XTR-DB',
+  'Xtreme Guard Decking Board', NULL,
   'High-impact composite decking board with grooved profile.',
   'Decking Board', 'lm', 'Composite',
   'pending_review', 0.87, 1
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000012'::uuid, mw_mfr, mw_doc,
-  'Flame Shield Decking Board', 'MW-FLM-DB',
+  'Flame Shield Decking Board', NULL,
   'Fire-resistant composite decking board.',
   'Decking Board', 'lm', 'Composite',
   'needs_source_check', 0.79, 2
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000013'::uuid, mw_mfr, mw_doc,
-  'Grooved Concealed Clip', 'MW-CLIP',
+  'Grooved Concealed Clip', NULL,
   'Stainless steel concealed clip for grooved decking boards.',
   'Fixing', 'pk50', 'Stainless Steel',
   'pending_review', 0.83, 3
 FROM mfrs, docs
 UNION ALL
 SELECT 'c0000000-0000-0000-0000-000000000014'::uuid, mw_mfr, mw_doc,
-  'Fascia Board', 'MW-FSC',
+  'Fascia Board', NULL,
   'Matching composite fascia board for decking edge finish.',
   'Trim', 'lm', 'Composite',
   'pending_review', 0.80, 4
