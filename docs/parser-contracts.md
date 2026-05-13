@@ -21,7 +21,7 @@ Source document (PDF)
   → publish_batches → production tables
 ```
 
-The parser is responsible only for the second arrow. Everything after that is a human or export concern.
+The parser consumes document chunks created during an extraction run and produces staged catalogue candidates plus field evidence. Everything after that is a human or export concern.
 
 ---
 
@@ -146,9 +146,9 @@ Example: "15m² roll (minimum 2 roll order)"
 |---|---|---|
 | `length_mm` | millimetres | Primary length for boards, panels, sheets |
 | `width_mm` | millimetres | Width |
-| `height_mm` | millimetres | Height or depth (use whichever axis the manufacturer labels) |
-| `depth_mm` | millimetres | Use where height/depth distinction matters |
-| `thickness_mm` | millimetres | Sheet/panel thickness |
+| `height_mm` | millimetres | Use only when the source clearly labels the axis as height — e.g. door height, panel height. Do not use for board/sheet thickness. |
+| `depth_mm` | millimetres | Use where depth is explicitly labelled as a distinct axis |
+| `thickness_mm` | millimetres | Board, sheet, panel, or cladding thickness — the thin third dimension of flat products |
 | `gauge_mm` | millimetres | Metal gauge |
 | `diameter_mm` | millimetres | Pipe, rod, screw shank |
 | `roll_m` | metres | Roll length |
@@ -167,12 +167,13 @@ Example: "15m² roll (minimum 2 roll order)"
 
 | Source text | Parser output |
 |---|---|
-| `"5400 x 138 x 29 mm board"` | `length_mm=5400, width_mm=138, height_mm=29, dimensions="5400 x 138 x 29 mm"` |
+| `"5400 x 138 x 29 mm board"` | `length_mm=5400, width_mm=138, thickness_mm=29, dimensions="5400 x 138 x 29 mm"` |
 | `"4.88 m length"` | `length_m=4.88, length_mm=4880, dimensions="4.88 m length"` |
 | `"30 m roll"` | `roll_m=30, dimensions="30 m roll"` |
 | `"8g screw"` | `gauge_mm=null, dimensions="8g", parser_notes=["gauge 8 — no mm equivalent extracted"]` |
 | `"300 ml adhesive cartridge"` | `volume_ml=300, dimensions="300 ml"` |
-| `"Pack of 100"` | `pieces=100` |
+| `"Pack of 100"` | `pack_format="Pack", supplier_pack_qty=100, supplier_pack_uom=null, parser_notes=["item type in pack not determinable from source — add supplier_pack_uom manually"]` |
+| `"2040 x 820 x 35 mm door"` | `height_mm=2040, width_mm=820, thickness_mm=35, dimensions="2040 x 820 x 35 mm"` |
 | `"10mm thick, 2530 x 1280mm sheet"` | `thickness_mm=10, length_mm=2530, width_mm=1280, dimensions="10mm thick, 2530 x 1280mm"` |
 
 ---
@@ -229,9 +230,9 @@ Human corrections must use audit records, not silent overwrites.
 
 ## 10. Contract 1: System Extraction
 
-**Used by:** `pipelines/parsing/parse_systems.py`
-**Prompt:** `prompts/manufacturer_system_extraction.md`
-**Example:** `samples/expected-outputs/system_extraction_example.json`
+**Used by:** `pipelines/parsing/parse_systems.py` _(planned, not yet created)_
+**Prompt:** `prompts/manufacturer_system_extraction.md` _(planned, not yet created)_
+**Example:** `samples/expected-outputs/system_extraction_example.json` _(planned, not yet created)_
 
 ### Top-Level Shape
 
@@ -307,9 +308,9 @@ Note: `fire_rating` is **deprecated** — use `bal_rating`.
 
 ## 11. Contract 2: Component Extraction
 
-**Used by:** `pipelines/parsing/parse_components.py`
-**Prompt:** `prompts/component_extraction.md`
-**Example:** `samples/expected-outputs/component_extraction_example.json`
+**Used by:** `pipelines/parsing/parse_components.py` _(planned, not yet created)_
+**Prompt:** `prompts/component_extraction.md` _(planned, not yet created)_
+**Example:** `samples/expected-outputs/component_extraction_example.json` _(planned, not yet created)_
 
 ### Top-Level Shape
 
@@ -397,6 +398,7 @@ Profiles are the main dimensional variants of a system. See Classification Rules
     "system_name": "string-or-null",
     "product_code": "string-or-null"
   },
+  "name": "string-or-null",
   "profile_name": "string-or-null",
   "product_code": "string-or-null",
   "dimensions": "string-or-null",
@@ -428,7 +430,10 @@ Profiles are the main dimensional variants of a system. See Classification Rules
 }
 ```
 
-Note: `profile_name` is the primary profile identifier. The legacy `name` field maps to `profile_name` — use `profile_name` in all new output.
+Field meanings:
+- `name` — full descriptive profile name as written in the source (e.g. "Avenue Grooved Board 5400mm"). Output this where the staged schema column exists.
+- `profile_name` — short profile/variant label (e.g. "Avenue 5400" or "Linea 180"). Intended as a compact identifier.
+- Both fields serve different purposes. Output both where possible. Do not silently map one to the other — the insertion layer is responsible for resolving which column each value writes to.
 
 ### System Component Relationship Shape
 
@@ -451,10 +456,12 @@ Note: `profile_name` is the primary profile identifier. The legacy `name` field 
 }
 ```
 
-Valid `role` values:
-`required`, `optional`, `accessory`, `trim`, `starter`, `corner`, `clip`, `fastener`, `sealant`, `adhesive`, `other`
+Valid `role` values (DB-enforced):
+`required`, `optional`, `accessory`
 
-Note: roles like `primary_cladding` and `decking_board` are removed — those items belong in profiles, not components.
+Do not use detailed descriptive role values like `clip`, `trim`, `fastener`, `sealant`, `adhesive`, or `other` — the DB schema does not support them and inserts will fail. Instead:
+- Use `component.category` to describe the item type (e.g. `"Fixings"`, `"Sealants"`, `"Trims"`).
+- Use the link `notes` field for any specific installation or relationship note.
 
 ### System Colour Shape
 
@@ -480,8 +487,8 @@ Note: roles like `primary_cladding` and `decking_board` are removed — those it
 
 ## 12. Contract 3: Verification Seed
 
-**Used by:** `pipelines/verification/prepare_field_verifications.py`
-**Example:** `samples/expected-outputs/verification_seed_example.json`
+**Used by:** `pipelines/verification/prepare_field_verifications.py` _(planned, not yet created)_
+**Example:** `samples/expected-outputs/verification_seed_example.json` _(planned, not yet created)_
 
 This contract defines how parser `field_sources` data maps to `field_verifications` rows.
 
@@ -566,14 +573,15 @@ NewTechWood Avenue 5400mm board variant:
 ```json
 {
   "system_match": { "system_name": "Avenue Decking", "product_code": "NTW-AVE" },
+  "name": "Avenue Grooved Board 5400mm",
   "profile_name": "Avenue 5400",
   "product_code": "NTW-AVE-5400-GR",
   "dimensions": "5400 x 138 x 29 mm",
   "length_mm": 5400,
   "width_mm": 138,
-  "height_mm": 29,
+  "height_mm": null,
   "depth_mm": null,
-  "thickness_mm": null,
+  "thickness_mm": 29,
   "gauge_mm": null,
   "diameter_mm": null,
   "roll_m": null,
@@ -607,13 +615,14 @@ James Hardie Linea 180 cladding profile with BAL:
 ```json
 {
   "system_match": { "system_name": "Linea Weatherboard", "product_code": null },
+  "name": "Linea 180 Weatherboard 3600mm",
   "profile_name": "Linea 180",
   "product_code": "H4040180",
   "dimensions": "3600 x 180 x 11 mm",
   "length_mm": 3600,
   "width_mm": 180,
-  "height_mm": 11,
-  "thickness_mm": null,
+  "height_mm": null,
+  "thickness_mm": 11,
   "gauge_mm": null,
   "diameter_mm": null,
   "roll_m": null,
@@ -690,8 +699,8 @@ TC28 hidden fix clip — this is a component, not a profile:
 {
   "staged_system_match": { "system_name": "Avenue Decking", "product_code": "NTW-AVE" },
   "component_match": { "sku": "TC28-SS304", "name": "TC28 Hidden Fix Clip" },
-  "role": "clip",
-  "notes": "1 clip per board end per joist",
+  "role": "accessory",
+  "notes": "Hidden fix clip — 1 per board end per joist. Category: Fixings.",
   "sort_order": 1,
   "extraction_confidence": 0.83,
   "source_page_number": 9,
@@ -739,7 +748,7 @@ Use this checklist before accepting any parser output for staging:
 
 ## 15. Contract Validation Rules
 
-Parser modules (`parse_systems.py`, `parse_components.py`) must validate AI output against these contracts before writing to Supabase:
+Parser modules (`parse_systems.py`, `parse_components.py`) _(planned, not yet created)_ must validate AI output against these contracts before writing to Supabase:
 
 1. Reject any record missing a required `name` field.
 2. Reject any record where a numeric field contains a non-numeric value.
@@ -750,7 +759,7 @@ Parser modules (`parse_systems.py`, `parse_components.py`) must validate AI outp
 7. If `bal_rating` is present on a profile, verify it also appears in `field_sources`. A BAL rating without evidence is suspect.
 8. If any `supplier_pack_qty` > 0 but `supplier_pack_uom` is null, add to `uncertain_fields`.
 
-See `pipelines/parsing/README.md` for implementation guidance.
+See `pipelines/parsing/README.md` _(planned, not yet created)_ for implementation guidance.
 
 ---
 
