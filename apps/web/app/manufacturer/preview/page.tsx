@@ -1,4 +1,5 @@
 import { StudioShell } from '../../../components/studio/StudioShell'
+import { StudioStatusBadge } from '../../../components/studio/StudioStatusBadge'
 
 const PLACEHOLDER_SYSTEMS = [
   { name: 'AlumaSeries 50', category: 'Windows', profiles: 3, status: 'draft' },
@@ -19,14 +20,11 @@ export default function ManufacturerPreviewPage() {
         Nothing shown here has been published to BuildQuote or RFQ.
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>Current state:</span>
-        <span className="studio-badge studio-badge-draft">Draft</span>
-        <span className="studio-badge studio-badge-approved" style={{ opacity: 0.4 }}>Approved</span>
-        <span className="studio-badge studio-badge-published" style={{ opacity: 0.4 }}>Published</span>
-        <span style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', marginLeft: '0.25rem' }}>
-          — Approved and Published states require BuildQuote admin action.
-        </span>
+      <div style={{ marginBottom: '1.25rem' }}>
+        <StudioStatusBadge
+          current="draft"
+          note="— Approved and Published states require BuildQuote admin action."
+        />
       </div>
 
       <div className="studio-preview-frame">

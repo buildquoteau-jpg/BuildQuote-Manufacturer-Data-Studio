@@ -1,4 +1,5 @@
 import { StudioShell } from '../../../../../components/studio/StudioShell'
+import { StudioStatusBadge } from '../../../../../components/studio/StudioStatusBadge'
 
 type Props = {
   params: { manufacturerId: string }
@@ -31,13 +32,11 @@ export default function AdminManufacturerPreviewPage({ params }: Props) {
         Manufacturers and BuildQuote admin can preview here before any publish action.
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <span className="studio-badge studio-badge-draft" style={{ cursor: 'pointer' }}>Draft</span>
-        <span className="studio-badge studio-badge-approved" style={{ opacity: 0.45 }}>Approved</span>
-        <span className="studio-badge studio-badge-published" style={{ opacity: 0.45 }}>Published</span>
-        <span style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', alignSelf: 'center', marginLeft: '0.25rem' }}>
-          — current state shown first. Approved and Published states not yet reached.
-        </span>
+      <div style={{ marginBottom: '1.25rem' }}>
+        <StudioStatusBadge
+          current="draft"
+          note="— Approved and Published states not yet reached."
+        />
       </div>
 
       <div className="studio-preview-frame">

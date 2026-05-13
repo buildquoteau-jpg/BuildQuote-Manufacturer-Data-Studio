@@ -50,14 +50,14 @@ export default function ManufacturerReviewPage() {
   return (
     <StudioShell role="manufacturer" subtitle="Review staged data">
       <h1 style={{ fontSize: '1.25rem', marginBottom: '0.35rem' }}>Review Staged Data</h1>
-      <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-        Verify that extracted data accurately reflects your source documents. Once you mark data as ready,
-        BuildQuote will review and approve before anything is published.
+      <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+        Verify that extracted data accurately reflects your source documents. Once you mark data as
+        ready, BuildQuote will review and approve before anything is published.
+        <br />
+        <span style={{ fontStyle: 'italic' }}>
+          Review workflow not connected yet — placeholder data only. No verification actions are active.
+        </span>
       </p>
-
-      <div className="studio-warn" style={{ marginBottom: '1.5rem' }}>
-        Review workflow not connected yet — placeholder data only. No verification actions are available.
-      </div>
 
       {SECTIONS.map((section) => (
         <div key={section.id} className="studio-section" style={{ marginTop: '1.25rem' }}>
