@@ -13,7 +13,7 @@
 // after each staged row is inserted. This planner uses temp keys as placeholders
 // throughout and annotates which fields still need resolution.
 //
-// Column references are accurate to migrations 001 + 002 + 007 + 008.
+// Column references are accurate to migrations 001 + 002 + 007 + 008 + 009.
 
 import type {
   ParserOutput,
@@ -95,12 +95,7 @@ export type PlannedStagedSystem = {
 }
 
 /**
- * Maps to staged_system_profiles (migrations 001 + 007 + 008).
- *
- * Schema note: staged_system_profiles has no uom column.
- * The parser output's uom for a profile is captured only in field_verifications
- * via the profile's field_sources entries. A SCHEMA_GAP_PROFILE_UOM info issue
- * is added to the plan when uom is present.
+ * Maps to staged_system_profiles (migrations 001 + 007 + 008 + 009).
  *
  * Schema note: staged_system_profiles has no source_document_id or source_chunk_id
  * columns. Source traceability lives in field_verifications per-field.
@@ -131,6 +126,7 @@ export type PlannedStagedSystemProfile = {
   supplier_pack_uom: string | null   // migration 007
   supplier_pack_note: string | null  // migration 007
   bal_rating: string | null          // migration 007
+  uom: string | null                 // migration 009
   sort_order: number
   extraction_confidence: number
   verification_status: 'pending_review'
@@ -531,20 +527,6 @@ function planProfile(
     )
   }
 
-  // uom has no column on staged_system_profiles — note the gap so it is not silently dropped.
-  // The uom value is still captured in field_verifications via the profile's field_sources entries.
-  if (p.uom) {
-    addIssue(
-      issues,
-      'info',
-      'SCHEMA_GAP_PROFILE_UOM',
-      `Profile "${p.profile_name ?? p.temp_key}" has uom="${p.uom}" but ` +
-        'staged_system_profiles has no uom column. ' +
-        'uom will be captured in field_verifications via field_sources only.',
-      path,
-    )
-  }
-
   return {
     row: {
       _temp_key: p.temp_key,
@@ -571,6 +553,7 @@ function planProfile(
       supplier_pack_uom: p.supplier_pack_uom ?? null,
       supplier_pack_note: p.supplier_pack_note ?? null,
       bal_rating: p.bal_rating ?? null,
+      uom: p.uom ?? null,
       sort_order: p.sort_order ?? 0,
       extraction_confidence: p.extraction_confidence,
       verification_status: 'pending_review',
