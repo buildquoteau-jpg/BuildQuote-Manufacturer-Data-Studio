@@ -1,11 +1,51 @@
-*,
-*::before,
-*::after {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+:root {
+  --ds-navy:       #185D7A;
+  --ds-orange:     #f97316;
+  --ds-teal:       #4FCBB0;
+  --ds-page-bg:    #f1f5f9;
+  --ds-card-bg:    #ffffff;
+  --ds-border:     #d1d5db;
+  --ds-border-soft:#e2e8f0;
+  --ds-text:       #1e293b;
+  --ds-text-sub:   #475569;
+  --ds-text-muted: #64748b;
+  --ds-text-faint: #94a3b8;
+}
+
+html {
+  font-size: 16px;
+}
+
 body {
-  font-family: sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  background: var(--ds-page-bg);
+  color: var(--ds-text);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+h1, h2 {
+  color: var(--ds-navy);
+}
+
+a {
+  color: var(--ds-navy);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Scrollable table containers */
+.ds-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

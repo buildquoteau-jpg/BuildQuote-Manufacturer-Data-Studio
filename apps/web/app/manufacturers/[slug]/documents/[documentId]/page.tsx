@@ -39,8 +39,8 @@ function LifecycleStep({ label, active, index }: { label: string; active: boolea
       gap: '0.75rem',
       padding: '0.6rem 0.75rem',
       borderRadius: 6,
-      background: active ? '#eff6ff' : 'transparent',
-      border: active ? '1px solid #bfdbfe' : '1px solid transparent',
+      background: active ? '#eef7fa' : 'transparent',
+      border: active ? '1px solid #a3d5e8' : '1px solid transparent',
     }}>
       <span style={{
         display: 'inline-flex',
@@ -51,21 +51,21 @@ function LifecycleStep({ label, active, index }: { label: string; active: boolea
         borderRadius: '50%',
         fontSize: '0.75rem',
         fontWeight: 700,
-        background: active ? '#3b82f6' : '#e5e7eb',
-        color: active ? '#fff' : '#6b7280',
+        background: active ? '#185D7A' : '#e2e8f0',
+        color: active ? '#fff' : '#94a3b8',
         flexShrink: 0,
       }}>
         {index + 1}
       </span>
-      <span style={{ fontSize: '0.9rem', color: active ? '#1d4ed8' : '#6b7280', fontWeight: active ? 600 : 400 }}>
+      <span style={{ fontSize: '0.9rem', color: active ? '#185D7A' : '#64748b', fontWeight: active ? 600 : 400 }}>
         {label}
       </span>
       {active && (
         <span style={{
           marginLeft: 'auto',
           fontSize: '0.75rem',
-          background: '#dbeafe',
-          color: '#1d4ed8',
+          background: '#cce7f0',
+          color: '#185D7A',
           padding: '0.1rem 0.45rem',
           borderRadius: 4,
           fontWeight: 600,
@@ -80,15 +80,15 @@ function LifecycleStep({ label, active, index }: { label: string; active: boolea
 function StatusBadge({ status }: { status: string }) {
   const colours: Record<string, { bg: string; color: string }> = {
     // run / doc statuses
-    uploaded:     { bg: '#dbeafe', color: '#1d4ed8' },
+    uploaded:     { bg: '#cce7f0', color: '#185D7A' },
     queued:       { bg: '#fef9c3', color: '#854d0e' },
-    running:      { bg: '#ffedd5', color: '#9a3412' },
-    extracting:   { bg: '#ffedd5', color: '#9a3412' },
+    running:      { bg: '#fed7aa', color: '#c2410c' },
+    extracting:   { bg: '#fed7aa', color: '#c2410c' },
     completed:    { bg: '#dcfce7', color: '#166534' },
     failed:       { bg: '#fee2e2', color: '#991b1b' },
     // verification statuses
-    pending_review:     { bg: '#f3f4f6', color: '#374151' },
-    in_review:          { bg: '#dbeafe', color: '#1d4ed8' },
+    pending_review:     { bg: '#f1f5f9', color: '#475569' },
+    in_review:          { bg: '#cce7f0', color: '#185D7A' },
     approved:           { bg: '#dcfce7', color: '#166534' },
     rejected:           { bg: '#fee2e2', color: '#991b1b' },
     needs_source_check: { bg: '#ffedd5', color: '#9a3412' },
@@ -134,32 +134,36 @@ function RoleBadge({ role }: { role: string }) {
   )
 }
 
-const CELL: React.CSSProperties = { padding: '0.4rem 1rem 0.4rem 0', color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }
-const VAL: React.CSSProperties  = { padding: '0.4rem 0' }
+const CELL: React.CSSProperties = { padding: '0.4rem 1.25rem 0.4rem 0', color: '#475569', fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.85rem' }
+const VAL: React.CSSProperties  = { padding: '0.4rem 0', color: '#1e293b' }
 
 const TH: React.CSSProperties = {
-  padding: '0.4rem 0.75rem',
+  padding: '0.45rem 0.75rem',
   textAlign: 'left',
-  fontSize: '0.8rem',
-  fontWeight: 600,
-  color: '#6b7280',
-  borderBottom: '1px solid #e5e7eb',
-  background: '#f9fafb',
+  fontSize: '0.73rem',
+  fontWeight: 700,
+  color: '#64748b',
+  borderBottom: '1px solid #e2e8f0',
+  background: '#f8fafc',
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
 }
 const TD: React.CSSProperties = {
-  padding: '0.45rem 0.75rem',
+  padding: '0.5rem 0.75rem',
   fontSize: '0.85rem',
-  borderBottom: '1px solid #f3f4f6',
-  color: '#374151',
+  borderBottom: '1px solid #f1f5f9',
+  color: '#1e293b',
+  verticalAlign: 'top',
 }
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
-      border: '1px solid #e5e7eb',
-      borderRadius: 8,
+      border: '1px solid #d1d5db',
+      borderRadius: 10,
       overflow: 'hidden',
       marginBottom: '1.5rem',
+      background: '#ffffff',
     }}>
       {children}
     </div>
@@ -168,7 +172,7 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 
 function EmptyNote({ text }: { text: string }) {
   return (
-    <p style={{ color: '#9ca3af', fontSize: '0.85rem', margin: '0.75rem 1rem' }}>{text}</p>
+    <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0.75rem 1rem' }}>{text}</p>
   )
 }
 
@@ -198,7 +202,7 @@ function ReadinessRow({ check }: { check: ReadinessCheck }) {
       alignItems: 'flex-start',
       gap: '0.6rem',
       padding: '0.45rem 0.75rem',
-      borderBottom: '1px solid #f3f4f6',
+      borderBottom: '1px solid #f1f5f9',
       fontSize: '0.88rem',
     }}>
       <span style={{
@@ -232,9 +236,9 @@ export default async function DocumentDetail({ params }: Props) {
 
   if (mfrError || !manufacturer) {
     return (
-      <main style={{ fontFamily: 'sans-serif', maxWidth: 900, margin: '2rem auto', padding: '0 1rem' }}>
+      <main style={{ maxWidth: 960, margin: '2rem auto', padding: '0 1.25rem' }}>
         <p><a href="/">← Home</a></p>
-        <p style={{ color: '#888' }}>Manufacturer not found.</p>
+        <p style={{ color: '#64748b' }}>Manufacturer not found.</p>
       </main>
     )
   }
@@ -249,9 +253,9 @@ export default async function DocumentDetail({ params }: Props) {
 
   if (docError || !doc) {
     return (
-      <main style={{ fontFamily: 'sans-serif', maxWidth: 900, margin: '2rem auto', padding: '0 1rem' }}>
+      <main style={{ maxWidth: 960, margin: '2rem auto', padding: '0 1.25rem' }}>
         <p><a href={`/manufacturers/${manufacturer.slug}`}>← Back to {manufacturer.name}</a></p>
-        <p style={{ color: '#888' }}>Document not found.</p>
+        <p style={{ color: '#64748b' }}>Document not found.</p>
       </main>
     )
   }
@@ -369,29 +373,30 @@ export default async function DocumentDetail({ params }: Props) {
   const activeStep = LIFECYCLE_STEPS.findIndex((s) => s.key === doc.status)
 
   return (
-    <main style={{ fontFamily: 'sans-serif', maxWidth: 900, margin: '2rem auto', padding: '0 1rem' }}>
+    <main style={{ maxWidth: 960, margin: '2rem auto', padding: '0 1.25rem 4rem' }}>
 
       {/* A — Navigation */}
-      <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: '0.25rem' }}>
-        <a href="/" style={{ color: '#888' }}>Manufacturers</a>
-        {' / '}
-        <a href={`/manufacturers/${manufacturer.slug}`} style={{ color: '#888' }}>{manufacturer.name}</a>
-        {' / '}
-        <span style={{ color: '#374151' }}>{doc.document_name}</span>
+      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '0.5rem' }}>
+        <a href="/" style={{ color: '#64748b' }}>Manufacturers</a>
+        <span style={{ margin: '0 0.4rem', color: '#cbd5e1' }}>/</span>
+        <a href={`/manufacturers/${manufacturer.slug}`} style={{ color: '#64748b' }}>{manufacturer.name}</a>
+        <span style={{ margin: '0 0.4rem', color: '#cbd5e1' }}>/</span>
+        <span style={{ color: '#475569', fontWeight: 500 }}>{doc.document_name}</span>
       </p>
-      <p style={{ marginTop: 0 }}>
-        <a href={`/manufacturers/${manufacturer.slug}`}>← Back to {manufacturer.name}</a>
+      <p style={{ marginTop: 0, marginBottom: '1.25rem', fontSize: '0.85rem' }}>
+        <a href={`/manufacturers/${manufacturer.slug}`} style={{ color: '#185D7A', fontWeight: 500 }}>← Back to {manufacturer.name}</a>
       </p>
 
       {/* B — Header summary card */}
       <div style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
+        border: '1px solid #d1d5db',
+        borderLeft: '4px solid #185D7A',
+        borderRadius: 10,
         padding: '1.25rem 1.5rem',
         marginBottom: '1.5rem',
-        background: '#fafafa',
+        background: '#ffffff',
       }}>
-        <h1 style={{ margin: '0 0 1rem 0', fontSize: '1.4rem' }}>{doc.document_name}</h1>
+        <h1 style={{ margin: '0 0 1rem 0', fontSize: '1.5rem', fontWeight: 700, color: '#185D7A' }}>{doc.document_name}</h1>
         <table style={{ borderCollapse: 'collapse', fontSize: '0.9rem' }}>
           <tbody>
             <tr>
@@ -416,7 +421,7 @@ export default async function DocumentDetail({ params }: Props) {
             </tr>
           </tbody>
         </table>
-        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid #e2e8f0' }}>
           {([
             { label: 'Extraction runs',   value: runs?.length ?? 0 },
             { label: 'Chunks',            value: chunkCount },
@@ -426,8 +431,8 @@ export default async function DocumentDetail({ params }: Props) {
             { label: 'Field verifications', value: fieldVerifications?.length ?? 0 },
           ] as { label: string; value: number }[]).map((s) => (
             <span key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem' }}>
-              <strong style={{ color: '#374151', fontSize: '1.15rem' }}>{s.value}</strong>
-              <span style={{ fontSize: '0.7rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{s.label}</span>
+              <strong style={{ color: '#185D7A', fontSize: '1.25rem', fontWeight: 700 }}>{s.value}</strong>
+              <span style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</span>
             </span>
           ))}
         </div>
@@ -485,16 +490,16 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Extraction summary</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               What this document has produced so far. All data is staged — not yet in production.
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1px', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: '1.5rem', background: '#e5e7eb' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1px', border: '1px solid #d1d5db', borderRadius: 10, overflow: 'hidden', marginBottom: '1.5rem', background: '#d1d5db' }}>
               {summaryRows.map((item) => (
-                <div key={item.label} style={{ padding: '0.9rem 1rem', background: '#fff' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <div key={item.label} style={{ padding: '1rem 1rem', background: '#ffffff' }}>
+                  <div style={{ fontSize: '0.68rem', color: '#64748b', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
                     {item.label}
                   </div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: item.dim ? '#d1d5db' : '#374151', lineHeight: 1.1, marginBottom: '0.25rem' }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: item.dim ? '#d1d5db' : '#185D7A', lineHeight: 1.1, marginBottom: '0.25rem' }}>
                     {item.primary}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#9ca3af', lineHeight: 1.4 }}>
@@ -509,7 +514,7 @@ export default async function DocumentDetail({ params }: Props) {
 
       {/* C — Document lifecycle */}
       <h2 style={{ marginBottom: '0.4rem' }}>Document lifecycle</h2>
-      <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+      <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
         Workflow placeholders — steps will become interactive in a future milestone.
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.5rem' }}>
@@ -520,14 +525,14 @@ export default async function DocumentDetail({ params }: Props) {
 
       {/* D — Extraction runs */}
       <h2 style={{ marginBottom: '0.4rem' }}>Extraction runs</h2>
-      <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+      <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
         Pipeline runs triggered against this document. Read-only.
       </p>
       <SectionCard>
         {!runs || runs.length === 0 ? (
-          <div style={{ padding: '0.85rem 1rem' }}>
-            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No extraction runs recorded yet</p>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+          <div style={{ padding: '1rem 1.25rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#1e293b', fontWeight: 600 }}>No extraction runs recorded yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b', lineHeight: 1.55 }}>
               Extraction runs are created when an AI pipeline processes this document. They will appear here once an operator triggers a run against this document.
             </p>
           </div>
@@ -561,14 +566,14 @@ export default async function DocumentDetail({ params }: Props) {
 
       {/* E — Document chunks */}
       <h2 style={{ marginBottom: '0.4rem' }}>Document chunks</h2>
-      <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+      <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
         Text and table chunks extracted from this document. Preview limited to first 10.
       </p>
       <SectionCard>
         {chunkCount === 0 ? (
-          <div style={{ padding: '0.85rem 1rem' }}>
-            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No document chunks yet</p>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+          <div style={{ padding: '1rem 1.25rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#1e293b', fontWeight: 600 }}>No document chunks yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b', lineHeight: 1.55 }}>
               Chunks are sections of the document text created during extraction. They appear here once an extraction run has processed this document and split the content into reviewable segments.
             </p>
           </div>
@@ -618,14 +623,14 @@ export default async function DocumentDetail({ params }: Props) {
 
       {/* F — Staged systems */}
       <h2 style={{ marginBottom: '0.4rem' }}>Staged systems</h2>
-      <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+      <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
         AI-drafted system cards awaiting human verification. Read-only.
       </p>
       <SectionCard>
         {!stagedSystems || stagedSystems.length === 0 ? (
-          <div style={{ padding: '0.85rem 1rem' }}>
-            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No staged systems yet</p>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+          <div style={{ padding: '1rem 1.25rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#1e293b', fontWeight: 600 }}>No staged systems yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b', lineHeight: 1.55 }}>
               Staged systems are AI-drafted product system cards created during extraction. They will appear here once an extraction run produces system records from this document. Systems must pass human verification before they can be published to BuildQuote.
             </p>
           </div>
@@ -674,14 +679,14 @@ export default async function DocumentDetail({ params }: Props) {
 
       {/* G — Staged components */}
       <h2 style={{ marginBottom: '0.4rem' }}>Staged components</h2>
-      <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+      <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
         AI-drafted component rows awaiting human verification. Read-only.
       </p>
       <SectionCard>
         {!stagedComponents || stagedComponents.length === 0 ? (
-          <div style={{ padding: '0.85rem 1rem' }}>
-            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>No staged components yet</p>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.5 }}>
+          <div style={{ padding: '1rem 1.25rem' }}>
+            <p style={{ margin: '0 0 0.35rem', fontSize: '0.88rem', color: '#1e293b', fontWeight: 600 }}>No staged components yet</p>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b', lineHeight: 1.55 }}>
               Staged components are AI-drafted component rows — the individual parts that make up a system. They appear here once an extraction run produces component records. Components are linked to systems and must be verified before publishing.
             </p>
           </div>
@@ -732,7 +737,7 @@ export default async function DocumentDetail({ params }: Props) {
       {systemIds.length > 0 && (
         <>
           <h2 style={{ marginBottom: '0.4rem' }}>System composition</h2>
-          <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+          <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
             Each system with its linked components, colours, and profiles. Read-only.
           </p>
 
@@ -779,10 +784,11 @@ export default async function DocumentDetail({ params }: Props) {
             const hasVariants = sysColours.length > 0 || sysProfs.length > 0
             return (
               <div key={sys.id} style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 8,
+                border: '1px solid #d1d5db',
+                borderRadius: 10,
                 marginBottom: '1rem',
                 overflow: 'hidden',
+                background: '#ffffff',
               }}>
                 {/* System header */}
                 <div style={{
@@ -791,12 +797,12 @@ export default async function DocumentDetail({ params }: Props) {
                   gap: '0.6rem',
                   flexWrap: 'wrap',
                   padding: '0.65rem 1rem',
-                  background: '#fafafa',
-                  borderBottom: '1px solid #f3f4f6',
+                  background: '#f8fafc',
+                  borderBottom: '1px solid #e2e8f0',
                 }}>
                   <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{sys.name}</span>
                   {sys.product_code && (
-                    <code style={{ fontSize: '0.8rem', color: '#374151', background: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
+                    <code style={{ fontSize: '0.78rem', color: '#185D7A', background: '#cce7f0', padding: '0.15rem 0.5rem', borderRadius: 4, fontWeight: 600, letterSpacing: '0.02em' }}>
                       {sys.product_code}
                     </code>
                   )}
@@ -847,7 +853,7 @@ export default async function DocumentDetail({ params }: Props) {
                 {hasVariants && (
                   <div style={{
                     padding: '0.5rem 1rem 0.65rem',
-                    borderTop: '1px solid #f3f4f6',
+                    borderTop: '1px solid #f1f5f9',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.4rem',
@@ -862,7 +868,7 @@ export default async function DocumentDetail({ params }: Props) {
                             borderRadius: 4,
                             background: col.is_stocked ? '#f3f4f6' : 'transparent',
                             color: col.is_stocked ? '#374151' : '#9ca3af',
-                            border: col.is_stocked ? '1px solid #e5e7eb' : '1px dashed #d1d5db',
+                            border: col.is_stocked ? '1px solid #e2e8f0' : '1px dashed #d1d5db',
                           }}>
                             {col.colour_name}{!col.is_stocked && ' (not stocked)'}
                           </span>
@@ -896,7 +902,7 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Catalogue code check</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               Read-only summary of code coverage across staged data for this document.
             </p>
             <SectionCard>
@@ -1002,7 +1008,7 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Review priorities</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               Where to focus human review first. Pending mapping is a normal staging state — it means an item has not been exported to production yet.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -1090,21 +1096,21 @@ export default async function DocumentDetail({ params }: Props) {
             <div style={{ marginBottom: '0.1rem' }}>
               <div style={{
                 padding: '0.45rem 0.75rem',
-                background: '#fafafa',
-                borderBottom: '1px solid #f3f4f6',
-                borderTop: '1px solid #f3f4f6',
+                background: '#f8fafc',
+                borderBottom: '1px solid #e2e8f0',
+                borderTop: '1px solid #e2e8f0',
                 fontSize: '0.82rem',
                 fontWeight: 600,
-                color: '#374151',
+                color: '#1e293b',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.6rem',
               }}>
                 {entityName || entityId}
                 {entityCode && (
-                  <span style={{ fontFamily: 'monospace', fontSize: '0.76rem', fontWeight: 400, color: '#6b7280', background: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
+                  <code style={{ fontSize: '0.75rem', fontWeight: 600, color: '#185D7A', background: '#cce7f0', padding: '0.15rem 0.45rem', borderRadius: 4, letterSpacing: '0.02em' }}>
                     {entityCode}
-                  </span>
+                  </code>
                 )}
               </div>
               <div style={{ overflowX: 'auto' }}>
@@ -1150,7 +1156,7 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Field verification state</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               Per-field extraction state for staged records in this document. Read-only — no edits are possible here.
             </p>
             <SectionCard>
@@ -1165,7 +1171,7 @@ export default async function DocumentDetail({ params }: Props) {
               </div>
 
               {hasSys && (
-                <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '0.5rem' }}>
+                <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '0.5rem' }}>
                   <div style={{ padding: '0.45rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                     Systems ({sysEntityIds.length})
                   </div>
@@ -1182,7 +1188,7 @@ export default async function DocumentDetail({ params }: Props) {
               )}
 
               {hasComp && (
-                <div style={{ borderTop: '1px solid #e5e7eb', marginTop: hasSys ? '0.75rem' : '0.5rem' }}>
+                <div style={{ borderTop: '1px solid #e2e8f0', marginTop: hasSys ? '0.75rem' : '0.5rem' }}>
                   <div style={{ padding: '0.45rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                     Components ({compEntityIds.length})
                   </div>
@@ -1281,14 +1287,14 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Extraction evidence trail</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               Traceability is read-only. Extraction evidence must be checked before any future publish/migration step.
             </p>
 
             {/* A — Source coverage summary */}
             <SectionCard>
-              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Source coverage
                 </span>
               </div>
@@ -1329,8 +1335,8 @@ export default async function DocumentDetail({ params }: Props) {
 
             {/* B — Traceability diagnostics */}
             <SectionCard>
-              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Traceability diagnostics
                 </span>
               </div>
@@ -1342,7 +1348,7 @@ export default async function DocumentDetail({ params }: Props) {
                     alignItems: 'flex-start',
                     gap: '0.6rem',
                     padding: '0.4rem 0.75rem',
-                    borderBottom: i < diags.length - 1 ? '1px solid #f3f4f6' : 'none',
+                    borderBottom: i < diags.length - 1 ? '1px solid #f1f5f9' : 'none',
                     fontSize: '0.88rem',
                   }}>
                     <div style={{ flex: 1, color: '#374151' }}>{d.label}</div>
@@ -1364,8 +1370,8 @@ export default async function DocumentDetail({ params }: Props) {
             {/* C — Field-to-evidence map */}
             {fvRows.length > 0 && (
               <SectionCard>
-                <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     Field-to-evidence map
                   </span>
                 </div>
@@ -1434,7 +1440,7 @@ export default async function DocumentDetail({ params }: Props) {
             <p style={{
               fontSize: '0.82rem', color: '#6b7280',
               padding: '0.6rem 0.85rem', marginBottom: '1.5rem',
-              border: '1px solid #e5e7eb', borderRadius: 6, background: '#fafafa',
+              border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc',
             }}>
               Traceability is read-only. Extraction evidence must be checked before any future publish/migration step.
               {fvWithoutChunk > 0 && (
@@ -1610,7 +1616,7 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Verification readiness</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               Read-only guide to staging completeness for this document.
             </p>
             <SectionCard>
@@ -1620,25 +1626,26 @@ export default async function DocumentDetail({ params }: Props) {
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: '0.4rem',
-                padding: '0.65rem 0.75rem',
+                padding: '0.7rem 0.85rem',
                 background: overallBg,
-                borderBottom: '1px solid #e5e7eb',
+                borderBottom: '1px solid #e2e8f0',
               }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>Overall readiness</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#185D7A' }}>Overall readiness</span>
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: overallColor }}>{overallState}</span>
               </div>
               <div>
                 {readinessGroups.map((group) => (
                   <div key={group.title}>
                     <div style={{
-                      padding: '0.35rem 0.75rem',
-                      fontSize: '0.72rem',
+                      padding: '0.35rem 0.75rem 0.35rem 1rem',
+                      fontSize: '0.7rem',
                       fontWeight: 700,
-                      color: '#9ca3af',
+                      color: '#185D7A',
                       letterSpacing: '0.05em',
                       textTransform: 'uppercase',
-                      borderBottom: '1px solid #f3f4f6',
-                      background: '#fafafa',
+                      borderBottom: '1px solid #e2e8f0',
+                      borderLeft: '3px solid #4FCBB0',
+                      background: '#f8fafc',
                     }}>
                       {group.title}
                     </div>
@@ -1653,7 +1660,7 @@ export default async function DocumentDetail({ params }: Props) {
                   alignItems: 'flex-start',
                   gap: '0.5rem',
                   padding: '0.5rem 0.75rem',
-                  borderTop: '1px solid #f3f4f6',
+                  borderTop: '1px solid #f1f5f9',
                   fontSize: '0.82rem',
                   color: '#9ca3af',
                 }}>
@@ -1675,15 +1682,15 @@ export default async function DocumentDetail({ params }: Props) {
 
       {/* K — Verification checklist */}
       <h2 style={{ marginBottom: '0.4rem' }}>Verification checklist</h2>
-      <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+      <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
         Future workflow steps — none of these are interactive yet.
       </p>
       <div style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        padding: '1rem 1.5rem',
+        border: '1px solid #d1d5db',
+        borderRadius: 10,
+        padding: '0.25rem 1.25rem 0.5rem',
         marginBottom: '1.5rem',
-        background: '#fafafa',
+        background: '#ffffff',
       }}>
         {[
           'Confirm document belongs to the selected manufacturer',
@@ -1696,17 +1703,17 @@ export default async function DocumentDetail({ params }: Props) {
           <div key={item} style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.6rem',
-            padding: '0.45rem 0',
-            borderBottom: '1px solid #f3f4f6',
-            color: '#6b7280',
-            fontSize: '0.9rem',
+            gap: '0.65rem',
+            padding: '0.55rem 0',
+            borderBottom: '1px solid #f1f5f9',
+            color: '#475569',
+            fontSize: '0.88rem',
           }}>
             <span style={{
-              width: 16,
-              height: 16,
+              width: 15,
+              height: 15,
               borderRadius: 3,
-              border: '1.5px solid #d1d5db',
+              border: '1.5px solid #cbd5e1',
               display: 'inline-block',
               flexShrink: 0,
             }} />
@@ -1794,7 +1801,7 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Review workflow</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               Read-only summary of where this document sits in the staged review process.
             </p>
             <SectionCard>
@@ -1807,7 +1814,7 @@ export default async function DocumentDetail({ params }: Props) {
                       alignItems: 'flex-start',
                       gap: '0.65rem',
                       padding: '0.5rem 0.75rem',
-                      borderBottom: i < steps.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      borderBottom: i < steps.length - 1 ? '1px solid #f1f5f9' : 'none',
                     }}>
                       <span style={{
                         display: 'inline-flex',
@@ -1982,7 +1989,7 @@ export default async function DocumentDetail({ params }: Props) {
         return (
           <>
             <h2 style={{ marginBottom: '0.4rem' }}>Publish planning preview</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 0, marginBottom: '0.75rem' }}>
               Read-only diagnostic preview of staged data and what must be resolved before a future controlled migration to RFQ/MFP production.
             </p>
 
@@ -1995,8 +2002,8 @@ export default async function DocumentDetail({ params }: Props) {
 
             {/* Would-be publish payload */}
             <SectionCard>
-              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Would-be publish payload
                 </span>
               </div>
@@ -2032,13 +2039,13 @@ export default async function DocumentDetail({ params }: Props) {
             {/* Eligibility categories */}
             {(totalSystems > 0 || totalComponents > 0 || totalLinks > 0) && (
               <SectionCard>
-                <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     Eligibility categories
                   </span>
                 </div>
                 {totalSystems > 0 && (
-                  <div style={{ borderBottom: totalComponents > 0 || totalLinks > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                  <div style={{ borderBottom: totalComponents > 0 || totalLinks > 0 ? '1px solid #f1f5f9' : 'none' }}>
                     <div style={{ padding: '0.4rem 0.75rem 0.2rem', fontSize: '0.75rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Systems</div>
                     {[
                       { label: 'Candidate (has name, not rejected)',                  count: sysCandidates,        bg: '#dcfce7', color: '#166534' },
@@ -2054,7 +2061,7 @@ export default async function DocumentDetail({ params }: Props) {
                   </div>
                 )}
                 {totalComponents > 0 && (
-                  <div style={{ borderBottom: totalLinks > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                  <div style={{ borderBottom: totalLinks > 0 ? '1px solid #f1f5f9' : 'none' }}>
                     <div style={{ padding: '0.4rem 0.75rem 0.2rem', fontSize: '0.75rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Components</div>
                     {[
                       { label: 'Candidate (has name, not rejected)', count: compCandidates, bg: '#dcfce7', color: '#166534' },
@@ -2088,8 +2095,8 @@ export default async function DocumentDetail({ params }: Props) {
 
             {/* Production mapping diagnostics */}
             <SectionCard>
-              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Production mapping diagnostics
                 </span>
               </div>
@@ -2126,7 +2133,7 @@ export default async function DocumentDetail({ params }: Props) {
                   },
                 ].map((row) => (
                   <div key={row.field} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid #f9fafb' }}>
-                    <code style={{ fontSize: '0.78rem', background: '#f3f4f6', padding: '0.1rem 0.35rem', borderRadius: 3, flexShrink: 0, color: '#374151' }}>
+                    <code style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '0.15rem 0.45rem', borderRadius: 4, flexShrink: 0, color: '#475569', fontWeight: 500 }}>
                       {row.field}
                     </code>
                     <span style={{ fontSize: '0.78rem', color: row.available === null ? '#9ca3af' : row.available ? '#166534' : '#92400e', flex: 1 }}>
@@ -2142,8 +2149,8 @@ export default async function DocumentDetail({ params }: Props) {
 
             {/* Publish batch status */}
             <SectionCard>
-              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Publish batch status
                 </span>
               </div>
@@ -2194,15 +2201,15 @@ export default async function DocumentDetail({ params }: Props) {
 
             {/* Publish blockers */}
             <SectionCard>
-              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Publish blockers
                 </span>
               </div>
               {blockers.map((b, i) => {
                 const s = BLO[b.sev]
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.4rem 0.75rem', borderBottom: i < blockers.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.4rem 0.75rem', borderBottom: i < blockers.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.dot, flexShrink: 0, marginTop: '0.4rem' }} />
                     <div style={{ flex: 1, fontSize: '0.85rem', color: '#374151' }}>{b.text}</div>
                     <span style={{ fontSize: '0.75rem', fontWeight: 600, color: s.lc, background: s.lb, padding: '0.1rem 0.45rem', borderRadius: 4, whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -2215,8 +2222,8 @@ export default async function DocumentDetail({ params }: Props) {
 
             {/* Future publish sequence */}
             <SectionCard>
-              <div style={{ padding: '0.45rem 0.75rem', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <div style={{ padding: '0.45rem 0.85rem', borderBottom: '1px solid #e2e8f0', borderLeft: '3px solid #4FCBB0', background: '#f8fafc' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Future publish sequence
                 </span>
               </div>
@@ -2230,7 +2237,7 @@ export default async function DocumentDetail({ params }: Props) {
                 { label: 'Write to RFQ/MFP production Supabase',                built: false },
                 { label: 'Record publish result',                                built: false },
               ] as { label: string; built: boolean }[]).map((step, i, arr) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.4rem 0.75rem', borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.4rem 0.75rem', borderBottom: i < arr.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: '50%', fontSize: '0.72rem', fontWeight: 700, background: step.built ? '#dcfce7' : '#f3f4f6', color: step.built ? '#166534' : '#d1d5db', flexShrink: 0 }}>
                     {i + 1}
                   </span>
@@ -2252,44 +2259,46 @@ export default async function DocumentDetail({ params }: Props) {
 
       {/* L — Safe metadata */}
       <h2 style={{ marginBottom: '0.4rem' }}>Safe metadata</h2>
-      <table style={{ borderCollapse: 'collapse', fontSize: '0.88rem', marginBottom: '1.5rem' }}>
-        <tbody>
-          <tr>
-            <td style={CELL}>Document ID</td>
-            <td style={{ ...VAL, fontFamily: 'monospace', fontSize: '0.8rem', color: '#374151' }}>{doc.id}</td>
-          </tr>
-          <tr>
-            <td style={CELL}>Manufacturer ID</td>
-            <td style={{ ...VAL, fontFamily: 'monospace', fontSize: '0.8rem', color: '#374151' }}>{doc.manufacturer_id}</td>
-          </tr>
-          <tr>
-            <td style={CELL}>Document type</td>
-            <td style={VAL}>{doc.document_type ?? '—'}</td>
-          </tr>
-          <tr>
-            <td style={CELL}>Document date</td>
-            <td style={VAL}>{doc.document_date ?? '—'}</td>
-          </tr>
-          <tr>
-            <td style={CELL}>Status</td>
-            <td style={VAL}>{doc.status}</td>
-          </tr>
-          <tr>
-            <td style={CELL}>Uploaded at</td>
-            <td style={VAL}>{fmtDate(doc.uploaded_at)}</td>
-          </tr>
-        </tbody>
-      </table>
+      <SectionCard>
+        <table style={{ borderCollapse: 'collapse', fontSize: '0.88rem', margin: '0.5rem 0.75rem 0.75rem' }}>
+          <tbody>
+            <tr>
+              <td style={CELL}>Document ID</td>
+              <td style={{ ...VAL, fontFamily: 'monospace', fontSize: '0.78rem', color: '#475569' }}>{doc.id}</td>
+            </tr>
+            <tr>
+              <td style={CELL}>Manufacturer ID</td>
+              <td style={{ ...VAL, fontFamily: 'monospace', fontSize: '0.78rem', color: '#475569' }}>{doc.manufacturer_id}</td>
+            </tr>
+            <tr>
+              <td style={CELL}>Document type</td>
+              <td style={VAL}>{doc.document_type ?? '—'}</td>
+            </tr>
+            <tr>
+              <td style={CELL}>Document date</td>
+              <td style={VAL}>{doc.document_date ?? '—'}</td>
+            </tr>
+            <tr>
+              <td style={CELL}>Status</td>
+              <td style={VAL}>{doc.status}</td>
+            </tr>
+            <tr>
+              <td style={CELL}>Uploaded at</td>
+              <td style={VAL}>{fmtDate(doc.uploaded_at)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </SectionCard>
 
       {/* M — Not available yet */}
       <p style={{
-        fontSize: '0.82rem',
-        color: '#9ca3af',
-        borderTop: '1px solid #f3f4f6',
-        paddingTop: '1rem',
+        fontSize: '0.8rem',
+        color: '#94a3b8',
+        borderTop: '1px solid #e2e8f0',
+        paddingTop: '1.25rem',
+        marginTop: '0.5rem',
       }}>
-        File preview, extraction, editing, approval, and upload controls are intentionally not enabled
-        in this local read-only shell.
+        File preview, extraction, editing, approval, and upload controls are intentionally not enabled in this read-only workspace.
       </p>
 
     </main>
