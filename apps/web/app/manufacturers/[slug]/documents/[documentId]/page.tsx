@@ -50,7 +50,45 @@ interface StagedProfile {
   verification_status: string
 }
 
-function fmtDimLine(p: StagedProfile): string | null {
+interface StagedComponent {
+  id: string
+  name: string
+  sku: string | null
+  category: string | null
+  uom: string | null
+  description: string | null
+  length_mm: number | null
+  width_mm: number | null
+  height_mm: number | null
+  depth_mm: number | null
+  thickness_mm: number | null
+  gauge_mm: number | null
+  diameter_mm: number | null
+  roll_m: number | null
+  weight_kg: number | null
+  pieces: number | null
+  volume_ml: number | null
+  weight_g: number | null
+  pack_format: string | null
+  supplier_pack_qty: number | null
+  supplier_pack_uom: string | null
+  supplier_pack_note: string | null
+  verification_status: string
+  extraction_confidence: number | null
+  production_component_id: string | null
+  sort_order: number | null
+}
+
+type HasBaseDims = {
+  dimensions?: string | null
+  length_m?: number | null
+  length_mm?: number | null
+  width_mm?: number | null
+  height_mm?: number | null
+  roll_m?: number | null
+}
+
+function fmtDimLine(p: HasBaseDims): string | null {
   if (p.dimensions) return p.dimensions
   const parts: string[] = []
   if (p.length_mm != null) parts.push(String(p.length_mm))
@@ -328,7 +366,7 @@ export default async function DocumentDetail({ params }: Props) {
 
     supabase
       .from('staged_components')
-      .select('id, name, sku, category, uom, description, verification_status, extraction_confidence, production_component_id')
+      .select('id, name, sku, category, uom, description, length_mm, width_mm, height_mm, depth_mm, thickness_mm, gauge_mm, diameter_mm, roll_m, weight_kg, pieces, volume_ml, weight_g, pack_format, supplier_pack_qty, supplier_pack_uom, supplier_pack_note, verification_status, extraction_confidence, production_component_id, sort_order')
       .eq('source_document_id', doc.id)
       .order('sort_order', { ascending: true }),
 
@@ -961,6 +999,42 @@ export default async function DocumentDetail({ params }: Props) {
                         {comp.description}
                       </div>
                     )}
+                    {(() => {
+                      const c = comp as StagedComponent
+                      const dimLine = fmtDimLine(c)
+                      const chips: { label: string; value: string }[] = []
+                      if (c.depth_mm      != null) chips.push({ label: 'Depth',       value: `${c.depth_mm} mm` })
+                      if (c.thickness_mm  != null) chips.push({ label: 'Thickness',   value: `${c.thickness_mm} mm` })
+                      if (c.gauge_mm      != null) chips.push({ label: 'Gauge',       value: `${c.gauge_mm} mm` })
+                      if (c.diameter_mm   != null) chips.push({ label: 'Diameter',    value: `${c.diameter_mm} mm` })
+                      if (c.roll_m        != null) chips.push({ label: 'Roll length', value: `${c.roll_m} m` })
+                      if (c.weight_kg     != null) chips.push({ label: 'Weight',      value: `${c.weight_kg} kg` })
+                      if (c.weight_g      != null) chips.push({ label: 'Weight',      value: `${c.weight_g} g` })
+                      if (c.pieces        != null) chips.push({ label: 'Pieces',      value: String(c.pieces) })
+                      if (c.volume_ml     != null) chips.push({ label: 'Volume',      value: `${c.volume_ml} ml` })
+                      const packParts: string[] = []
+                      if (c.supplier_pack_qty != null) packParts.push(String(c.supplier_pack_qty))
+                      if (c.supplier_pack_uom) packParts.push(c.supplier_pack_uom)
+                      const supplierPack = packParts.length > 0
+                        ? packParts.join(' ') + (c.supplier_pack_note ? ` (${c.supplier_pack_note})` : '')
+                        : null
+                      const hasAny = dimLine || chips.length > 0 || c.pack_format || supplierPack
+                      if (!hasAny) return null
+                      return (
+                        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '0.2rem 0.55rem', marginTop: '0.3rem', fontSize: '0.75rem', fontWeight: 400 }}>
+                          {dimLine && <span style={{ color: '#185D7A', fontWeight: 500 }}>{dimLine}</span>}
+                          {chips.map((f, i) => (
+                            <span key={i} style={{ color: '#475569' }}><span style={{ color: '#9ca3af' }}>{f.label}:</span> {f.value}</span>
+                          ))}
+                          {c.pack_format && (
+                            <span style={{ color: '#475569' }}><span style={{ color: '#9ca3af' }}>Pack:</span> {c.pack_format}</span>
+                          )}
+                          {supplierPack && (
+                            <span style={{ color: '#475569' }}><span style={{ color: '#9ca3af' }}>Supplier pack:</span> {supplierPack}</span>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td style={{ ...TD, color: '#6b7280' }}>{comp.sku ?? '—'}</td>
                   <td style={{ ...TD, color: '#6b7280' }}>{comp.category ?? '—'}</td>
@@ -1071,7 +1145,45 @@ export default async function DocumentDetail({ params }: Props) {
                           const comp = compById.get(link.staged_component_id)
                           return (
                             <tr key={link.staged_component_id}>
-                              <td style={{ ...TD, fontWeight: 500 }}>{comp?.name ?? '—'}</td>
+                              <td style={{ ...TD, fontWeight: 500 }}>
+                                {comp?.name ?? '—'}
+                                {comp && (() => {
+                                  const c = comp as StagedComponent
+                                  const dimLine = fmtDimLine(c)
+                                  const chips: { label: string; value: string }[] = []
+                                  if (c.depth_mm      != null) chips.push({ label: 'Depth',       value: `${c.depth_mm} mm` })
+                                  if (c.thickness_mm  != null) chips.push({ label: 'Thickness',   value: `${c.thickness_mm} mm` })
+                                  if (c.gauge_mm      != null) chips.push({ label: 'Gauge',       value: `${c.gauge_mm} mm` })
+                                  if (c.diameter_mm   != null) chips.push({ label: 'Diameter',    value: `${c.diameter_mm} mm` })
+                                  if (c.roll_m        != null) chips.push({ label: 'Roll length', value: `${c.roll_m} m` })
+                                  if (c.weight_kg     != null) chips.push({ label: 'Weight',      value: `${c.weight_kg} kg` })
+                                  if (c.weight_g      != null) chips.push({ label: 'Weight',      value: `${c.weight_g} g` })
+                                  if (c.pieces        != null) chips.push({ label: 'Pieces',      value: String(c.pieces) })
+                                  if (c.volume_ml     != null) chips.push({ label: 'Volume',      value: `${c.volume_ml} ml` })
+                                  const packParts: string[] = []
+                                  if (c.supplier_pack_qty != null) packParts.push(String(c.supplier_pack_qty))
+                                  if (c.supplier_pack_uom) packParts.push(c.supplier_pack_uom)
+                                  const supplierPack = packParts.length > 0
+                                    ? packParts.join(' ') + (c.supplier_pack_note ? ` (${c.supplier_pack_note})` : '')
+                                    : null
+                                  const hasAny = dimLine || chips.length > 0 || c.pack_format || supplierPack
+                                  if (!hasAny) return null
+                                  return (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '0.2rem 0.55rem', marginTop: '0.25rem', fontSize: '0.73rem', fontWeight: 400 }}>
+                                      {dimLine && <span style={{ color: '#185D7A', fontWeight: 500 }}>{dimLine}</span>}
+                                      {chips.map((f, i) => (
+                                        <span key={i} style={{ color: '#475569' }}><span style={{ color: '#9ca3af' }}>{f.label}:</span> {f.value}</span>
+                                      ))}
+                                      {c.pack_format && (
+                                        <span style={{ color: '#475569' }}><span style={{ color: '#9ca3af' }}>Pack:</span> {c.pack_format}</span>
+                                      )}
+                                      {supplierPack && (
+                                        <span style={{ color: '#475569' }}><span style={{ color: '#9ca3af' }}>Supplier pack:</span> {supplierPack}</span>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
+                              </td>
                               <td style={{
                                 ...TD,
                                 color: '#6b7280',
