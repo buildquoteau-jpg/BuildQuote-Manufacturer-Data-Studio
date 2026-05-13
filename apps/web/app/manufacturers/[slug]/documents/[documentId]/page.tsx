@@ -438,6 +438,210 @@ export default async function DocumentDetail({ params }: Props) {
         </div>
       </div>
 
+      {/* NEW — Review workspace */}
+      <div style={{ marginBottom: '1.75rem' }}>
+        {/* Instruction banner */}
+        <div style={{
+          background: '#f0f9ff',
+          border: '1px solid #bae6fd',
+          borderRadius: 8,
+          padding: '0.7rem 1rem',
+          marginBottom: '1.1rem',
+        }}>
+          <p style={{ margin: 0, fontSize: '0.87rem', color: '#0c4a6e', lineHeight: 1.6 }}>
+            <strong>Review workspace</strong> — Compare the catalogue evidence with the extracted system card.
+            Corrections will be logged with evidence and timestamps in a later workflow.
+          </p>
+        </div>
+
+        {/* Two-column layout — stacks on narrow, side-by-side on desktop */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '1.1rem',
+          alignItems: 'start',
+        }}>
+
+          {/* Left — Catalogue evidence */}
+          <div style={{ border: '1px solid #d1d5db', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '0.6rem 0.9rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#185D7A' }}>Catalogue evidence</div>
+              <div style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: '0.15rem' }}>Source document and extracted text chunks</div>
+            </div>
+            <div style={{ padding: '0.75rem 0.9rem' }}>
+              {/* Source document info */}
+              <div style={{ marginBottom: '0.7rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '0.04em', fontWeight: 700, marginBottom: '0.2rem' }}>Source document</div>
+                <div style={{ fontSize: '0.9rem', color: '#1e293b', fontWeight: 600 }}>{doc.document_name}</div>
+                {doc.document_type && (
+                  <div style={{ fontSize: '0.77rem', color: '#64748b', marginTop: '0.1rem' }}>
+                    {doc.document_type}{doc.document_date ? ` · ${doc.document_date}` : ''}
+                  </div>
+                )}
+              </div>
+              {/* Chunk count summary */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                padding: '0.35rem 0.6rem', borderRadius: 6, marginBottom: '0.7rem',
+                background: chunkCount > 0 ? '#f0fdf4' : '#f9fafb',
+                border: `1px solid ${chunkCount > 0 ? '#bbf7d0' : '#e2e8f0'}`,
+              }}>
+                <span style={{ fontWeight: 700, fontSize: '1rem', color: chunkCount > 0 ? '#166534' : '#9ca3af' }}>{chunkCount}</span>
+                <span style={{ fontSize: '0.78rem', color: chunkCount > 0 ? '#16a34a' : '#9ca3af' }}>
+                  text chunk{chunkCount !== 1 ? 's' : ''} extracted
+                </span>
+                {(fieldVerifications ?? []).length > 0 && (
+                  <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                    {(fieldVerifications ?? []).filter((fv) => fv.source_chunk_id != null).length}/{(fieldVerifications ?? []).length} fields linked
+                  </span>
+                )}
+              </div>
+              {/* Evidence snippets */}
+              {chunkCount === 0 ? (
+                <div style={{ padding: '0.75rem 0.8rem', background: '#f9fafb', borderRadius: 6, border: '1px dashed #e2e8f0', textAlign: 'center' as const }}>
+                  <div style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 500 }}>No evidence chunks available yet</div>
+                  <div style={{ fontSize: '0.73rem', color: '#cbd5e1', marginTop: '0.2rem' }}>Chunks appear after an extraction run processes this document</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '0.45rem' }}>
+                  {(chunkRows ?? []).slice(0, 3).map((chunk) => (
+                    <div key={chunk.id} style={{ padding: '0.45rem 0.6rem', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' as const, marginBottom: chunk.raw_text ? '0.25rem' : 0 }}>
+                        {chunk.page_number != null && (
+                          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#185D7A', background: '#cce7f0', padding: '0.1rem 0.35rem', borderRadius: 3 }}>
+                            p.{chunk.page_number}
+                          </span>
+                        )}
+                        {chunk.heading && (
+                          <span style={{ fontWeight: 600, color: '#374151', fontSize: '0.78rem' }}>{chunk.heading}</span>
+                        )}
+                        {chunk.chunk_type && (
+                          <span style={{ fontSize: '0.68rem', color: '#9ca3af', marginLeft: 'auto', fontFamily: 'monospace' }}>{chunk.chunk_type}</span>
+                        )}
+                      </div>
+                      {chunk.raw_text && (
+                        <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, fontStyle: 'italic' }}>
+                          {chunk.raw_text.slice(0, 120)}{chunk.raw_text.length > 120 ? '…' : ''}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {chunkCount > 3 && (
+                    <p style={{ margin: '0.1rem 0 0', fontSize: '0.73rem', color: '#94a3b8' }}>
+                      +{chunkCount - 3} more chunk{chunkCount - 3 !== 1 ? 's' : ''} — see Document chunks below
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right — Extracted system card + field checklist */}
+          <div style={{ border: '1px solid #d1d5db', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '0.6rem 0.9rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#185D7A' }}>Extracted system card</div>
+                <div style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                  {stagedSystems && stagedSystems.length > 0
+                    ? `${stagedSystems.length} system${stagedSystems.length > 1 ? 's' : ''} staged${stagedSystems.length > 1 ? ' — showing first' : ''}`
+                    : 'No staged systems yet'}
+                </div>
+              </div>
+              {stagedSystems && stagedSystems.length > 0 && (
+                <StatusBadge status={stagedSystems[0].verification_status} />
+              )}
+            </div>
+            {!stagedSystems || stagedSystems.length === 0 ? (
+              <div style={{ padding: '1.25rem 0.9rem', textAlign: 'center' as const }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#94a3b8' }}>No extracted system data</div>
+                <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: '0.3rem' }}>
+                  System cards appear after an extraction run produces data from this document
+                </div>
+              </div>
+            ) : (() => {
+              const _sys   = stagedSystems[0]
+              const _links = sscLinks.filter((l) => l.staged_system_id === _sys.id)
+              const _profs = sysProfileRows.filter((p) => p.staged_system_id === _sys.id)
+              const _cols  = sysColourRows.filter((c) => c.staged_system_id === _sys.id)
+              const _fvs   = (fieldVerifications ?? []).filter((fv) => fv.entity_id === _sys.id)
+              const _fp    = _profs[0]
+
+              type FieldStatus = 'Present' | 'Missing' | 'Linked' | 'Needs evidence'
+              const FS: Record<FieldStatus, { bg: string; color: string }> = {
+                Present:          { bg: '#dcfce7', color: '#166534' },
+                Missing:          { bg: '#fee2e2', color: '#991b1b' },
+                Linked:           { bg: '#dbeafe', color: '#1d4ed8' },
+                'Needs evidence': { bg: '#fef3c7', color: '#92400e' },
+              }
+              const fieldRows: { label: string; value: string | null; status: FieldStatus }[] = [
+                { label: 'System name',          value: _sys.name || null,                                                                   status: _sys.name?.trim() ? 'Present' : 'Missing' },
+                { label: 'Product code / SKU',   value: _sys.product_code || null,                                                           status: _sys.product_code ? 'Present' : 'Missing' },
+                { label: 'Category',             value: _sys.category || null,                                                               status: _sys.category ? 'Present' : 'Missing' },
+                { label: 'Subcategory',          value: _sys.subcategory || null,                                                            status: _sys.subcategory ? 'Present' : 'Missing' },
+                { label: 'Dimensions / profile', value: _fp ? (_fp.dimensions ?? _fp.name ?? null) : null,                                   status: _profs.length > 0 ? 'Present' : 'Missing' },
+                { label: 'Colours',              value: _cols.length > 0 ? `${_cols.length} variant${_cols.length !== 1 ? 's' : ''}` : null, status: _cols.length > 0 ? 'Present' : 'Missing' },
+                { label: 'Components linked',    value: _links.length > 0 ? `${_links.length} component${_links.length !== 1 ? 's' : ''}` : null, status: _links.length > 0 ? 'Linked' : 'Missing' },
+                { label: 'Evidence link',        value: _fvs.length > 0 ? `${_fvs.filter((fv) => fv.source_chunk_id).length}/${_fvs.length} linked` : null, status: _fvs.length === 0 ? 'Missing' : _fvs.some((fv) => fv.source_chunk_id) ? 'Linked' : 'Needs evidence' },
+              ]
+              return (
+                <>
+                  <div style={{ padding: '0.6rem 0.9rem', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>{_sys.name}</div>
+                    {_sys.product_code && (
+                      <code style={{ display: 'inline-block', marginTop: '0.25rem', fontSize: '0.78rem', color: '#185D7A', background: '#cce7f0', padding: '0.15rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
+                        {_sys.product_code}
+                      </code>
+                    )}
+                    {_sys.description && (
+                      <p style={{ margin: '0.3rem 0 0', fontSize: '0.77rem', color: '#64748b', lineHeight: 1.45 }}>
+                        {_sys.description.slice(0, 100)}{_sys.description.length > 100 ? '…' : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    {fieldRows.map((row, i) => {
+                      const s = FS[row.status]
+                      return (
+                        <div key={row.label} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.38rem 0.9rem',
+                          borderBottom: i < fieldRows.length - 1 ? '1px solid #f8fafc' : 'none',
+                          fontSize: '0.83rem',
+                        }}>
+                          <div style={{ width: 140, flexShrink: 0, color: '#64748b', fontWeight: 500 }}>{row.label}</div>
+                          <div style={{ flex: 1, color: row.value ? '#1e293b' : '#94a3b8', fontSize: '0.81rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                            {row.value ?? 'Missing'}
+                          </div>
+                          <span style={{ fontSize: '0.71rem', fontWeight: 600, color: s.color, background: s.bg, padding: '0.1rem 0.4rem', borderRadius: 4, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>
+                            {row.status}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {stagedSystems.length > 1 && (
+                    <p style={{ margin: 0, padding: '0.4rem 0.9rem', fontSize: '0.72rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9', background: '#f9fafb' }}>
+                      +{stagedSystems.length - 1} more system{stagedSystems.length > 2 ? 's' : ''} — see Staged systems below
+                    </p>
+                  )}
+                  <p style={{ margin: 0, padding: '0.4rem 0.9rem', fontSize: '0.72rem', color: '#9ca3af', borderTop: '1px solid #f1f5f9', fontStyle: 'italic' }}>
+                    Corrections will be captured with evidence and timestamps in a future workflow.
+                  </p>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Advanced diagnostics ── */}
+      <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '1.5rem', marginBottom: '0.25rem' }}>
+        <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem', fontWeight: 700, color: '#64748b' }}>Advanced diagnostics</h2>
+        <p style={{ margin: '0 0 1.5rem', fontSize: '0.82rem', color: '#9ca3af' }}>
+          Technical extraction details, field-level evidence, readiness checks, and publish planning. For internal reviewer use.
+        </p>
+      </div>
+
       {/* B_sum — Extraction summary */}
       {(() => {
         const sysN  = stagedSystems?.length  ?? 0
