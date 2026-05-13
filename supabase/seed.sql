@@ -511,21 +511,56 @@ ON CONFLICT (staged_system_id, colour_name) DO NOTHING;
 -- ============================================================
 -- STAGED SYSTEM PROFILES
 -- NTW grooved board dimensions. JH Linea exposure options.
+-- Exercises new columns added in 007_staged_schema_alignment:
+--   profile_name, product_code, dimensions, length_mm, width_mm,
+--   thickness_mm, pack_format, supplier_pack_qty,
+--   supplier_pack_uom, bal_rating.
 -- (no unique constraint — plain INSERT; safe after db reset)
 -- ============================================================
 
 INSERT INTO staged_system_profiles
-  (staged_system_id, name, dimensions, sort_order, verification_status)
+  (staged_system_id,
+   name, profile_name, product_code, dimensions,
+   length_mm, width_mm, thickness_mm,
+   pack_format, supplier_pack_qty, supplier_pack_uom,
+   bal_rating,
+   sort_order, verification_status)
 VALUES
-  -- NTW Avenue (b001)
-  ('b0000000-0000-0000-0000-000000000001', '138 × 29mm Grooved', '138mm wide, 29mm thick', 1, 'approved'),
-  -- NTW Terrace (b002)
-  ('b0000000-0000-0000-0000-000000000002', '138 × 29mm Grooved', '138mm wide, 29mm thick', 1, 'in_review'),
-  -- NTW Coastal (b003)
-  ('b0000000-0000-0000-0000-000000000003', '138 × 29mm Grooved', '138mm wide, 29mm thick', 1, 'pending_review'),
-  -- JH Linea (b004)
-  ('b0000000-0000-0000-0000-000000000004', '180mm Exposure', '180mm face exposure', 1, 'approved'),
-  ('b0000000-0000-0000-0000-000000000004', '230mm Exposure', '230mm face exposure', 2, 'pending_review');
+  -- NTW Avenue (b001) — approved; composite decking, no BAL rating
+  ('b0000000-0000-0000-0000-000000000001',
+   '138 × 29mm Grooved Board 5400mm', 'Grooved', 'AV138G-5400', '138 × 29mm',
+   5400, 138, 29,
+   'Board', 10, 'board',
+   NULL,
+   1, 'approved'),
+  -- NTW Terrace (b002) — in_review
+  ('b0000000-0000-0000-0000-000000000002',
+   '138 × 29mm Grooved Board 5400mm', 'Grooved', 'TR138G-5400', '138 × 29mm',
+   5400, 138, 29,
+   'Board', 10, 'board',
+   NULL,
+   1, 'in_review'),
+  -- NTW Coastal (b003) — pending_review
+  ('b0000000-0000-0000-0000-000000000003',
+   '138 × 29mm Grooved Board 5400mm', 'Grooved', 'CO138G-5400', '138 × 29mm',
+   5400, 138, 29,
+   'Board', 10, 'board',
+   NULL,
+   1, 'pending_review'),
+  -- JH Linea (b004) 180mm — approved; fibre cement with BAL rating
+  ('b0000000-0000-0000-0000-000000000004',
+   'Linea 180mm Exposure 4800mm', 'Linea 180', 'JHL180-4800', '180mm exposure',
+   4800, 180, 8,
+   'Board', 4, 'board',
+   'BAL-12.5',
+   1, 'approved'),
+  -- JH Linea (b004) 230mm — pending_review
+  ('b0000000-0000-0000-0000-000000000004',
+   'Linea 230mm Exposure 4800mm', 'Linea 230', 'JHL230-4800', '230mm exposure',
+   4800, 230, 8,
+   'Board', 4, 'board',
+   'BAL-12.5',
+   2, 'pending_review');
 
 -- ============================================================
 -- FIELD VERIFICATIONS
