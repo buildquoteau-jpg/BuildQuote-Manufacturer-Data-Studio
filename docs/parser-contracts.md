@@ -105,36 +105,79 @@ This model is not decking/cladding-only. The same entity structure applies to al
 
 ## 4. Quantity and Pack Rules
 
-Supplier pack information describes how the manufacturer/supplier packages and sells the item. It is **not** the builder's order quantity.
+### 4.1 UOM vs manufacturer pack size — these are different things
+
+**`uom`** is the sell/request unit used for quoting. It describes how a builder or supplier would typically request or quote the item:
+
+> `ea`, `piece`, `length`, `lm`, `m2`, `sheet`, `roll`, `box`, `carton`, `ream`, `bale`, `kg`
+
+**Manufacturer pack size** is a catalogue or logistics value — the quantity in a full manufacturer pack. It does not imply that the item must be ordered in that quantity. Suppliers frequently sell partial packs or trade quantities.
+
+Do not conflate the two. A catalogue listing "Pack size: 120" for a clip does not mean `uom = "pack"` or that builders order 120 at a time. It means the manufacturer distributes 120 per full pack.
+
+### 4.2 Pack fields
 
 | Field | Meaning | Example |
 |---|---|---|
-| `supplier_pack_qty` | How many units in one supplier pack | `100` |
-| `supplier_pack_uom` | Unit of the items in the pack | `"screws"` |
-| `pack_format` | Type of packaging | `"Box"` |
-| `supplier_pack_note` | Free-text pack note | `"sold by box only"` |
+| `uom` | How the item is sold/quoted | `"ea"`, `"roll"`, `"box"` |
+| `pack_format` | Physical packaging type | `"Box"`, `"Roll"`, `"Bag"`, `"Carton"` |
+| `supplier_pack_qty` | Units in one manufacturer/supplier pack | `120` |
+| `supplier_pack_uom` | Name of the unit inside the pack | `"pieces"`, `"screws"`, `"clips"` |
+| `supplier_pack_note` | Free-text note about pack constraint | `"Manufacturer full pack; supplier may sell partial"` |
 
-Example: "Box of 100 screws"
+### 4.3 Examples
+
+**"Pack size: 120" for clips:**
 ```json
 {
+  "uom": "ea",
+  "pack_format": null,
+  "supplier_pack_qty": 120,
+  "supplier_pack_uom": "pieces",
+  "supplier_pack_note": "Manufacturer full pack size; supplier may sell partial packs"
+}
+```
+
+**"Box of 25 screws" — sold/quoted as a box:**
+```json
+{
+  "uom": "box",
   "pack_format": "Box",
-  "supplier_pack_qty": 100,
+  "supplier_pack_qty": 25,
   "supplier_pack_uom": "screws",
   "supplier_pack_note": null
 }
 ```
 
-Example: "15m² roll (minimum 2 roll order)"
+**"Roll 30m":**
 ```json
 {
+  "uom": "roll",
+  "roll_m": 30,
   "pack_format": "Roll",
-  "supplier_pack_qty": 1,
-  "supplier_pack_uom": "roll",
+  "supplier_pack_qty": null,
+  "supplier_pack_uom": null,
+  "supplier_pack_note": null
+}
+```
+
+**"15m² roll (minimum 2 roll order)":**
+```json
+{
+  "uom": "roll",
+  "pack_format": "Roll",
+  "supplier_pack_qty": null,
+  "supplier_pack_uom": null,
   "supplier_pack_note": "minimum 2 roll order"
 }
 ```
 
-**Do not infer builder order quantity from supplier pack size.** The RFQ quantity is always user-supplied at quoting time. The parser must not prefill or assume order quantities.
+### 4.4 Rules
+
+- **Never use `supplier_pack_qty` as the builder/customer RFQ quantity.** RFQ quantity is always user-supplied at quoting time.
+- **Never set `uom` to a pack size.** `uom` reflects the sell/quote unit, not the manufacturer logistics unit.
+- If the source only states a pack size with no indication of sell unit, use `supplier_pack_qty` and flag `uom` as uncertain in `uncertain_fields`.
+- `pieces` is for the true product piece count of the item itself — not for supplier pack sizes.
 
 ---
 
@@ -156,7 +199,7 @@ Example: "15m² roll (minimum 2 roll order)"
 | `weight_kg` | kilograms | Item weight |
 | `weight_g` | grams | Item weight where grams are more appropriate |
 | `volume_ml` | millilitres | Adhesive/sealant cartridge volume |
-| `pieces` | integer | Count of pieces |
+| `pieces` | integer | True product piece count of the item itself — not supplier pack size |
 
 - Convert to mm when stated in cm or inches. Record the conversion in `parser_notes`.
 - Do not convert mm to m or vice versa silently — use the matching field.
@@ -372,18 +415,18 @@ Note: `fire_rating` is **deprecated** — use `bal_rating`.
 |---|---|---|
 | `name` | yes | Must be present — reject record if absent |
 | `sku` | no | As printed in source |
-| `uom` | no | Use `uom` not `unit`. e.g. lm, m2, each, roll, sheet, kg |
+| `uom` | no | Sell/quote unit — use `uom` not `unit`. e.g. `ea`, `piece`, `lm`, `m2`, `roll`, `sheet`, `box`, `kg`. Do not set to a pack size. |
 | `dimensions` | no | Raw dimension string — preserve original text |
 | All `*_mm` fields | no | Numeric only. Null if not stated. See dimension rules |
 | `roll_m` | no | Numeric, metres |
 | `weight_kg` | no | Numeric, kilograms |
 | `weight_g` | no | Numeric, grams — use for small items where grams is more natural |
-| `pieces` | no | Integer only |
+| `pieces` | no | True product piece count of the item itself — not supplier pack size |
 | `volume_ml` | no | Numeric, millilitres — for adhesives, sealants, liquid products |
-| `pack_format` | no | e.g. "Box", "Roll", "Bag", "Tube", "Carton" |
-| `supplier_pack_qty` | no | Numeric — how many units per supplier pack |
-| `supplier_pack_uom` | no | Unit name for items in the pack, e.g. "screws", "clips" |
-| `supplier_pack_note` | no | Free-text note about pack constraint |
+| `pack_format` | no | Physical packaging type, e.g. "Box", "Roll", "Bag", "Tube", "Carton" |
+| `supplier_pack_qty` | no | Units per manufacturer/supplier pack — not the customer order quantity |
+| `supplier_pack_uom` | no | Unit name for items inside the pack, e.g. "screws", "clips", "pieces" |
+| `supplier_pack_note` | no | Free-text note about pack constraint or sell minimum |
 | `extraction_confidence` | yes | 0.0–1.0 |
 | `field_sources` | yes | One entry per extracted non-null field |
 | `uncertain_fields` | yes | Array of field names — empty if none |
@@ -655,7 +698,7 @@ TC28 hidden fix clip — this is a component, not a profile:
   "name": "TC28 Hidden Fix Clip",
   "description": "Stainless steel 304 hidden fix clip for composite decking installation.",
   "category": "Fixings",
-  "uom": "each",
+  "uom": "ea",
   "dimensions": null,
   "length_mm": null,
   "width_mm": null,
@@ -666,7 +709,7 @@ TC28 hidden fix clip — this is a component, not a profile:
   "pack_format": "Box",
   "supplier_pack_qty": 200,
   "supplier_pack_uom": "clips",
-  "supplier_pack_note": null,
+  "supplier_pack_note": "Manufacturer full box; supplier may sell partial packs",
   "pieces": null,
   "volume_ml": null,
   "sort_order": 1,
