@@ -421,17 +421,17 @@ export default async function DocumentDetail({ params }: Props) {
             </tr>
           </tbody>
         </table>
-        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px solid #e2e8f0' }}>
           {([
-            { label: 'Extraction runs',   value: runs?.length ?? 0 },
-            { label: 'Chunks',            value: chunkCount },
-            { label: 'Systems',           value: stagedSystems?.length ?? 0 },
-            { label: 'Components',        value: stagedComponents?.length ?? 0 },
-            { label: 'Relationships',     value: relationshipCount },
-            { label: 'Field verifications', value: fieldVerifications?.length ?? 0 },
+            { label: 'Runs',        value: runs?.length ?? 0 },
+            { label: 'Chunks',      value: chunkCount },
+            { label: 'Systems',     value: stagedSystems?.length ?? 0 },
+            { label: 'Components',  value: stagedComponents?.length ?? 0 },
+            { label: 'Links',       value: relationshipCount },
+            { label: 'Fields',      value: fieldVerifications?.length ?? 0 },
           ] as { label: string; value: number }[]).map((s) => (
-            <span key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem' }}>
-              <strong style={{ color: '#185D7A', fontSize: '1.25rem', fontWeight: 700 }}>{s.value}</strong>
+            <span key={s.label} style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+              <strong style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 700 }}>{s.value}</strong>
               <span style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</span>
             </span>
           ))}
@@ -499,8 +499,8 @@ export default async function DocumentDetail({ params }: Props) {
               {/* Evidence snippets */}
               {chunkCount === 0 ? (
                 <div style={{ padding: '0.75rem 0.8rem', background: '#f9fafb', borderRadius: 6, border: '1px dashed #e2e8f0', textAlign: 'center' as const }}>
-                  <div style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 500 }}>No evidence chunks available yet</div>
-                  <div style={{ fontSize: '0.73rem', color: '#cbd5e1', marginTop: '0.2rem' }}>Chunks appear after an extraction run processes this document</div>
+                  <div style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 500 }}>No catalogue evidence is linked yet</div>
+                  <div style={{ fontSize: '0.73rem', color: '#cbd5e1', marginTop: '0.2rem', lineHeight: 1.45 }}>Once extraction chunks are available, the reviewer will compare them against the staged card data here.</div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '0.45rem' }}>
@@ -553,9 +553,9 @@ export default async function DocumentDetail({ params }: Props) {
             </div>
             {!stagedSystems || stagedSystems.length === 0 ? (
               <div style={{ padding: '1.25rem 0.9rem', textAlign: 'center' as const }}>
-                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#94a3b8' }}>No extracted system data</div>
-                <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: '0.3rem' }}>
-                  System cards appear after an extraction run produces data from this document
+                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#94a3b8' }}>No staged system card yet</div>
+                <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: '0.3rem', lineHeight: 1.45 }}>
+                  No staged system card exists for this document yet. Extraction must create staged data before human verification can begin.
                 </div>
               </div>
             ) : (() => {
@@ -566,21 +566,23 @@ export default async function DocumentDetail({ params }: Props) {
               const _fvs   = (fieldVerifications ?? []).filter((fv) => fv.entity_id === _sys.id)
               const _fp    = _profs[0]
 
-              type FieldStatus = 'Present' | 'Missing' | 'Linked' | 'Needs evidence'
+              type FieldStatus = 'Present' | 'Missing' | 'Linked' | 'Needs evidence' | 'Not available'
               const FS: Record<FieldStatus, { bg: string; color: string }> = {
-                Present:          { bg: '#dcfce7', color: '#166534' },
-                Missing:          { bg: '#fee2e2', color: '#991b1b' },
-                Linked:           { bg: '#dbeafe', color: '#1d4ed8' },
-                'Needs evidence': { bg: '#fef3c7', color: '#92400e' },
+                Present:           { bg: '#dcfce7', color: '#166534' },
+                Missing:           { bg: '#fee2e2', color: '#991b1b' },
+                Linked:            { bg: '#dbeafe', color: '#1d4ed8' },
+                'Needs evidence':  { bg: '#fef3c7', color: '#92400e' },
+                'Not available':   { bg: '#f3f4f6', color: '#9ca3af' },
               }
               const fieldRows: { label: string; value: string | null; status: FieldStatus }[] = [
-                { label: 'System name',          value: _sys.name || null,                                                                   status: _sys.name?.trim() ? 'Present' : 'Missing' },
-                { label: 'Product code / SKU',   value: _sys.product_code || null,                                                           status: _sys.product_code ? 'Present' : 'Missing' },
-                { label: 'Category',             value: _sys.category || null,                                                               status: _sys.category ? 'Present' : 'Missing' },
-                { label: 'Subcategory',          value: _sys.subcategory || null,                                                            status: _sys.subcategory ? 'Present' : 'Missing' },
-                { label: 'Dimensions / profile', value: _fp ? (_fp.dimensions ?? _fp.name ?? null) : null,                                   status: _profs.length > 0 ? 'Present' : 'Missing' },
-                { label: 'Colours',              value: _cols.length > 0 ? `${_cols.length} variant${_cols.length !== 1 ? 's' : ''}` : null, status: _cols.length > 0 ? 'Present' : 'Missing' },
-                { label: 'Components linked',    value: _links.length > 0 ? `${_links.length} component${_links.length !== 1 ? 's' : ''}` : null, status: _links.length > 0 ? 'Linked' : 'Missing' },
+                { label: 'System name',          value: _sys.name || null,                                                                        status: _sys.name?.trim() ? 'Present' : 'Missing' },
+                { label: 'Product code / SKU',   value: _sys.product_code || null,                                                                status: _sys.product_code ? 'Present' : 'Missing' },
+                { label: 'Category',             value: _sys.category || null,                                                                    status: _sys.category ? 'Present' : 'Missing' },
+                { label: 'Subcategory',          value: _sys.subcategory || null,                                                                 status: _sys.subcategory ? 'Present' : 'Missing' },
+                { label: 'Dimensions / profile', value: _fp ? (_fp.dimensions ?? _fp.name ?? null) : null,                                        status: _profs.length > 0 ? 'Present' : 'Missing' },
+                { label: 'Length',               value: null,                                                                                     status: 'Not available' },
+                { label: 'Profile / colour',     value: _cols.length > 0 ? `${_cols.length} colour variant${_cols.length !== 1 ? 's' : ''}` : null, status: _cols.length > 0 ? 'Present' : 'Missing' },
+                { label: 'Components',           value: _links.length > 0 ? `${_links.length} component${_links.length !== 1 ? 's' : ''}` : null, status: _links.length > 0 ? 'Linked' : 'Missing' },
                 { label: 'Evidence link',        value: _fvs.length > 0 ? `${_fvs.filter((fv) => fv.source_chunk_id).length}/${_fvs.length} linked` : null, status: _fvs.length === 0 ? 'Missing' : _fvs.some((fv) => fv.source_chunk_id) ? 'Linked' : 'Needs evidence' },
               ]
               return (
@@ -624,8 +626,8 @@ export default async function DocumentDetail({ params }: Props) {
                       +{stagedSystems.length - 1} more system{stagedSystems.length > 2 ? 's' : ''} — see Staged systems below
                     </p>
                   )}
-                  <p style={{ margin: 0, padding: '0.4rem 0.9rem', fontSize: '0.72rem', color: '#9ca3af', borderTop: '1px solid #f1f5f9', fontStyle: 'italic' }}>
-                    Corrections will be captured with evidence and timestamps in a future workflow.
+                  <p style={{ margin: 0, padding: '0.4rem 0.9rem', fontSize: '0.72rem', color: '#9ca3af', borderTop: '1px solid #f1f5f9', fontStyle: 'italic', lineHeight: 1.5 }}>
+                    Later, corrections will be saved as timestamped audit records. The original extracted value will be preserved, and verified corrections will become the resolved value used for publishing.
                   </p>
                 </>
               )
