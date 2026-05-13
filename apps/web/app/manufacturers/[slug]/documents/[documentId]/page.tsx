@@ -651,16 +651,100 @@ export default async function DocumentDetail({ params }: Props) {
                 'Needs evidence':  { bg: '#fef3c7', color: '#92400e' },
                 'Not available':   { bg: '#f3f4f6', color: '#9ca3af' },
               }
+
+              // --- Profile readiness pre-computation ---
+              const profDimLine  = _fp ? fmtDimLine(_fp) : null
+              const profPackVal: string | null = _fp ? (
+                [
+                  _fp.pack_format,
+                  _fp.supplier_pack_qty != null
+                    ? `${_fp.supplier_pack_qty}${_fp.supplier_pack_uom ? ' ' + _fp.supplier_pack_uom : ''}`
+                    : null,
+                  _fp.bal_rating ? `BAL: ${_fp.bal_rating}` : null,
+                ].filter((x): x is string => x != null).join(' · ') || null
+              ) : null
+
+              // --- Component readiness pre-computation ---
+              const _linkedComps  = _links
+                .map((l) => compById.get(l.staged_component_id) as StagedComponent | undefined)
+                .filter((c): c is StagedComponent => c != null)
+              const _compWithSku  = _linkedComps.filter((c) => c.sku != null).length
+              const _compWithDims = _linkedComps.filter((c) =>
+                c.length_mm != null || c.width_mm != null || c.height_mm != null ||
+                c.depth_mm  != null || c.thickness_mm != null || c.gauge_mm != null ||
+                c.diameter_mm != null || c.roll_m != null || c.weight_kg != null
+              ).length
+              const _compWithPack = _linkedComps.filter((c) =>
+                c.pack_format != null || c.supplier_pack_qty != null ||
+                c.volume_ml   != null || c.weight_g != null || c.pieces != null
+              ).length
+
               const fieldRows: { label: string; value: string | null; status: FieldStatus }[] = [
-                { label: 'System name',          value: _sys.name || null,                                                                        status: _sys.name?.trim() ? 'Present' : 'Missing' },
-                { label: 'Product code / SKU',   value: _sys.product_code || null,                                                                status: _sys.product_code ? 'Present' : 'Missing' },
-                { label: 'Category',             value: _sys.category || null,                                                                    status: _sys.category ? 'Present' : 'Missing' },
-                { label: 'Subcategory',          value: _sys.subcategory || null,                                                                 status: _sys.subcategory ? 'Present' : 'Missing' },
-                { label: 'Dimensions / profile', value: _fp ? (fmtDimLine(_fp) ?? _fp.profile_name ?? null) : null,                              status: _profs.length > 0 ? 'Present' : 'Missing' },
-                { label: 'Length',               value: _fp ? (_fp.length_mm != null ? `${_fp.length_mm} mm` : _fp.length_m != null ? `${_fp.length_m} m` : null) : null, status: _fp && (_fp.length_mm != null || _fp.length_m != null) ? 'Present' : (_profs.length === 0 ? 'Missing' : 'Not available') },
-                { label: 'Profile / colour',     value: _cols.length > 0 ? `${_cols.length} colour variant${_cols.length !== 1 ? 's' : ''}` : null, status: _cols.length > 0 ? 'Present' : 'Missing' },
-                { label: 'Components',           value: _links.length > 0 ? `${_links.length} component${_links.length !== 1 ? 's' : ''}` : null, status: _links.length > 0 ? 'Linked' : 'Missing' },
-                { label: 'Evidence link',        value: _fvs.length > 0 ? `${_fvs.filter((fv) => fv.source_chunk_id).length}/${_fvs.length} linked` : null, status: _fvs.length === 0 ? 'Missing' : _fvs.some((fv) => fv.source_chunk_id) ? 'Linked' : 'Needs evidence' },
+                // System identity
+                { label: 'System name',   value: _sys.name || null,         status: _sys.name?.trim() ? 'Present' : 'Missing' },
+                { label: 'Product code',  value: _sys.product_code || null, status: _sys.product_code ? 'Present' : 'Missing' },
+                { label: 'Category',      value: _sys.category || null,     status: _sys.category ? 'Present' : 'Missing' },
+                { label: 'Subcategory',   value: _sys.subcategory || null,  status: _sys.subcategory ? 'Present' : 'Missing' },
+                // Profile identity: profile_name / product_code
+                {
+                  label: 'Profile identity',
+                  value: _fp
+                    ? (_fp.profile_name ?? _fp.product_code ?? `${_profs.length} profile${_profs.length !== 1 ? 's' : ''} staged`)
+                    : null,
+                  status: _profs.length === 0 ? 'Missing'
+                    : (_fp?.profile_name || _fp?.product_code) ? 'Present' : 'Not available',
+                },
+                // Profile dimensions: dimensions text or individual mm fields
+                {
+                  label: 'Profile dimensions',
+                  value: profDimLine,
+                  status: _profs.length === 0 ? 'Missing' : profDimLine ? 'Present' : 'Not available',
+                },
+                // Profile pack / BAL: pack_format + supplier_pack + bal_rating
+                {
+                  label: 'Profile pack / BAL',
+                  value: profPackVal,
+                  status: _profs.length === 0 ? 'Not available' : profPackVal ? 'Present' : 'Not available',
+                },
+                // Colour variants
+                {
+                  label: 'Colour variants',
+                  value: _cols.length > 0 ? `${_cols.length} colour${_cols.length !== 1 ? 's' : ''}` : null,
+                  status: _cols.length > 0 ? 'Present' : 'Missing',
+                },
+                // Component count
+                {
+                  label: 'Components',
+                  value: _links.length > 0 ? `${_links.length} linked` : null,
+                  status: _links.length > 0 ? 'Linked' : 'Missing',
+                },
+                // Component identity: name / sku / category — only when components exist
+                ...(_links.length > 0 ? [{
+                  label: 'Component identity',
+                  value: _compWithSku === _linkedComps.length
+                    ? `All ${_linkedComps.length} have SKU`
+                    : `${_compWithSku}/${_linkedComps.length} have SKU`,
+                  status: (_compWithSku === _linkedComps.length ? 'Present'
+                    : _compWithSku > 0 ? 'Needs evidence' : 'Missing') as FieldStatus,
+                }] : []),
+                // Component dimensions — only when components exist
+                ...(_links.length > 0 ? [{
+                  label: 'Component dimensions',
+                  value: _compWithDims > 0 ? `${_compWithDims}/${_linkedComps.length} have dimensions` : null,
+                  status: (_compWithDims > 0 ? 'Present' : 'Not available') as FieldStatus,
+                }] : []),
+                // Component pack — only when components exist
+                ...(_links.length > 0 ? [{
+                  label: 'Component pack',
+                  value: _compWithPack > 0 ? `${_compWithPack}/${_linkedComps.length} have pack data` : null,
+                  status: (_compWithPack > 0 ? 'Present' : 'Not available') as FieldStatus,
+                }] : []),
+                // Evidence link
+                {
+                  label: 'Evidence link',
+                  value: _fvs.length > 0 ? `${_fvs.filter((fv) => fv.source_chunk_id).length}/${_fvs.length} linked` : null,
+                  status: _fvs.length === 0 ? 'Missing' : _fvs.some((fv) => fv.source_chunk_id) ? 'Linked' : 'Needs evidence',
+                },
               ]
               return (
                 <>
