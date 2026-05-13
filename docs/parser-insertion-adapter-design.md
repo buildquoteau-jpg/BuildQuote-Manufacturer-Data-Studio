@@ -462,3 +462,132 @@ For the adapter implementer — the exact table and column targets, as confirmed
 ### parser_field_evidence
 `id`, `extraction_run_id`, `entity_type`, `entity_id`, `field_name`, `extracted_value`, `source_document_id`, `source_page_number`, `source_chunk_id`, `confidence`, `is_uncertain`, `parser_note`, `created_at`  
 **No UNIQUE constraint — append-only.**
+
+---
+
+## 12. Secure RPC Execution Path
+
+Design for how the application will safely call `insert_parser_output_plan_v1` (and future insertion RPCs) without exposing database writes to the browser or to unauthenticated callers.
+
+**Status:** Design only. No grants added, no routes created, no RLS touched in this section.  
+**Context:** Migration 011 revoked `EXECUTE` from `anon`, `authenticated`, and `service_role`. The only role that retains `EXECUTE` is `postgres` (the function owner). The anon/publishable client cannot call the RPC. This is the correct baseline to design from.
+
+---
+
+### 12.1 Who is allowed to call the insertion RPC?
+
+**Not permitted:**
+- Browser-side code. The publishable (anon) key is embedded in the client bundle. Any user who opens DevTools can read it. Granting the anon role insertion access means any browser session can write staged data.
+- Authenticated users calling the RPC directly via the Supabase JS client. Even with a valid session JWT, the `authenticated` role must not have broad `EXECUTE` on insertion RPCs — the caller would bypass server-side validation, workspace checks, and the audit trail.
+- Client components and Client Actions in Next.js. These execute in the browser context; the same constraint as above applies.
+
+**Permitted (now and in V1):**
+- A server-side Next.js Route Handler, running in the Node.js process, using the service role key. The service role key is never exposed to the browser and must only live in server-side environment variables.
+
+**Permitted (later, once auth/RLS design is complete):**
+- A narrow, named Postgres role (e.g. `parser_inserter`) with `EXECUTE` on only the insertion RPC and no other elevated access. This is cleaner than `service_role` but requires more setup and is deferred to the auth/RLS design chunk (§10.3).
+- Alternatively, a `SECURITY DEFINER` wrapper function with its own restricted caller grants — discussed in §12.2.
+
+**Rule:** The real insertion RPC must only be reachable from server-side code that has passed explicit application-layer validation. It must never be callable from the browser, directly or indirectly.
+
+---
+
+### 12.2 What role or key should server-side code use?
+
+Three options, in order of practicality for this project:
+
+#### Option A — service_role key, server-side only (recommended for V1)
+
+Supabase provides a service role key (`SUPABASE_SERVICE_ROLE_KEY`) that bypasses RLS and has elevated privileges. It must:
+- Live in a server-only environment variable (no `NEXT_PUBLIC_` prefix, never in the browser bundle).
+- Be used only inside a Next.js Route Handler or equivalent server-only module.
+- Never be imported into a Client Component or passed to the browser.
+
+A separate server-only Supabase client is created using this key — it must not be the same `supabase` instance used for browser reads (`apps/web/lib/supabase.ts`). A future migration will add `GRANT EXECUTE ON FUNCTION public.insert_parser_output_plan_v1(jsonb) TO service_role` so the service role client can call the RPC.
+
+**Why this is acceptable for V1:** The service role is standard Supabase practice for server-side admin operations. The risk surface is contained to the server process. It is straightforward to implement without new Postgres role infrastructure.
+
+**Why the publishable key is not acceptable:** The publishable (anon) key is intentionally public — it is designed to be embedded in browser bundles and is safe to expose because RLS controls what it can read/write. Granting insertion access to `anon` removes that protection entirely. Even if RLS INSERT policies are eventually added to restrict writes, granting `anon` EXECUTE on an insertion RPC is architecturally wrong: it means any unauthenticated browser session can attempt a write path that has no rate limiting, no workspace check, and no session context.
+
+#### Option B — SECURITY DEFINER wrapper with restricted caller grant
+
+A wrapper function is created that:
+1. Is marked `SECURITY DEFINER` (runs as its definer, `postgres`, regardless of caller).
+2. Accepts a narrow, validated payload — not the full raw JSONB plan.
+3. Has `EXECUTE` granted to a dedicated named role (`parser_inserter`) or to `authenticated` with strict pre-checks inside the function body.
+
+This keeps the real insertion logic inside a function that the wrapper calls internally, and the wrapper itself enforces the access boundary. The trade-off is added complexity: two functions instead of one, and a custom Postgres role to manage.
+
+**Not recommended for V1.** Viable once the auth/RLS design (§10.3) is complete and the Studio reviewer role model is defined.
+
+#### Option C — Direct pg connection (node-postgres)
+
+A Next.js Route Handler uses `pg` (node-postgres) with the local DB connection string (`postgresql://postgres:postgres@127.0.0.1:54322/postgres` locally, the Supabase pooler URL in production). This can open a real `BEGIN / COMMIT` transaction in TypeScript without needing a Postgres RPC function at all.
+
+**Trade-offs:**
+- Avoids writing complex JSONB-heavy SQL inside a PL/pgSQL function.
+- Adds `pg` as a server-side dependency.
+- Requires the DB connection string in the server environment (not the anon key).
+- Does not use the Supabase JS client for writes — removes the RPC layer entirely.
+- Harder to test independently of the Next.js process.
+
+**Not recommended as primary path.** The Postgres RPC function is already in place and provides DB-layer atomicity without an extra dependency. Use Option A (service_role + RPC) for V1.
+
+---
+
+### 12.3 What must the server-side route validate before calling the RPC?
+
+The Route Handler is the application's last line of defence before a DB write. It must validate all of the following before calling `supabase.rpc('insert_parser_output_plan_v1', ...)`:
+
+| Check | Required for | Notes |
+|---|---|---|
+| User session is present and valid | Once auth exists | Use Supabase session from cookie/header, not from the client. In V1 (no auth yet), this check is skipped — document clearly. |
+| User has workspace / manufacturer permission | Once auth exists | The user must belong to the manufacturer's workspace. Check against `manufacturer_users` or equivalent. In V1, skipped. |
+| `source_document_id` is provided and exists | V1 | Query `source_documents` to confirm the row exists in the local DB. |
+| `source_document_id` belongs to the expected `manufacturer_id` | V1 | Prevents cross-manufacturer data pollution. |
+| `extraction_run_id` is provided and exists | V1 | Query `extraction_runs` to confirm the row exists and is `IN_PROGRESS` or equivalent status. |
+| `extraction_run_id` belongs to `source_document_id` | V1 | Confirms the run is for the correct document. |
+| `ParserOutput` has passed `validateParserOutput` | V1 | Always — must be `ok: true` before planning. Never skip. |
+| `ParserInsertionPlan` has passed `planParserOutputInsertion` | V1 | Always — must be `ok: true` before passing to RPC. Never skip. |
+| Plan `summary.planningErrors` is 0 | V1 | Belt-and-suspenders: even if `ok: true`, do not proceed if error count is non-zero. |
+| No production export involved | V1 | Insertion writes to staging tables only. The route must not accept a `publishToProd` flag or equivalent. |
+
+**Auth-absent V1 behaviour:** In V1, user/session/workspace checks are skipped because auth has not been implemented. This is acceptable for local-only use during the data studio build phase. The absence of auth checks must be clearly marked in the route code with a `// TODO(auth): add session + workspace check` comment so it is not silently carried forward.
+
+---
+
+### 12.4 What must remain blocked until auth/RLS is complete?
+
+These are hard gates. Nothing in this list should be unblocked without a deliberate design and migration:
+
+| Blocked capability | Why it must stay blocked |
+|---|---|
+| Browser / anon RPC execution | `anon` has no `EXECUTE` after migration 011. Do not re-grant. |
+| `authenticated` RPC execution | Same — revoked in 011. Do not re-grant until the Studio role model is defined. |
+| Direct table inserts from browser code | No RLS INSERT policies exist on staged tables. Browser writes would go unvalidated. |
+| Service role key in client components | Would expose the key to the browser. Fatal. |
+| `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` as an env var | The `NEXT_PUBLIC_` prefix pushes vars into the browser bundle. Must never exist. |
+| Production publish / export | Publish logic belongs to a separate, separate-chunk route with its own permission model. |
+| Manufacturer self-service upload | Auth not ready. If a manufacturer-facing upload surface is added before auth exists, it must write to a tightly RLS-controlled holding table only — not directly into staged tables. |
+| Calling the RPC from a Server Action tied to a form | Server Actions are callable from the browser via fetch. Unless the action validates a session, it is equivalent to a browser write. Blocked until auth exists. |
+
+---
+
+### 12.5 Recommended implementation sequence after this design
+
+This extends the implementation path from §9 with the secure execution layer.
+
+| Step | Task | Notes |
+|---|---|---|
+| 1 | Implement SQL insert logic inside `insert_parser_output_plan_v1` | While still not granted to any app role. Full 7-table insert with temp key resolution. Test via `supabase db query` and local SQL only. Rollback after each test. |
+| 2 | Verify insert logic against all three fixtures using local SQL | Confirm row counts match plan summaries. Verify no partial state on forced error. Confirm `db reset` produces clean state. |
+| 3 | Create `apps/web/lib/supabase-server.ts` — server-only Supabase client | Uses `SUPABASE_SERVICE_ROLE_KEY` (no `NEXT_PUBLIC_` prefix). Must not be importable from Client Components — enforce via Next.js `server-only` package or filename convention. |
+| 4 | Add migration `GRANT EXECUTE ON FUNCTION public.insert_parser_output_plan_v1(jsonb) TO service_role` | This is the minimum deliberate grant for V1. Commit as its own migration. |
+| 5 | Create `apps/web/app/api/parser/insert/route.ts` — server-side Route Handler | POST handler. Accepts `{ sourceDocumentId, extractionRunId, parserOutput }`. Runs validate → plan → RPC chain. Returns structured result. In V1: skip auth/session check but mark clearly with TODO. |
+| 6 | Update `call-rpc-shell-fixture.ts` (or a new equivalent) to call the Route Handler instead of calling the RPC directly | This proves the full server-side path end-to-end without touching the browser. |
+| 7 | Run full chain against all three fixtures via the Route Handler | Confirm counts, confirm no partial state, confirm row counts reset cleanly after `db reset`. |
+| 8 | Design auth/RLS policies for the Studio reviewer role | Separate chunk. Decide which Supabase role maps to a reviewer, which tables need RLS, what INSERT/UPDATE policies are needed. |
+| 9 | Replace V1 service_role grant with the appropriate minimum grant | Either a dedicated `parser_inserter` role (Option B from §12.2) or a narrowly scoped `authenticated` grant protected by a `SECURITY DEFINER` wrapper. |
+| 10 | Only after auth/RLS is proven: add UI trigger | A button in the document review page that calls the Route Handler for the current `source_document_id`. This is a separate UI chunk. |
+
+**Key principle:** The RPC function must never be callable from the browser at any point in this sequence. The Route Handler is the only permitted caller, and the Route Handler is never exposed as a public endpoint without session validation once auth exists.
