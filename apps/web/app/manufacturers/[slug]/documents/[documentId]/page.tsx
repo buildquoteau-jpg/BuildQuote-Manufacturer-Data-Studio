@@ -23,6 +23,46 @@ function fmtConfidence(value: number | null | undefined): string {
   return `${Math.round(value * 100)}%`
 }
 
+interface StagedProfile {
+  staged_system_id: string
+  profile_name: string | null
+  product_code: string | null
+  dimensions: string | null
+  length_m: number | null
+  length_mm: number | null
+  width_mm: number | null
+  height_mm: number | null
+  depth_mm: number | null
+  thickness_mm: number | null
+  gauge_mm: number | null
+  diameter_mm: number | null
+  roll_m: number | null
+  weight_kg: number | null
+  pieces: number | null
+  volume_ml: number | null
+  weight_g: number | null
+  pack_format: string | null
+  supplier_pack_qty: number | null
+  supplier_pack_uom: string | null
+  supplier_pack_note: string | null
+  bal_rating: string | null
+  sort_order: number | null
+  verification_status: string
+}
+
+function fmtDimLine(p: StagedProfile): string | null {
+  if (p.dimensions) return p.dimensions
+  const parts: string[] = []
+  if (p.length_mm != null) parts.push(String(p.length_mm))
+  if (p.width_mm  != null) parts.push(String(p.width_mm))
+  if (p.height_mm != null) parts.push(String(p.height_mm))
+  if (parts.length >= 2) return parts.join(' × ') + ' mm'
+  if (parts.length === 1) return parts[0] + ' mm'
+  if (p.length_m != null) return `${p.length_m} m`
+  if (p.roll_m   != null) return `${p.roll_m} m roll`
+  return null
+}
+
 const LIFECYCLE_STEPS = [
   { key: 'uploaded',   label: 'Uploaded' },
   { key: 'queued',     label: 'Queued for extraction' },
@@ -309,8 +349,7 @@ export default async function DocumentDetail({ params }: Props) {
   let sscLinks:       any[] = []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let sysColourRows:  any[] = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let sysProfileRows: any[] = []
+  let sysProfileRows: StagedProfile[] = []
 
   if (systemIds.length > 0) {
     const [{ data: sscData }, { data: colourData }, { data: profileData }] = await Promise.all([
@@ -323,7 +362,7 @@ export default async function DocumentDetail({ params }: Props) {
         .in('staged_system_id', systemIds)
         .order('sort_order', { ascending: true }),
       supabase.from('staged_system_profiles')
-        .select('staged_system_id, name, dimensions, sort_order, verification_status')
+        .select('staged_system_id, profile_name, product_code, dimensions, length_m, length_mm, width_mm, height_mm, depth_mm, thickness_mm, gauge_mm, diameter_mm, roll_m, weight_kg, pieces, volume_ml, weight_g, pack_format, supplier_pack_qty, supplier_pack_uom, supplier_pack_note, bal_rating, sort_order, verification_status')
         .in('staged_system_id', systemIds)
         .order('sort_order', { ascending: true }),
     ])
@@ -579,8 +618,8 @@ export default async function DocumentDetail({ params }: Props) {
                 { label: 'Product code / SKU',   value: _sys.product_code || null,                                                                status: _sys.product_code ? 'Present' : 'Missing' },
                 { label: 'Category',             value: _sys.category || null,                                                                    status: _sys.category ? 'Present' : 'Missing' },
                 { label: 'Subcategory',          value: _sys.subcategory || null,                                                                 status: _sys.subcategory ? 'Present' : 'Missing' },
-                { label: 'Dimensions / profile', value: _fp ? (_fp.dimensions ?? _fp.name ?? null) : null,                                        status: _profs.length > 0 ? 'Present' : 'Missing' },
-                { label: 'Length',               value: null,                                                                                     status: 'Not available' },
+                { label: 'Dimensions / profile', value: _fp ? (fmtDimLine(_fp) ?? _fp.profile_name ?? null) : null,                              status: _profs.length > 0 ? 'Present' : 'Missing' },
+                { label: 'Length',               value: _fp ? (_fp.length_mm != null ? `${_fp.length_mm} mm` : _fp.length_m != null ? `${_fp.length_m} m` : null) : null, status: _fp && (_fp.length_mm != null || _fp.length_m != null) ? 'Present' : (_profs.length === 0 ? 'Missing' : 'Not available') },
                 { label: 'Profile / colour',     value: _cols.length > 0 ? `${_cols.length} colour variant${_cols.length !== 1 ? 's' : ''}` : null, status: _cols.length > 0 ? 'Present' : 'Missing' },
                 { label: 'Components',           value: _links.length > 0 ? `${_links.length} component${_links.length !== 1 ? 's' : ''}` : null, status: _links.length > 0 ? 'Linked' : 'Missing' },
                 { label: 'Evidence link',        value: _fvs.length > 0 ? `${_fvs.filter((fv) => fv.source_chunk_id).length}/${_fvs.length} linked` : null, status: _fvs.length === 0 ? 'Missing' : _fvs.some((fv) => fv.source_chunk_id) ? 'Linked' : 'Needs evidence' },
@@ -1082,13 +1121,73 @@ export default async function DocumentDetail({ params }: Props) {
                       </div>
                     )}
                     {sysProfs.length > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.78rem', color: '#9ca3af', flexShrink: 0 }}>Profiles:</span>
-                        {sysProfs.map((p, i) => (
-                          <span key={i} style={{ fontSize: '0.78rem', color: '#374151' }}>
-                            {p.name ?? '—'}{p.dimensions ? ` — ${p.dimensions}` : ''}
-                          </span>
-                        ))}
+                      <div>
+                        <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginBottom: '0.4rem' }}>Profiles</div>
+                        {sysProfs.map((p, i) => {
+                          const dimLine = fmtDimLine(p)
+                          const dimParts: { label: string; value: string }[] = []
+                          if (p.depth_mm      != null) dimParts.push({ label: 'Depth',       value: `${p.depth_mm} mm` })
+                          if (p.thickness_mm  != null) dimParts.push({ label: 'Thickness',   value: `${p.thickness_mm} mm` })
+                          if (p.gauge_mm      != null) dimParts.push({ label: 'Gauge',       value: `${p.gauge_mm} mm` })
+                          if (p.diameter_mm   != null) dimParts.push({ label: 'Diameter',    value: `${p.diameter_mm} mm` })
+                          if (p.roll_m        != null) dimParts.push({ label: 'Roll length', value: `${p.roll_m} m` })
+                          if (p.weight_kg     != null) dimParts.push({ label: 'Weight',      value: `${p.weight_kg} kg` })
+                          if (p.weight_g      != null) dimParts.push({ label: 'Weight',      value: `${p.weight_g} g` })
+                          if (p.pieces        != null) dimParts.push({ label: 'Pieces',      value: String(p.pieces) })
+                          if (p.volume_ml     != null) dimParts.push({ label: 'Volume',      value: `${p.volume_ml} ml` })
+                          const packParts: string[] = []
+                          if (p.supplier_pack_qty != null) packParts.push(String(p.supplier_pack_qty))
+                          if (p.supplier_pack_uom) packParts.push(p.supplier_pack_uom)
+                          const supplierPack = packParts.length > 0
+                            ? packParts.join(' ') + (p.supplier_pack_note ? ` (${p.supplier_pack_note})` : '')
+                            : null
+                          const hasMeta = dimLine || dimParts.length > 0 || p.pack_format || supplierPack || p.bal_rating
+                          return (
+                            <div key={i} style={{
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 6,
+                              padding: '0.45rem 0.7rem',
+                              marginBottom: i < sysProfs.length - 1 ? '0.4rem' : 0,
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' as const, marginBottom: hasMeta ? '0.3rem' : 0 }}>
+                                <span style={{ fontWeight: 600, fontSize: '0.83rem', color: '#1e293b' }}>{p.profile_name ?? '—'}</span>
+                                {p.product_code && (
+                                  <code style={{ fontSize: '0.73rem', color: '#185D7A', background: '#cce7f0', padding: '0.1rem 0.35rem', borderRadius: 3, fontWeight: 600 }}>
+                                    {p.product_code}
+                                  </code>
+                                )}
+                              </div>
+                              {hasMeta && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '0.2rem 0.65rem', fontSize: '0.77rem' }}>
+                                  {dimLine && (
+                                    <span style={{ color: '#185D7A', fontWeight: 500 }}>{dimLine}</span>
+                                  )}
+                                  {dimParts.map((f, fi) => (
+                                    <span key={fi} style={{ color: '#475569' }}>
+                                      <span style={{ color: '#9ca3af' }}>{f.label}:</span> {f.value}
+                                    </span>
+                                  ))}
+                                  {p.pack_format && (
+                                    <span style={{ color: '#475569' }}>
+                                      <span style={{ color: '#9ca3af' }}>Pack:</span> {p.pack_format}
+                                    </span>
+                                  )}
+                                  {supplierPack && (
+                                    <span style={{ color: '#475569' }}>
+                                      <span style={{ color: '#9ca3af' }}>Supplier pack:</span> {supplierPack}
+                                    </span>
+                                  )}
+                                  {p.bal_rating && (
+                                    <span style={{ color: '#475569' }}>
+                                      <span style={{ color: '#9ca3af' }}>BAL:</span> {p.bal_rating}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
