@@ -331,7 +331,112 @@ The production Supabase project must not be connected until step 9 is proven cor
 
 ---
 
-## 10. Schema Reference Summary
+## 10. Approved Implementation Decisions
+
+These decisions resolve the open blockers from section 8. They are locked before any RPC or DB-writing code is created. Do not re-open them without a new design chunk.
+
+### 10.1 Transaction strategy
+
+**Decision:** Use a Postgres RPC function for real insertion so staged rows, `field_verifications`, and `parser_field_evidence` are all inserted atomically inside one `BEGIN … COMMIT`.
+
+**Reason:** Insertion spans multiple linked tables with FK dependencies. Sequential Supabase JS `.insert()` calls cannot be wrapped in a real transaction and are too easy to partially fail — leaving orphaned staged rows with no `field_verifications`, or `field_verifications` rows pointing at temp keys that were never resolved.
+
+### 10.2 Write surface
+
+**Decision:** No browser-side or client-component writes for parser insertion. The insertion RPC call must be made from a server-side route or server action only.
+
+**Reason:** The staged tables contain unverified AI-drafted catalogue data. Browser-side writes bypass server-layer validation and are incompatible with the RLS/auth model that will be designed later. Keeping insertion server-side means the write path is one controllable surface.
+
+### 10.3 RLS and auth
+
+**Decision:** Do not add RLS policies in this chunk. Do not solve local write access by loosening RLS. RLS and auth are a future security chunk, addressed after the insertion logic is proven correct against local fixtures.
+
+**Reason:** Designing RLS requires knowing which roles (manufacturer reviewer, admin, service) need which access on which tables. That design has not been done. Patching RLS now to unblock insertion would produce ad hoc policies that need to be redesigned anyway.
+
+### 10.4 Re-run strategy — V1 append-only
+
+**Decision:** V1 is append-only per extraction run. Each run creates a new set of staged candidate rows. Do not attempt entity deduplication, upsert, or merge across extraction runs in V1.
+
+**Reason:** Append-only is the safest and most auditable approach for an initial implementation. Every run's output is fully preserved and traceable via `extraction_run_id`. The reviewer UI can compare runs using `parser_field_evidence`. Deduplication logic (deciding which staged row is the "same" entity across two runs) is a separate, harder problem that should not block V1.
+
+**Implication:** `field_verifications` rows are inserted for the new staged entity rows created by each run. No cross-run field_verifications refresh is needed in V1 because each run produces its own fresh staged candidates with their own UUIDs.
+
+### 10.5 Link failure strategy
+
+**Decision:** Any unresolved required temp-key link aborts the entire insertion transaction. Partial or orphaned links must not be committed.
+
+**Applies to:**
+- `staged_system_components` where the system temp key cannot be resolved to a staged system UUID
+- `staged_system_components` where the component temp key cannot be resolved to a staged component UUID
+- `staged_system_colours` where the system temp key cannot be resolved to a staged system UUID
+- `staged_system_profiles` where the system temp key cannot be resolved to a staged system UUID
+
+**Reason:** Orphaned rows (a `staged_system_components` row with a null `staged_system_id`) violate FK constraints and produce data that is unattributable in the review UI. If a link cannot be resolved, the run output is incomplete and the whole insertion must fail cleanly so the issue is surfaced and corrected in the parser output.
+
+**Note:** The dry-run planner already emits `UNRESOLVED_SYSTEM_MATCH` and `UNRESOLVED_COMPONENT_MATCH` errors (severity `error`) for this case, and returns `ok: false`. The adapter must only be called with a plan where `ok === true`. This provides a first line of defence before any DB writes begin.
+
+### 10.6 Status vocabulary — verified from live local schema
+
+**Decision:** The two status vocabularies are separate and must never be mixed. The adapter must use the correct value for each table. These are the exact values from the live local schema (migrations 001–009):
+
+**`staged_*.verification_status`** (all five staged tables — default `'pending_review'`):
+
+| Value | Meaning |
+|---|---|
+| `pending_review` | AI-drafted, not yet reviewed |
+| `in_review` | A reviewer has opened this record |
+| `approved` | Reviewer has approved the record |
+| `rejected` | Reviewer has rejected the record |
+| `needs_source_check` | Reviewer flagged it for source verification |
+| `exported` | Record has been published to production |
+
+The adapter inserts staged rows with `verification_status = 'pending_review'`.
+
+**`field_verifications.status`** (default `'pending'`):
+
+| Value | Meaning |
+|---|---|
+| `pending` | Extracted, awaiting reviewer action |
+| `approved` | Reviewer approved the extracted value |
+| `rejected` | Reviewer rejected the extracted value |
+| `edited` | Reviewer supplied a corrected verified_value |
+| `needs_source_check` | Reviewer flagged for source re-check |
+
+The adapter inserts `field_verifications` rows with `status = 'pending'`.
+
+**Source:** Confirmed against migration 001 (staged tables comment), migration 002 (field_verifications comment), and live local schema distinct-value queries on 2026-05-13.
+
+### 10.7 `source_page_id` gap
+
+**Decision:** V1 insertion stores `source_page_number` (integer) and `source_chunk_id` as provided by the planner. `source_page_id` (FK → `document_pages.id`) is left `null` in V1.
+
+**Reason:** Resolving `source_page_number → document_pages.id` requires a pre-query inside the transaction and assumes `document_pages` rows exist for every referenced page, which cannot be guaranteed at insertion time (the docling extraction step may not have run yet). V1 must not be blocked on this. The `source_page_id` column can be backfilled in a later step or resolved at UI display time.
+
+### 10.8 `field_verifications` re-run behaviour
+
+**Decision (V1):** Because V1 is append-only (each run creates new staged rows with fresh UUIDs), each run also creates a fresh set of `field_verifications` rows linked to the new staged rows. There is no cross-run field_verifications overwrite or refresh in V1.
+
+**Decision (future dedupe/upsert path, when introduced):** If a future version introduces entity deduplication across runs (reusing existing staged row UUIDs), the following rule applies to `field_verifications` on re-run:
+
+| Existing `field_verifications.status` | Adapter action on re-run |
+|---|---|
+| `pending` | May refresh `extracted_value`, `source_chunk_id`, `source_page_number`, `confidence` via upsert |
+| `approved` | Preserve — do not overwrite |
+| `edited` | Preserve — do not overwrite |
+| `rejected` | Preserve — do not overwrite |
+| `needs_source_check` | Preserve — do not overwrite |
+
+New `parser_field_evidence` rows are always appended regardless of `field_verifications.status`.
+
+### 10.9 `parser_field_evidence` behaviour
+
+**Decision:** Always append. Never update existing `parser_field_evidence` rows. The table has no UNIQUE constraint on `(entity_type, entity_id, field_name)` by design — multiple rows for the same field from different runs are the intended and correct state.
+
+**At insert time:** Every planned `parser_field_evidence` row becomes one new DB row, even if the same field for the same entity was recorded by a prior run. The `extraction_run_id` column distinguishes which run produced which evidence row.
+
+---
+
+## 11. Schema Reference Summary
 
 For the adapter implementer — the exact table and column targets, as confirmed from live local schema (migrations 001–009):
 
