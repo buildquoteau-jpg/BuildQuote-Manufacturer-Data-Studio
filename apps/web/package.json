@@ -10,7 +10,8 @@
     "extract:local-pdf": "node scripts/extract-local-pdf.mjs",
     "parser:bundle": "node scripts/create-parser-input-bundle.mjs",
     "parser:ai-local": "tsx scripts/parser-ai-local.ts",
-    "parser:dry-run": "tsx scripts/parser-dry-run.ts"
+    "parser:dry-run": "tsx scripts/parser-dry-run.ts",
+    "parser:insert-preview": "tsx scripts/parser-insert-preview.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

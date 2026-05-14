@@ -364,14 +364,14 @@ export default async function AdminDocumentDetailPage({ params }: Props) {
               color: 'var(--ds-text)',
             }}
           >
-            {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. (Optional) Run AI parser — writes output to .local/parser-ai-outputs/\npnpm parser:ai-local -- --input ".local/parser-inputs/<bundle>.json"\n\n# 3. Dry-run with AI output (validates against parser contracts)\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json"\n\n# 3b. Strict mode — exits non-zero on any errors or plan failures\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json" --strict`}
+            {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. Run AI parser (or use --fixture to skip the API call)\npnpm parser:ai-local -- --input ".local/parser-inputs/<bundle>.json" --fixture\n\n# 3. Strict dry-run — must pass before insert preview\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json" --strict\n\n# 4. Insert preview — maps plan to exact insert order and payload shapes\npnpm parser:insert-preview -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json" --strict`}
           </pre>
           <p style={{ margin: '0 0 0.4rem', color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
-            Each dry-run saves a report to <code>.local/parser-reports/</code> (gitignored).
-            Skip step 2 to dry-run the built-in fixture instead of real AI output.
+            Reports saved to <code>.local/parser-reports/</code> and <code>.local/parser-insert-previews/</code> (gitignored).
+            The insert preview shows planned row counts, temp key mapping, and redacted payload samples — no DB writes.
           </p>
           <p style={{ margin: 0, color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
-            No staged DB writes occur until the dry-run passes and writes are explicitly approved.
+            Staged DB writes require the insert preview to pass and explicit separate approval.
           </p>
         </div>
       </div>
