@@ -39,3 +39,6 @@ npm-debug.log*
 
 # Supabase local
 supabase/.temp/
+
+# Local extraction artifacts (gitignored — may contain copyrighted catalogue text)
+.local/

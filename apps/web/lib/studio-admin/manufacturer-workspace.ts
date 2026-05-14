@@ -37,6 +37,36 @@ export type AdminWorkspaceDocument = {
   fileSizeBytes: number | null
 }
 
+export type AdminDocumentChunk = {
+  id: string
+  pageNumber: number | null
+  chunkIndex: number
+  rawTextPreview: string | null
+  charCount: number
+}
+
+export type AdminDocumentExtractionRun = {
+  id: string
+  runType: string
+  status: string
+  toolName: string | null
+  startedAt: string | null
+  completedAt: string | null
+  errorMessage: string | null
+}
+
+export type AdminDocumentDetail = {
+  id: string
+  documentName: string
+  documentType: string | null
+  documentDate: string | null
+  status: string
+  uploadedAt: string
+  fileSizeBytes: number | null
+  notes: string | null
+  storageProvider: string
+}
+
 export type AdminWorkspaceSystem = {
   id: string
   name: string
@@ -95,6 +125,18 @@ export type AdminWorkspacePreviewResult =
       ok: true
       manufacturer: AdminWorkspaceManufacturer
       systems: Array<AdminWorkspaceSystem & { colours: string[] }>
+    }
+  | { ok: false; error: string; forbidden?: boolean }
+
+export type AdminDocumentDetailResult =
+  | {
+      ok: true
+      manufacturer: AdminWorkspaceManufacturer
+      document: AdminDocumentDetail
+      pageCount: number
+      chunkCount: number
+      chunks: AdminDocumentChunk[]
+      latestRun: AdminDocumentExtractionRun | null
     }
   | { ok: false; error: string; forbidden?: boolean }
 
@@ -422,4 +464,138 @@ export async function getAdminManufacturerPreviewData(
   }
 
   return { ok: true, manufacturer: mfrResult.manufacturer, systems }
+}
+
+// ============================================================
+// getAdminDocumentDetail
+// Single document with extracted pages/chunks for the admin
+// document detail view. Storage bucket/key intentionally excluded.
+// ============================================================
+
+const CHUNK_PREVIEW_LEN = 800
+
+export async function getAdminDocumentDetail(
+  manufacturerId: string,
+  documentId: string,
+): Promise<AdminDocumentDetailResult> {
+  const authCheck = await assertAdminOrReviewer()
+  if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
+
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const [mfrResult, docResult] = await Promise.all([
+    fetchManufacturer(c.supabase, manufacturerId),
+    c.supabase
+      .from('source_documents')
+      .select(
+        'id, document_name, document_type, document_date, status, uploaded_at, file_size_bytes, notes, storage_provider',
+      )
+      .eq('id', documentId)
+      .eq('manufacturer_id', manufacturerId)
+      .single(),
+  ])
+
+  if (!mfrResult.ok) return { ok: false, error: mfrResult.error }
+  if (docResult.error || !docResult.data) {
+    return {
+      ok: false,
+      error:
+        docResult.error?.code === 'PGRST116'
+          ? 'Document not found.'
+          : (docResult.error?.message ?? 'Unknown error.'),
+    }
+  }
+
+  type DocRow = {
+    id: string
+    document_name: string
+    document_type: string | null
+    document_date: string | null
+    status: string
+    uploaded_at: string
+    file_size_bytes: number | null
+    notes: string | null
+    storage_provider: string
+  }
+  const d = docResult.data as DocRow
+
+  const [pageCountResult, chunkResult, runResult] = await Promise.all([
+    c.supabase
+      .from('document_pages')
+      .select('*', { count: 'exact', head: true })
+      .eq('source_document_id', documentId),
+    c.supabase
+      .from('document_chunks')
+      .select('id, page_number, chunk_index, raw_text')
+      .eq('source_document_id', documentId)
+      .order('chunk_index', { ascending: true })
+      .limit(200),
+    c.supabase
+      .from('extraction_runs')
+      .select('id, run_type, status, tool_name, started_at, completed_at, error_message')
+      .eq('source_document_id', documentId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+  ])
+
+  type ChunkRow = {
+    id: string
+    page_number: number | null
+    chunk_index: number
+    raw_text: string | null
+  }
+  type RunRow = {
+    id: string
+    run_type: string
+    status: string
+    tool_name: string | null
+    started_at: string | null
+    completed_at: string | null
+    error_message: string | null
+  }
+
+  const chunkRows = (chunkResult.data ?? []) as ChunkRow[]
+  const runRows = (runResult.data ?? []) as RunRow[]
+
+  const chunks: AdminDocumentChunk[] = chunkRows.map((row) => ({
+    id: row.id,
+    pageNumber: row.page_number,
+    chunkIndex: row.chunk_index,
+    rawTextPreview: row.raw_text ? row.raw_text.slice(0, CHUNK_PREVIEW_LEN) : null,
+    charCount: row.raw_text?.length ?? 0,
+  }))
+
+  const latestRun: AdminDocumentExtractionRun | null =
+    runRows.length > 0
+      ? {
+          id: runRows[0].id,
+          runType: runRows[0].run_type,
+          status: runRows[0].status,
+          toolName: runRows[0].tool_name,
+          startedAt: runRows[0].started_at,
+          completedAt: runRows[0].completed_at,
+          errorMessage: runRows[0].error_message,
+        }
+      : null
+
+  return {
+    ok: true,
+    manufacturer: mfrResult.manufacturer,
+    document: {
+      id: d.id,
+      documentName: d.document_name,
+      documentType: d.document_type,
+      documentDate: d.document_date,
+      status: d.status,
+      uploadedAt: d.uploaded_at,
+      fileSizeBytes: d.file_size_bytes,
+      notes: d.notes,
+      storageProvider: d.storage_provider,
+    },
+    pageCount: pageCountResult.count ?? 0,
+    chunkCount: chunkRows.length,
+    chunks,
+    latestRun,
+  }
 }

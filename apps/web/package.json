@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "extract:local-pdf": "node scripts/extract-local-pdf.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -19,6 +20,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "pdf-parse": "^2.4.5",
     "typescript": "^5"
   }
 }

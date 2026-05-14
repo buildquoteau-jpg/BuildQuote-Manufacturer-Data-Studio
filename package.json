@@ -6,7 +6,8 @@
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "build:web": "pnpm --filter web build",
-    "lint": "pnpm --filter web lint"
+    "lint": "pnpm --filter web lint",
+    "extract:local-pdf": "pnpm --filter web run extract:local-pdf"
   },
   "engines": {
     "node": ">=18"

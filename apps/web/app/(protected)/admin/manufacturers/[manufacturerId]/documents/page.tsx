@@ -40,35 +40,44 @@ function docBadgeClass(status: string): string {
   return `studio-badge studio-badge-${STATUS_BADGE[status] ?? 'draft'}`
 }
 
-function DocRow({ doc }: { doc: AdminWorkspaceDocument }) {
+function DocRow({ doc, manufacturerId }: { doc: AdminWorkspaceDocument; manufacturerId: string }) {
   return (
-    <div
-      style={{
-        background: 'var(--ds-card-bg)',
-        border: '1px solid var(--ds-border)',
-        borderRadius: 8,
-        padding: '0.8rem 1.1rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '0.5rem',
-      }}
+    <a
+      href={`/admin/manufacturers/${manufacturerId}/documents/${doc.id}`}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
     >
-      <div>
-        <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.15rem' }}>
-          📄 {doc.documentName}
+      <div
+        style={{
+          background: 'var(--ds-card-bg)',
+          border: '1px solid var(--ds-border)',
+          borderRadius: 8,
+          padding: '0.8rem 1.1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
+          transition: 'border-color 0.12s',
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.15rem' }}>
+            📄 {doc.documentName}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)' }}>
+            {doc.documentType?.replace(/_/g, ' ') ?? 'unknown type'}
+            {doc.documentDate ? ` · ${doc.documentDate}` : ''}
+            {formatFileSize(doc.fileSizeBytes)}
+            {' · '}
+            {formatDate(doc.uploadedAt)}
+          </div>
         </div>
-        <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)' }}>
-          {doc.documentType?.replace(/_/g, ' ') ?? 'unknown type'}
-          {doc.documentDate ? ` · ${doc.documentDate}` : ''}
-          {formatFileSize(doc.fileSizeBytes)}
-          {' · Uploaded '}
-          {formatDate(doc.uploadedAt)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+          <span className={docBadgeClass(doc.status)}>{doc.status}</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)' }}>View →</span>
         </div>
       </div>
-      <span className={docBadgeClass(doc.status)}>{doc.status}</span>
-    </div>
+    </a>
   )
 }
 
@@ -159,7 +168,7 @@ export default async function AdminManufacturerDocumentsPage({ params }: Props) 
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {documents.map((doc) => (
-              <DocRow key={doc.id} doc={doc} />
+              <DocRow key={doc.id} doc={doc} manufacturerId={manufacturerId} />
             ))}
           </div>
         )}
