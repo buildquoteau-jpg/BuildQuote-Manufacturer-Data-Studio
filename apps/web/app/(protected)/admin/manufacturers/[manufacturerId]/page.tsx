@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { StudioCard } from '@/components/studio/StudioCard'
-import { getAdminManufacturerDetail } from '@/lib/studio-admin/manufacturers'
+import { getAdminManufacturerWorkspace } from '@/lib/studio-admin/manufacturer-workspace'
 
 type Props = {
   params: { manufacturerId: string }
@@ -9,10 +9,10 @@ type Props = {
 
 export default async function AdminManufacturerDetailPage({ params }: Props) {
   const { manufacturerId } = params
-  const result = await getAdminManufacturerDetail(manufacturerId)
+  const result = await getAdminManufacturerWorkspace(manufacturerId)
 
   if (!result.ok) {
-    if (result.notFound) redirect('/admin/manufacturers')
+    if (result.forbidden) redirect('/admin/manufacturers')
 
     return (
       <StudioShell role="admin" subtitle="Manufacturer detail">
@@ -21,14 +21,12 @@ export default async function AdminManufacturerDetailPage({ params }: Props) {
             ← All manufacturers
           </a>
         </div>
-        <div className="studio-warn">
-          Could not load manufacturer: {result.error}
-        </div>
+        <div className="studio-warn">Could not load manufacturer: {result.error}</div>
       </StudioShell>
     )
   }
 
-  const { manufacturer: m } = result
+  const { manufacturer: m, documentCount, systemCount, componentCount, profileCount, colourCount } = result
 
   return (
     <StudioShell role="admin" subtitle={m.name}>
@@ -50,14 +48,12 @@ export default async function AdminManufacturerDetailPage({ params }: Props) {
       >
         <h1 style={{ fontSize: '1.25rem' }}>{m.name}</h1>
         <span
-          className={`studio-badge studio-badge-${
-            m.status === 'active' ? 'approved' : 'draft'
-          }`}
+          className={`studio-badge studio-badge-${m.status === 'active' ? 'approved' : 'draft'}`}
         >
           {m.status}
         </span>
       </div>
-      <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+      <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
         <code
           style={{
             background: 'var(--ds-page-bg)',
@@ -72,20 +68,29 @@ export default async function AdminManufacturerDetailPage({ params }: Props) {
           <span style={{ marginLeft: '0.75rem' }}>{m.description}</span>
         )}
       </p>
+      <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', marginBottom: '1.5rem' }}>
+        BuildQuote admin support view for this manufacturer workspace.
+      </p>
+
+      <div className="studio-info" style={{ marginBottom: '1.5rem' }}>
+        Read-only support workspace. Publishing and edits are not active yet.
+      </div>
 
       {/* Stats row */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
           gap: '0.6rem',
           marginBottom: '1.75rem',
         }}
       >
         {[
-          { label: 'Documents', value: m.documents.length },
-          { label: 'Staged systems', value: m.systemCount },
-          { label: 'Staged components', value: m.componentCount },
+          { label: 'Documents', value: documentCount },
+          { label: 'Staged systems', value: systemCount },
+          { label: 'Components', value: componentCount },
+          { label: 'Profiles', value: profileCount },
+          { label: 'Colours', value: colourCount },
         ].map((s) => (
           <div
             key={s.label}
@@ -96,7 +101,14 @@ export default async function AdminManufacturerDetailPage({ params }: Props) {
               padding: '0.75rem 1rem',
             }}
           >
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--ds-navy)', marginBottom: '0.1rem' }}>
+            <div
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: 700,
+                color: 'var(--ds-navy)',
+                marginBottom: '0.1rem',
+              }}
+            >
               {s.value}
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-sub)' }}>{s.label}</div>
@@ -104,96 +116,32 @@ export default async function AdminManufacturerDetailPage({ params }: Props) {
         ))}
       </div>
 
-      {/* Workspace action cards */}
+      {/* Workspace support navigation */}
       <div className="studio-card-grid" style={{ marginBottom: '2rem' }}>
         <StudioCard
           icon="📄"
           title="Documents"
-          description={`${m.documents.length} source document${m.documents.length !== 1 ? 's' : ''}. Upload pipeline not connected.`}
-          href={`/admin/manufacturers/${manufacturerId}`}
-          disabled
-        />
-        <StudioCard
-          icon="⚙️"
-          title="Extraction Runs"
-          description="Extraction pipeline not connected to this view yet."
-          href={`/admin/manufacturers/${manufacturerId}`}
-          disabled
+          description={`${documentCount} source document${documentCount !== 1 ? 's' : ''}. View uploaded source documents for this workspace.`}
+          href={`/admin/manufacturers/${manufacturerId}/documents`}
         />
         <StudioCard
           icon="✅"
-          title="Review Staged Data"
-          description={`${m.systemCount} system${m.systemCount !== 1 ? 's' : ''}, ${m.componentCount} component${m.componentCount !== 1 ? 's' : ''} staged. Review workflow not connected.`}
-          href={`/admin/manufacturers/${manufacturerId}`}
-          disabled
+          title="Review"
+          description={`${systemCount} system${systemCount !== 1 ? 's' : ''}, ${componentCount} component${componentCount !== 1 ? 's' : ''} staged. Read-only review summary.`}
+          href={`/admin/manufacturers/${manufacturerId}/review`}
         />
         <StudioCard
           icon="👁"
-          title="Preview Public Page"
-          description="Preview how this manufacturer's public page will look before publishing."
+          title="Preview"
+          description="Private admin preview of this manufacturer's public page and staged systems."
           href={`/admin/manufacturers/${manufacturerId}/preview`}
         />
         <StudioCard
           icon="🔲"
-          title="Widget Preview"
+          title="Widget preview"
           description="Preview the embeddable system card widget for this manufacturer."
           href={`/admin/manufacturers/${manufacturerId}/widget-preview`}
         />
-      </div>
-
-      {/* Source documents list */}
-      <div className="studio-section">
-        <div className="studio-section-heading">Source documents</div>
-        {m.documents.length === 0 ? (
-          <p style={{ fontSize: '0.85rem', color: 'var(--ds-text-faint)' }}>
-            No documents uploaded yet.
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {m.documents.map((doc) => (
-              <div
-                key={doc.id}
-                style={{
-                  background: 'var(--ds-card-bg)',
-                  border: '1px solid var(--ds-border)',
-                  borderRadius: 8,
-                  padding: '0.8rem 1.1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '0.5rem',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.15rem' }}>
-                    📄 {doc.documentName}
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)' }}>
-                    {doc.documentType?.replace('_', ' ') ?? 'unknown type'}
-                    {' · '}
-                    {new Date(doc.uploadedAt).toLocaleDateString('en-AU', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </div>
-                </div>
-                <span
-                  className={`studio-badge studio-badge-${
-                    doc.status === 'approved' || doc.status === 'extracted'
-                      ? 'approved'
-                      : doc.status === 'failed' || doc.status === 'rejected'
-                      ? 'draft'
-                      : 'draft'
-                  }`}
-                >
-                  {doc.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Publish status */}
