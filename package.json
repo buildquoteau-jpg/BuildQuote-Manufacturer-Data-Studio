@@ -11,7 +11,8 @@
     "parser:bundle": "pnpm --filter web run parser:bundle",
     "parser:ai-local": "pnpm --filter web run parser:ai-local",
     "parser:dry-run": "pnpm --filter web run parser:dry-run",
-    "parser:insert-preview": "pnpm --filter web run parser:insert-preview"
+    "parser:insert-preview": "pnpm --filter web run parser:insert-preview",
+    "parser:insert-local": "pnpm --filter web run parser:insert-local"
   },
   "engines": {
     "node": ">=18"

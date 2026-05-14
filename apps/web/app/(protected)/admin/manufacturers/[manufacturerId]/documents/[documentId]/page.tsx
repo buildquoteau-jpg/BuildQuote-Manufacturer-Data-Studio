@@ -366,12 +366,42 @@ export default async function AdminDocumentDetailPage({ params }: Props) {
           >
             {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. Run AI parser (or use --fixture to skip the API call)\npnpm parser:ai-local -- --input ".local/parser-inputs/<bundle>.json" --fixture\n\n# 3. Strict dry-run — must pass before insert preview\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json" --strict\n\n# 4. Insert preview — maps plan to exact insert order and payload shapes\npnpm parser:insert-preview -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json" --strict`}
           </pre>
-          <p style={{ margin: '0 0 0.4rem', color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
+          <p style={{ margin: '0 0 0.6rem', color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
             Reports saved to <code>.local/parser-reports/</code> and <code>.local/parser-insert-previews/</code> (gitignored).
             The insert preview shows planned row counts, temp key mapping, and redacted payload samples — no DB writes.
           </p>
+          <div
+            style={{
+              background: 'var(--ds-warn-bg, #fffbeb)',
+              border: '1px solid var(--ds-border)',
+              borderRadius: 6,
+              padding: '0.5rem 0.75rem',
+              fontSize: '0.78rem',
+              color: 'var(--ds-text-muted)',
+              marginBottom: '0.6rem',
+            }}
+          >
+            <strong>Local-only write step</strong> — after the insert preview passes, run
+            from the monorepo root (local CLI only, no UI action):
+            <pre
+              style={{
+                background: 'var(--ds-border-soft)',
+                borderRadius: 4,
+                padding: '0.4rem 0.6rem',
+                fontSize: '0.77rem',
+                overflowX: 'auto',
+                margin: '0.4rem 0 0',
+                color: 'var(--ds-text)',
+              }}
+            >
+              {`pnpm parser:insert-local -- \\\n  --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json" \\\n  --strict --confirm-local-write`}
+            </pre>
+          </div>
           <p style={{ margin: 0, color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
-            Staged DB writes require the insert preview to pass and explicit separate approval.
+            Staged DB writes require <code>LOCAL_ONLY_ALLOW_SERVICE_ROLE=true</code> in{' '}
+            <code>.env.local</code> and both <code>--strict</code> and{' '}
+            <code>--confirm-local-write</code> flags. See{' '}
+            <code>docs/local-parser-insert-local.md</code> for full safety gate details.
           </p>
         </div>
       </div>
