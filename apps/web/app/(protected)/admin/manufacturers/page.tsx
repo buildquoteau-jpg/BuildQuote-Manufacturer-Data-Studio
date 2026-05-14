@@ -1,4 +1,4 @@
-import { StudioShell } from '../../../components/studio/StudioShell'
+import { StudioShell } from '@/components/studio/StudioShell'
 
 const PLACEHOLDER_MANUFACTURERS = [
   { id: 'demo-1', name: 'Acme Aluminium', slug: 'acme-aluminium', status: 'active', systems: 4, docsCount: 3 },

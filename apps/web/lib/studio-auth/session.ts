@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createStudioServerClient } from '../supabase/server'
 
 // ============================================================
@@ -74,7 +75,28 @@ const NULL_SESSION: StudioSession = {
  *   - no data_studio_user_profiles row exists for the auth user
  *   - the profile status is not 'active'
  */
-export async function getStudioSession(): Promise<StudioSession> {
+/**
+ * Returns the destination path appropriate for the given session.
+ * Used by loginWithPassword and the login page to redirect to the right area.
+ */
+export function resolvePostLoginPath(session: StudioSession): string {
+  if (!session.profile) return '/login'
+
+  switch (session.globalRole) {
+    case 'buildquote_admin':
+      return '/admin/manufacturers'
+    case 'buildquote_reviewer':
+      // No reviewer workspace yet — land on dashboard which shows the appropriate message
+      return '/dashboard'
+    case 'manufacturer_user':
+      return session.memberships.length > 0 ? '/manufacturer/dashboard' : '/dashboard'
+    default:
+      return '/dashboard'
+  }
+}
+
+// Memoised per server-render so multiple layouts on one request share one DB round-trip.
+export const getStudioSession = cache(async (): Promise<StudioSession> => {
   // Gracefully handle missing env vars — don't throw in page rendering
   let supabase: ReturnType<typeof createStudioServerClient>
   try {
@@ -158,4 +180,4 @@ export async function getStudioSession(): Promise<StudioSession> {
     globalRole: profile.globalRole,
     memberships,
   }
-}
+})

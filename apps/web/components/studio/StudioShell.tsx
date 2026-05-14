@@ -1,22 +1,21 @@
 import type { ReactNode } from 'react'
+import { logout } from '@/lib/studio-auth/actions'
 
-export type StudioRole = 'admin' | 'manufacturer' | 'dashboard'
+export type StudioRole = 'admin' | 'reviewer' | 'manufacturer' | 'dashboard'
 
 type NavItem = { label: string; href: string }
 
-const COMMON_NAV: NavItem[] = [
-  { label: 'Login', href: '/login' },
-  { label: 'Dashboard', href: '/dashboard' },
-]
-
 const ADMIN_NAV: NavItem[] = [
-  ...COMMON_NAV,
+  { label: 'Dashboard', href: '/dashboard' },
   { label: 'Manufacturers', href: '/admin/manufacturers' },
 ]
 
+const REVIEWER_NAV: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard' },
+]
+
 const MFR_NAV: NavItem[] = [
-  ...COMMON_NAV,
-  { label: 'Mfr. dashboard', href: '/manufacturer/dashboard' },
+  { label: 'Dashboard', href: '/manufacturer/dashboard' },
   { label: 'Documents', href: '/manufacturer/documents' },
   { label: 'Review', href: '/manufacturer/review' },
   { label: 'Preview', href: '/manufacturer/preview' },
@@ -24,33 +23,30 @@ const MFR_NAV: NavItem[] = [
 ]
 
 const DASHBOARD_NAV: NavItem[] = [
-  ...COMMON_NAV,
-  { label: 'Admin', href: '/admin/manufacturers' },
-  { label: 'Mfr. dashboard', href: '/manufacturer/dashboard' },
+  { label: 'Dashboard', href: '/dashboard' },
 ]
 
 const NAV_BY_ROLE: Record<StudioRole, NavItem[]> = {
   admin: ADMIN_NAV,
+  reviewer: REVIEWER_NAV,
   manufacturer: MFR_NAV,
   dashboard: DASHBOARD_NAV,
 }
 
 const BADGE_BY_ROLE: Record<StudioRole, { className: string; label: string }> = {
-  admin:        { className: 'studio-badge studio-badge-admin', label: 'Admin shell' },
-  manufacturer: { className: 'studio-badge studio-badge-mfr',   label: 'Manufacturer shell' },
+  admin:        { className: 'studio-badge studio-badge-admin', label: 'Admin' },
+  reviewer:     { className: 'studio-badge studio-badge-draft', label: 'Reviewer' },
+  manufacturer: { className: 'studio-badge studio-badge-mfr',   label: 'Manufacturer' },
   dashboard:    { className: 'studio-badge studio-badge-draft',  label: 'Dashboard' },
 }
-
-const DEFAULT_NOTICE =
-  'Auth shell only — real sign-in and route protection are not active yet. All pages are accessible during development.'
 
 type Props = {
   role: StudioRole
   /** Short context string shown faintly in the header, e.g. "All manufacturers". */
   subtitle?: string
   /**
-   * Override the default auth shell notice with a page-specific message.
-   * Pass null to suppress the notice entirely (use sparingly).
+   * A page-specific notice to show at the top of main content.
+   * Pass null to suppress any notice (default: no notice).
    */
   notice?: string | null
   children: ReactNode
@@ -59,7 +55,8 @@ type Props = {
 export function StudioShell({ role, subtitle, notice, children }: Props) {
   const nav = NAV_BY_ROLE[role]
   const badge = BADGE_BY_ROLE[role]
-  const noticeText = notice === null ? null : (notice ?? DEFAULT_NOTICE)
+  // Default: no notice. Pages opt in by passing a string.
+  const noticeText = notice ?? null
 
   return (
     <div className="studio-page">
@@ -79,6 +76,23 @@ export function StudioShell({ role, subtitle, notice, children }: Props) {
             {item.label}
           </a>
         ))}
+        {/* Sign-out is a server action — form POST, no client JS needed */}
+        <form action={logout} style={{ marginLeft: 'auto' }}>
+          <button
+            type="submit"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 'inherit',
+              color: 'var(--ds-text-muted)',
+              padding: '0',
+              lineHeight: 'inherit',
+            }}
+          >
+            Sign out
+          </button>
+        </form>
       </nav>
 
       <main className="studio-main">

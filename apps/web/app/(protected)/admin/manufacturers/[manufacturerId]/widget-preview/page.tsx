@@ -1,4 +1,4 @@
-import { StudioShell } from '../../../../../components/studio/StudioShell'
+import { StudioShell } from '@/components/studio/StudioShell'
 
 type Props = {
   params: { manufacturerId: string }

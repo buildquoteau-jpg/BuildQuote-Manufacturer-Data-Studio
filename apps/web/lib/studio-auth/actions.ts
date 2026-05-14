@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createStudioServerClient } from '../supabase/server'
+import { getStudioSession, resolvePostLoginPath } from './session'
 
 // ============================================================
 // Types
@@ -77,9 +78,9 @@ export async function loginWithPassword(
     return { error: 'Sign in failed. Please try again or contact BuildQuote.' }
   }
 
-  // Sign-in succeeded — redirect server-side to dashboard.
-  // The dashboard will handle role-based sub-routing once getStudioSession() resolves the profile.
-  redirect('/dashboard')
+  // Sign-in succeeded — resolve role and redirect to the appropriate area.
+  const session = await getStudioSession()
+  redirect(resolvePostLoginPath(session))
 }
 
 // ============================================================

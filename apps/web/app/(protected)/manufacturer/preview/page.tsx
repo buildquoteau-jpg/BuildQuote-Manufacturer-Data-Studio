@@ -1,5 +1,9 @@
-import { StudioShell } from '../../../components/studio/StudioShell'
-import { StudioStatusBadge } from '../../../components/studio/StudioStatusBadge'
+import { StudioShell } from '@/components/studio/StudioShell'
+import { StudioStatusBadge } from '@/components/studio/StudioStatusBadge'
+
+// Studio-only internal preview — not a public customer-facing route.
+// The future public manufacturer page (/manufacturers/[slug]) is customer-facing
+// and will NOT require manufacturer login. This route is the Studio preview only.
 
 const PLACEHOLDER_SYSTEMS = [
   { name: 'AlumaSeries 50', category: 'Windows', profiles: 3, status: 'draft' },

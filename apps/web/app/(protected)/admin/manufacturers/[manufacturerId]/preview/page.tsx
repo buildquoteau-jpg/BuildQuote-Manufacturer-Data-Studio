@@ -1,5 +1,5 @@
-import { StudioShell } from '../../../../../components/studio/StudioShell'
-import { StudioStatusBadge } from '../../../../../components/studio/StudioStatusBadge'
+import { StudioShell } from '@/components/studio/StudioShell'
+import { StudioStatusBadge } from '@/components/studio/StudioStatusBadge'
 
 type Props = {
   params: { manufacturerId: string }

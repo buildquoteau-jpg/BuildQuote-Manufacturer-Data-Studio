@@ -1,4 +1,4 @@
-import { StudioShell } from '../../../components/studio/StudioShell'
+import { StudioShell } from '@/components/studio/StudioShell'
 
 const DOCUMENT_TYPES = [
   { id: 'product_guide', label: 'Product Guide', desc: 'Main product specification document or catalogue' },

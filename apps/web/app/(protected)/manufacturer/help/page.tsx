@@ -1,4 +1,4 @@
-import { StudioShell } from '../../../components/studio/StudioShell'
+import { StudioShell } from '@/components/studio/StudioShell'
 
 const HELP_SECTIONS = [
   {

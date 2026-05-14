@@ -1,5 +1,5 @@
-import { StudioShell } from '../../../../components/studio/StudioShell'
-import { StudioCard } from '../../../../components/studio/StudioCard'
+import { StudioShell } from '@/components/studio/StudioShell'
+import { StudioCard } from '@/components/studio/StudioCard'
 
 type Props = {
   params: { manufacturerId: string }

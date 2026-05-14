@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation'
-import { getStudioSession } from '@/lib/studio-auth/session'
+import { getStudioSession, resolvePostLoginPath } from '@/lib/studio-auth/session'
 import { LoginForm } from '@/components/studio/LoginForm'
 
 export default async function LoginPage() {
-  // If the user already has a valid Studio profile, skip the login form
+  // If the user already has a valid Studio profile, send them to the right area directly
   const session = await getStudioSession()
   if (session.profile) {
-    redirect('/dashboard')
+    redirect(resolvePostLoginPath(session))
   }
 
   const envMissing =
