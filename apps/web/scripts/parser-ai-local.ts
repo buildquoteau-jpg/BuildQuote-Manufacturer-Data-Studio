@@ -37,6 +37,26 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
 
+// Load .env.local so ANTHROPIC_API_KEY can be set there (mirrors parser-insert-local pattern)
+function loadEnvFile(filepath: string): void {
+  if (!existsSync(filepath)) return
+  const lines = readFileSync(filepath, 'utf8').split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx < 0) continue
+    const key = trimmed.slice(0, eqIdx).trim()
+    const rawVal = trimmed.slice(eqIdx + 1).split(' #')[0].trim()
+    const val = rawVal.replace(/^["']|["']$/g, '')
+    if (key && !(key in process.env)) {
+      process.env[key] = val
+    }
+  }
+}
+loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+loadEnvFile(path.join(REPO_ROOT, 'apps', 'web', '.env.local'))
+
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
 
 // ----------------------------------------------------------
