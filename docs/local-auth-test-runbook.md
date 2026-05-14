@@ -136,16 +136,107 @@ This confirms the `(protected)` route group layout is working correctly.
 
 ---
 
-## Testing manufacturer_user role (optional)
+## Manufacturer user test
 
-To test the manufacturer_user path:
+Tests the full manufacturer_user login path: login → redirect to manufacturer workspace →
+role-based nav → admin routes blocked → sign out.
 
-1. Create a second auth user in Supabase Studio (e.g. `mfr@test.local`)
-2. In the SQL snippet, change `global_role` to `'manufacturer_user'`
-3. Uncomment the STEP 2 block in the snippet and set the manufacturer slug
-4. Run the snippet with the new user's UUID
-5. Sign in as that user and visit `/auth-check`
-6. Confirm memberships shows the manufacturer ID and role
+Uses a dedicated snippet: `supabase/snippets/local-manufacturer-user-test.sql`
+
+### Step M1 — Create the manufacturer auth user
+
+1. Open Supabase Studio: **http://localhost:54323**
+2. Go to **Authentication → Users → Add user → Create new user**
+3. Enter:
+   - **Email:** `manufacturer@test.local`
+   - **Password:** any password you will remember
+   - **Auto confirm user:** ✅ (required for local dev — skips email confirmation)
+4. Click **Create user**
+
+> The snippet will look up this user by email — you do **not** need to copy the UUID.
+
+### Step M2 — Run the manufacturer test SQL snippet
+
+1. In Supabase Studio, open **SQL Editor**
+2. Open `supabase/snippets/local-manufacturer-user-test.sql`
+3. If you used a different email or want a different manufacturer, edit these two lines at
+   the top of the `DO $$` block:
+   ```sql
+   v_email TEXT := 'manufacturer@test.local';
+   v_slug  TEXT := 'newtechwood';
+   ```
+4. Run the entire file (click **Run** or `Ctrl+Enter`)
+5. Check the **Messages** tab — you should see:
+   ```
+   NOTICE:  Done. profile_id=<uuid>, manufacturer_id=<uuid>
+   ```
+6. The `SELECT` blocks at the bottom also run automatically and show the inserted rows.
+
+**Expected verify output:**
+
+| Column | Expected value |
+|---|---|
+| `global_role` | `manufacturer_user` |
+| `profile_status` | `active` |
+| `manufacturer_name` | `NewTechWood` (or the name matching your slug) |
+| `role` | `manufacturer_admin` |
+| `membership_status` | `active` |
+
+### Step M3 — Sign out of any existing session
+
+If you are signed in as the admin test user, click **Sign out** in the nav (or visit
+`/auth-check` and click the sign-out button there).
+
+**Expected:** Redirected to `/login`.
+
+### Step M4 — Sign in as manufacturer user
+
+1. Open **http://localhost:3000/login**
+2. Enter `manufacturer@test.local` and the password from Step M1
+3. Click **Sign in**
+
+**Expected:** Redirected directly to `/manufacturer/dashboard` — not to `/dashboard`.
+
+### Step M5 — Verify manufacturer nav
+
+On `/manufacturer/dashboard`, confirm:
+
+- ✅ Nav shows: `Dashboard · Documents · Review · Preview · Help · Sign out`
+- ✅ Nav does **not** show: `Manufacturers` (admin link is hidden)
+- ✅ Shell badge reads "Manufacturer" (not "Admin")
+- ✅ Workspace section shows membership role `manufacturer_admin` and status `active`
+- ✅ Placeholder counts are visible (not connected to DB yet — that is expected)
+
+### Step M6 — Confirm /admin/manufacturers is blocked
+
+Navigate to **http://localhost:3000/admin/manufacturers**
+
+**Expected:** Redirected to `/dashboard`, which immediately redirects to
+`/manufacturer/dashboard` (because the user has an active membership).
+The admin page is never displayed.
+
+### Step M7 — Verify session on /auth-check
+
+Navigate to **http://localhost:3000/auth-check**
+
+**Expected:**
+
+| Field | Expected value |
+|---|---|
+| Email | `manufacturer@test.local` |
+| Global role | `manufacturer_user` |
+| Profile status | `active` |
+| Memberships → Count | `1` |
+| Memberships → Role | `manufacturer_admin` |
+| Memberships → Status | `active` |
+
+### Step M8 — Sign out
+
+Click **Sign out** on the `/auth-check` page or anywhere in the nav.
+
+**Expected:** Redirected to `/login`.
+
+Visiting `/manufacturer/dashboard` without signing in should now redirect to `/login`.
 
 ---
 
@@ -165,9 +256,15 @@ To test the manufacturer_user path:
 ## What is NOT tested here
 
 - Production Supabase — not touched in any way
-- RLS policies — not active yet; the protected group is app-level only
+- RLS policies — not active yet; protection is app-level only
 - Invitation flow — not implemented yet
-- Role-based route authorization — `/admin/*` and `/manufacturer/*` are still public
 - Password reset — not implemented yet
 
-These are all covered in later chunks.
+## What IS now tested / active
+
+- App-level route protection via `(protected)` layout group
+- Role-based redirect after login (`buildquote_admin` → `/admin/manufacturers`,
+  `manufacturer_user` with membership → `/manufacturer/dashboard`)
+- Admin routes blocked for `manufacturer_user` role
+- Manufacturer routes blocked for signed-out users and users with no active membership
+- Role-specific nav (admin links hidden from manufacturer users)
