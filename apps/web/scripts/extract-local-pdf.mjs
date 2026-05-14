@@ -35,7 +35,9 @@ import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 
 const require = createRequire(import.meta.url)
-const pdfParse = require('pdf-parse')
+// pdf-parse v2 exports a class, not a function. The v1 pattern of calling
+// pdfParse(buffer) does not work with v2.
+const { PDFParse } = require('pdf-parse')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -246,6 +248,27 @@ Optional:
 
   const originalFilename = path.basename(filePath)
 
+  // ── 3a. Clean up any stuck rows from a previously interrupted run ─────────
+  // If the process was killed before error-handling ran, source_documents rows
+  // can be left in 'extracting' status forever. Mark them failed before inserting
+  // a fresh row so the admin UI doesn't show stuck documents.
+  const { data: stuckRows } = await supabase
+    .from('source_documents')
+    .select('id')
+    .eq('manufacturer_id', mfr.id)
+    .eq('original_filename', originalFilename)
+    .eq('document_name', documentName)
+    .in('status', ['extracting', 'parsing'])
+
+  if (stuckRows && stuckRows.length > 0) {
+    const stuckIds = stuckRows.map((r) => r.id)
+    await supabase
+      .from('source_documents')
+      .update({ status: 'failed', notes: 'Superseded by a later extraction run.' })
+      .in('id', stuckIds)
+    console.log(`  ℹ Marked ${stuckIds.length} stuck document row(s) as failed`)
+  }
+
   // ── 3. Insert source_documents row ────────────────────────────────────────
   const { data: srcDoc, error: srcDocErr } = await supabase
     .from('source_documents')
@@ -296,28 +319,15 @@ Optional:
   console.log(`  ✓ extraction_runs created (${extractionRunId})`)
 
   // ── 5. Extract PDF text per page ───────────────────────────────────────────
+  // pdf-parse v2: new PDFParse({ data }) → getText() → { pages: [{ text, num }] }
   let extractedPages = []
   try {
-    let pageCounter = 0
-    const pageRenderResults = []
-
-    const options = {
-      pagerender: async (pageData) => {
-        pageCounter++
-        const currentPage = pageCounter
-        const textContent = await pageData.getTextContent()
-        const strings = textContent.items
-          .filter((item) => typeof item.str === 'string')
-          .map((item) => item.str)
-        // Join with space; collapse runs of whitespace to single space
-        const pageText = strings.join(' ').replace(/\s+/g, ' ').trim()
-        pageRenderResults.push({ pageNumber: currentPage, text: pageText })
-        return pageText
-      },
-    }
-
-    await pdfParse(pdfBuffer, options)
-    extractedPages = pageRenderResults.sort((a, b) => a.pageNumber - b.pageNumber)
+    const parser = new PDFParse({ data: pdfBuffer })
+    const result = await parser.getText()
+    extractedPages = result.pages.map((p) => ({
+      pageNumber: p.num,
+      text: typeof p.text === 'string' ? p.text.replace(/\s+/g, ' ').trim() : '',
+    }))
   } catch (err) {
     console.error(`ERROR: PDF extraction failed — ${err.message}`)
     await Promise.all([
