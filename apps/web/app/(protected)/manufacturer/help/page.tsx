@@ -1,3 +1,8 @@
+import { getStudioSession } from '@/lib/studio-auth/session'
+import {
+  resolveWorkspaceContext,
+  getManufacturerInfo,
+} from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 
 const HELP_SECTIONS = [
@@ -19,20 +24,52 @@ const HELP_SECTIONS = [
   },
 ]
 
-export default function ManufacturerHelpPage() {
+export default async function ManufacturerHelpPage() {
+  const session = await getStudioSession()
+  const ctx = resolveWorkspaceContext(session)
+
+  let workspaceName: string | null = null
+  if (ctx.found) {
+    const mfrResult = await getManufacturerInfo(ctx.manufacturerId)
+    workspaceName = mfrResult.ok ? mfrResult.manufacturer.name : null
+  }
+
   return (
     <StudioShell role="manufacturer" subtitle="Help & Support">
       <h1 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Help &amp; Support</h1>
 
+      {workspaceName && (
+        <div
+          style={{
+            fontSize: '0.83rem',
+            color: 'var(--ds-text-faint)',
+            marginBottom: '1.25rem',
+            paddingLeft: '0.25rem',
+          }}
+        >
+          Workspace: <strong style={{ color: 'var(--ds-text-sub)' }}>{workspaceName}</strong>
+        </div>
+      )}
+
       {/* Contact */}
-      <div style={{ background: 'var(--ds-card-bg)', border: '1px solid var(--ds-border)', borderRadius: 8, padding: '1.25rem', marginBottom: '1.5rem' }}>
+      <div
+        style={{
+          background: 'var(--ds-card-bg)',
+          border: '1px solid var(--ds-border)',
+          borderRadius: 8,
+          padding: '1.25rem',
+          marginBottom: '1.5rem',
+        }}
+      >
         <h2 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Contact BuildQuote</h2>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '1.2rem' }}>📧</span>
             <div>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.1rem' }}>Email support</div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.1rem' }}>
+                Email support
+              </div>
               <a
                 href="mailto:support@buildquote.com.au?subject=BuildQuote%20Data%20Studio%20Support"
                 style={{ fontSize: '0.875rem', color: 'var(--ds-navy)' }}
@@ -42,10 +79,19 @@ export default function ManufacturerHelpPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: 0.55 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              opacity: 0.55,
+            }}
+          >
             <span style={{ fontSize: '1.2rem' }}>💬</span>
             <div>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.1rem' }}>WhatsApp support</div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.1rem' }}>
+                WhatsApp support
+              </div>
               <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>
                 WhatsApp Business support coming later
               </span>
@@ -65,8 +111,16 @@ export default function ManufacturerHelpPage() {
         ))}
       </div>
 
-      <div style={{ marginTop: '1.5rem', fontSize: '0.82rem', color: 'var(--ds-text-faint)', padding: '0 0.25rem' }}>
-        BuildQuote Data Studio is currently in early development. More documentation will be added as features are connected.
+      <div
+        style={{
+          marginTop: '1.5rem',
+          fontSize: '0.82rem',
+          color: 'var(--ds-text-faint)',
+          padding: '0 0.25rem',
+        }}
+      >
+        BuildQuote Data Studio is currently in early development. More documentation will be
+        added as features are connected.
       </div>
     </StudioShell>
   )

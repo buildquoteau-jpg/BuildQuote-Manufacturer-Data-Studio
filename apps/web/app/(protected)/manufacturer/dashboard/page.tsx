@@ -1,56 +1,119 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
+import {
+  resolveWorkspaceContext,
+  getManufacturerInfo,
+  getWorkspaceCounts,
+} from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { StudioCard } from '@/components/studio/StudioCard'
 
 export default async function ManufacturerDashboardPage() {
   const session = await getStudioSession()
-  // Manufacturer layout already guarantees an active membership exists.
-  const membership = session.memberships[0]
+  const ctx = resolveWorkspaceContext(session)
+
+  // Admin with no manufacturer context
+  if (!ctx.found && ctx.reason === 'admin_no_context') {
+    return (
+      <StudioShell role="manufacturer" subtitle="Admin support access">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Manufacturer workspace</h1>
+        <div className="studio-info">
+          Admin support access. To view a manufacturer workspace, open the manufacturer record
+          from the{' '}
+          <a href="/admin/manufacturers" style={{ color: 'var(--ds-navy)' }}>
+            admin manufacturers list
+          </a>
+          .
+        </div>
+      </StudioShell>
+    )
+  }
+
+  // manufacturer_user with no active memberships (layout redirects these, but handle gracefully)
+  if (!ctx.found) {
+    return (
+      <StudioShell role="manufacturer" subtitle="No workspace">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Manufacturer workspace</h1>
+        <div className="studio-info">
+          No manufacturer workspace assigned. Contact BuildQuote admin to get access.
+        </div>
+      </StudioShell>
+    )
+  }
 
   const displayName = session.profile?.fullName ?? session.profile?.email ?? 'Your workspace'
 
+  const [mfrResult, countsResult] = await Promise.all([
+    getManufacturerInfo(ctx.manufacturerId),
+    getWorkspaceCounts(ctx.manufacturerId),
+  ])
+
+  const manufacturer = mfrResult.ok ? mfrResult.manufacturer : null
+  const counts = countsResult.ok ? countsResult.counts : null
+
+  const workspaceName = manufacturer?.name ?? displayName
+
   return (
-    <StudioShell role="manufacturer" subtitle={displayName}>
-      <h1 style={{ fontSize: '1.25rem', marginBottom: '0.3rem' }}>Dashboard</h1>
+    <StudioShell role="manufacturer" subtitle={workspaceName}>
+      <h1 style={{ fontSize: '1.25rem', marginBottom: '0.3rem' }}>Manufacturer workspace</h1>
       <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-        Welcome to BuildQuote Data Studio. Manage your product data, review extractions, and
-        preview your public page.
+        Review and preview your BuildQuote Data Studio records before publishing.
       </p>
 
-      {/* Workspace summary — real session data, no extra DB query */}
-      {membership && (
-        <div
-          style={{
-            background: 'var(--ds-card-bg)',
-            border: '1px solid var(--ds-border-soft)',
-            borderRadius: 8,
-            padding: '0.75rem 1.1rem',
-            marginBottom: '1.5rem',
-            fontSize: '0.83rem',
-            color: 'var(--ds-text-sub)',
-            display: 'flex',
-            gap: '1.25rem',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}
-        >
+      {/* Workspace summary */}
+      <div
+        style={{
+          background: 'var(--ds-card-bg)',
+          border: '1px solid var(--ds-border-soft)',
+          borderRadius: 8,
+          padding: '0.75rem 1.1rem',
+          marginBottom: '1.5rem',
+          fontSize: '0.83rem',
+          color: 'var(--ds-text-sub)',
+          display: 'flex',
+          gap: '1.25rem',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <span>
+          <span style={{ color: 'var(--ds-text-faint)' }}>Workspace · </span>
+          <strong>{manufacturer?.name ?? '—'}</strong>
+        </span>
+        {manufacturer?.slug && (
           <span>
-            <span style={{ color: 'var(--ds-text-faint)' }}>Workspace · </span>
-            <code style={{ fontSize: '0.78rem', background: 'var(--ds-page-bg)', padding: '0.1rem 0.3rem', borderRadius: 3 }}>
-              {membership.manufacturerId.slice(0, 8)}…
+            <span style={{ color: 'var(--ds-text-faint)' }}>Slug · </span>
+            <code
+              style={{
+                fontSize: '0.78rem',
+                background: 'var(--ds-page-bg)',
+                padding: '0.1rem 0.3rem',
+                borderRadius: 3,
+              }}
+            >
+              {manufacturer.slug}
             </code>
           </span>
-          <span>
-            <span style={{ color: 'var(--ds-text-faint)' }}>Your role · </span>
-            <strong>{membership.role}</strong>
+        )}
+        <span>
+          <span style={{ color: 'var(--ds-text-faint)' }}>Your role · </span>
+          <strong>{ctx.membership.role}</strong>
+        </span>
+        <span>
+          <span style={{ color: 'var(--ds-text-faint)' }}>Status · </span>
+          <span style={{ color: '#166534', fontWeight: 600 }}>
+            {manufacturer?.status ?? ctx.membership.status}
           </span>
-          <span>
-            <span style={{ color: 'var(--ds-text-faint)' }}>Status · </span>
-            <span style={{ color: '#166534', fontWeight: 600 }}>{membership.status}</span>
-          </span>
+        </span>
+        {ctx.allMemberships.length > 1 && (
           <span style={{ color: 'var(--ds-text-faint)', fontStyle: 'italic', marginLeft: 'auto' }}>
-            Manufacturer name connected once DB is wired
+            {ctx.allMemberships.length} workspaces available — showing first
           </span>
+        )}
+      </div>
+
+      {mfrResult.ok === false && (
+        <div className="studio-warn" style={{ marginBottom: '1rem' }}>
+          Could not load workspace details: {mfrResult.error}
         </div>
       )}
 
@@ -58,26 +121,19 @@ export default async function ManufacturerDashboardPage() {
         <StudioCard
           icon="📄"
           title="Documents"
-          description="Upload product guides, install guides, and brochures for extraction."
+          description="View source documents for this workspace."
           href="/manufacturer/documents"
         />
         <StudioCard
-          icon="⚙️"
-          title="Extraction Runs"
-          description="View AI extraction run results from your uploaded documents."
-          disabled
-          href="/manufacturer/dashboard"
-        />
-        <StudioCard
           icon="✅"
-          title="Review Staged Data"
-          description="Verify extracted systems, profiles, components, and colours."
+          title="Review queue"
+          description="Read-only snapshot of extracted records awaiting human verification."
           href="/manufacturer/review"
         />
         <StudioCard
           icon="👁"
-          title="Preview Public Page"
-          description="See how your manufacturer page and system cards will look before publish."
+          title="Preview"
+          description="Private Studio preview of your manufacturer page and systems."
           href="/manufacturer/preview"
         />
         <StudioCard
@@ -90,13 +146,22 @@ export default async function ManufacturerDashboardPage() {
 
       <div className="studio-section">
         <div className="studio-section-heading">Overview</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            gap: '0.75rem',
+          }}
+        >
           {[
-            { label: 'Documents', value: '—', note: 'not connected' },
-            { label: 'Extraction runs', value: '—', note: 'not connected' },
-            { label: 'Staged systems', value: '—', note: 'not connected' },
-            { label: 'Components', value: '—', note: 'not connected' },
-            { label: 'Publish status', value: '—', note: 'not published' },
+            { label: 'Documents', value: counts?.documentCount ?? '—' },
+            { label: 'Staged systems', value: counts?.systemCount ?? '—' },
+            { label: 'Components', value: counts?.componentCount ?? '—' },
+            {
+              label: 'Publish status',
+              value: manufacturer?.status ?? '—',
+              note: 'not published',
+            },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -107,17 +172,27 @@ export default async function ManufacturerDashboardPage() {
                 padding: '0.9rem 1rem',
               }}
             >
-              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--ds-navy)', marginBottom: '0.15rem' }}>
+              <div
+                style={{
+                  fontSize: '1.4rem',
+                  fontWeight: 700,
+                  color: 'var(--ds-navy)',
+                  marginBottom: '0.15rem',
+                }}
+              >
                 {stat.value}
               </div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--ds-text-sub)' }}>{stat.label}</div>
-              <div style={{ fontSize: '0.73rem', color: 'var(--ds-text-faint)' }}>{stat.note}</div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--ds-text-sub)' }}>
+                {stat.label}
+              </div>
+              {stat.note && (
+                <div style={{ fontSize: '0.73rem', color: 'var(--ds-text-faint)' }}>
+                  {stat.note}
+                </div>
+              )}
             </div>
           ))}
         </div>
-        <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', marginTop: '0.5rem' }}>
-          Placeholder counts — database queries not connected yet.
-        </p>
       </div>
     </StudioShell>
   )
