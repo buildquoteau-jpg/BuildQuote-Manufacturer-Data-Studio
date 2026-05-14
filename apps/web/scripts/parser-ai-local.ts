@@ -74,7 +74,7 @@ type Provider = 'anthropic' | 'openai'
 
 const DEFAULT_PROVIDER: Provider = 'anthropic'
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6'
-const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
+const DEFAULT_OPENAI_MODEL = 'gpt-5.5'
 
 // ----------------------------------------------------------
 // Arg parser
@@ -376,12 +376,21 @@ All *_mm and *_m fields must be numbers, never strings.
 
 ---
 
-## Evidence rules
+## Evidence rules (MANDATORY — validation will reject records that violate this)
 
-Every non-null extracted field should appear in field_sources with:
-- field_name, extracted_value (as string), source_page_number, source_chunk_id (use the chunk IDs from input), confidence
+EVERY non-null field MUST have a corresponding entry in field_sources — no exceptions.
+This includes the "name" field on every system, profile, and component.
+A record with name="TC28 Timber Fix" MUST have a field_sources entry { "field_name": "name", ... }.
+Missing field_sources entries for non-null fields will cause dry-run validation to fail.
 
-Use source_chunk_id from the input chunk list. Use source_page_number from the chunk's page_number.
+Each field_sources entry must include:
+- field_name: the exact field name (e.g. "name", "sku", "dimensions")
+- extracted_value: always a string, even if the field is numeric
+- source_page_number: from the chunk's page_number
+- source_chunk_id: exact chunk ID from the input (never invent a chunk ID)
+- confidence: 0.0–1.0
+- is_uncertain: false (or true if genuinely uncertain)
+- parser_note: null (or a string if you need to note something)
 
 ---
 
@@ -585,7 +594,7 @@ async function runOpenAIExtraction(
   try {
     const response = await client.chat.completions.create({
       model,
-      max_tokens: 32768,
+      max_completion_tokens: 65536,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
@@ -598,7 +607,7 @@ async function runOpenAIExtraction(
       console.error(
         `[ERROR] OpenAI response was truncated (finish_reason=length, completion_tokens=${usage?.completion_tokens ?? '?'}).\n` +
         '  The output JSON is incomplete and cannot be parsed.\n' +
-        '  Increase max_tokens or reduce the document size.'
+        '  Increase max_completion_tokens or reduce the document size.'
       )
       process.exit(1)
     }
