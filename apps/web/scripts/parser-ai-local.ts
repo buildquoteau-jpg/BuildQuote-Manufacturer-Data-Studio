@@ -3,23 +3,28 @@
  * apps/web/scripts/parser-ai-local.ts
  *
  * Local-only AI parser command. Reads a parser input bundle produced by
- * parser:bundle, calls the Anthropic API to extract catalogue data, and
+ * parser:bundle, calls the AI provider to extract catalogue data, and
  * writes the raw AI output to .local/parser-ai-outputs/.
  *
  * Usage:
  *   pnpm parser:ai-local -- --input ".local/parser-inputs/<bundle>.json"
- *   pnpm parser:ai-local -- --input "..." --model claude-opus-4-7
+ *   pnpm parser:ai-local -- --input "..." --provider openai
+ *   pnpm parser:ai-local -- --input "..." --provider anthropic --model claude-opus-4-7
+ *   pnpm parser:ai-local -- --input "..." --provider openai --model gpt-4o
  *   pnpm parser:ai-local -- --input "..." --fixture     # skip API call, use mock fixture
  *   pnpm parser:ai-local -- --input "..." --out ".local/parser-ai-outputs/custom.json"
+ *   pnpm parser:ai-local -- --check-keys               # print key diagnostics only
  *
  * Flags:
- *   --input   <path>   Parser input bundle (required)
- *   --model   <model>  Claude model ID (default: claude-sonnet-4-6)
- *   --fixture          Skip API call — write mockNTWAvenueDecking fixture as AI output
- *   --out     <path>   Custom output path (must remain inside .local/)
+ *   --input      <path>   Parser input bundle (required unless --check-keys)
+ *   --provider   <name>   anthropic (default) | openai
+ *   --model      <model>  Model ID override
+ *   --fixture             Skip API call — write mockNTWAvenueDecking fixture as AI output
+ *   --out        <path>   Custom output path (must remain inside .local/)
+ *   --check-keys          Print key presence diagnostics and exit. No values printed.
  *
  * SAFETY RULES:
- *   - Reads ANTHROPIC_API_KEY from env only. Never printed.
+ *   - Reads API keys from env only. Never printed.
  *   - Writes output to .local/parser-ai-outputs/ only (gitignored).
  *   - No Supabase. No DB writes. No service role.
  *   - Raw AI output must be inspected before any future staged write.
@@ -30,6 +35,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { mockNTWAvenueDecking } from '../lib/parser/fixtures'
 import type { ParserOutput } from '../lib/parser/types'
 
@@ -37,7 +43,10 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
 
-// Load .env.local so ANTHROPIC_API_KEY can be set there (mirrors parser-insert-local pattern)
+// ----------------------------------------------------------
+// Env loading (mirrors parser-insert-local pattern)
+// ----------------------------------------------------------
+
 function loadEnvFile(filepath: string): void {
   if (!existsSync(filepath)) return
   const lines = readFileSync(filepath, 'utf8').split('\n')
@@ -57,7 +66,15 @@ function loadEnvFile(filepath: string): void {
 loadEnvFile(path.join(REPO_ROOT, '.env.local'))
 loadEnvFile(path.join(REPO_ROOT, 'apps', 'web', '.env.local'))
 
-const DEFAULT_MODEL = 'claude-sonnet-4-6'
+// ----------------------------------------------------------
+// Defaults
+// ----------------------------------------------------------
+
+type Provider = 'anthropic' | 'openai'
+
+const DEFAULT_PROVIDER: Provider = 'anthropic'
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6'
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
 
 // ----------------------------------------------------------
 // Arg parser
@@ -92,7 +109,39 @@ function isSafeLocalPath(p: string): boolean {
 }
 
 // ----------------------------------------------------------
-// Prompt construction
+// Key diagnostics (--check-keys)
+// ----------------------------------------------------------
+
+function checkKeys(provider: Provider): void {
+  const envFiles = [
+    path.join(REPO_ROOT, '.env.local'),
+    path.join(REPO_ROOT, 'apps', 'web', '.env.local'),
+  ]
+  console.log('\n[parser:ai-local] --check-keys diagnostic')
+  console.log(`  Provider        : ${provider}`)
+  console.log(`  Env files read  : ${envFiles.filter(existsSync).map(f => path.relative(REPO_ROOT, f)).join(', ') || '(none found)'}`)
+  if (provider === 'anthropic') {
+    const k = process.env.ANTHROPIC_API_KEY
+    console.log(`  ANTHROPIC_API_KEY`)
+    console.log(`    present       : ${!!k}`)
+    if (k) {
+      console.log(`    length        : ${k.length}`)
+      console.log(`    starts sk-ant-api03-: ${k.startsWith('sk-ant-api03-')}`)
+    }
+  } else {
+    const k = process.env.OPENAI_API_KEY
+    console.log(`  OPENAI_API_KEY`)
+    console.log(`    present       : ${!!k}`)
+    if (k) {
+      console.log(`    length        : ${k.length}`)
+      console.log(`    starts sk-     : ${k.startsWith('sk-')}`)
+    }
+  }
+  console.log()
+}
+
+// ----------------------------------------------------------
+// Prompt construction (shared by both providers)
 // ----------------------------------------------------------
 
 interface BundleChunk {
@@ -380,14 +429,242 @@ function buildUserPrompt(bundle: Record<string, unknown>, chunks: BundleChunk[])
 }
 
 // ----------------------------------------------------------
+// Parse & validate AI JSON response (shared)
+// ----------------------------------------------------------
+
+function parseAndValidateResponse(
+  rawContent: string,
+  outPath: string,
+  meta: Record<string, unknown>,
+): Record<string, unknown> {
+  const jsonStr = rawContent
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let parserOutput: any
+  try {
+    parserOutput = JSON.parse(jsonStr)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[ERROR] AI response is not valid JSON: ${msg}`)
+    console.error('  Raw response saved for inspection.')
+    writeFileSync(outPath, JSON.stringify({ _meta: { ...meta, parse_error: msg }, raw_response: rawContent, parser_output: null }, null, 2), 'utf8')
+    console.error(`  Saved to: ${outPath}`)
+    process.exit(1)
+  }
+
+  const topLevelKeys = ['systems', 'system_profiles', 'components', 'system_components', 'system_colours']
+  const missing = topLevelKeys.filter(k => !Array.isArray(parserOutput[k]))
+  if (missing.length > 0) {
+    console.warn(`[WARN] AI output missing expected top-level arrays: ${missing.join(', ')}`)
+    console.warn('  Output saved anyway — run parser:dry-run to validate fully.')
+  }
+
+  return parserOutput
+}
+
+// ----------------------------------------------------------
+// Anthropic extraction
+// ----------------------------------------------------------
+
+async function runAnthropicExtraction(
+  bundle: Record<string, unknown>,
+  chunks: BundleChunk[],
+  outPath: string,
+  model: string,
+  docId: string,
+  docName: string,
+  resolvedInput: string,
+): Promise<void> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    console.error(
+      '\n[ERROR] Missing ANTHROPIC_API_KEY.\n' +
+      '        Set it in .env.local or your shell environment.\n' +
+      '        No output written.\n' +
+      '        To use OpenAI instead: --provider openai\n' +
+      '        To test without an API key: --fixture\n'
+    )
+    process.exit(1)
+  }
+
+  console.log(`  Provider      : anthropic`)
+  console.log(`  Model         : ${model}`)
+
+  const client = new Anthropic({ apiKey })
+  const systemPrompt = buildSystemPrompt()
+  const userPrompt = buildUserPrompt(bundle, chunks)
+
+  let rawContent: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let usage: any = null
+
+  try {
+    const response = await client.messages.create({
+      model,
+      max_tokens: 16000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    })
+    usage = response.usage
+    // Detect truncation before attempting to parse — truncated JSON is always invalid.
+    if (response.stop_reason === 'max_tokens') {
+      console.error(
+        `[ERROR] Anthropic response was truncated (stop_reason=max_tokens, output_tokens=${usage?.output_tokens ?? '?'}).\n` +
+        '  The output JSON is incomplete and cannot be parsed.\n' +
+        '  Try a model with higher output capacity or reduce the document size.'
+      )
+      process.exit(1)
+    }
+    const textBlock = response.content.find(b => b.type === 'text')
+    if (!textBlock || textBlock.type !== 'text') {
+      console.error('[ERROR] Anthropic API returned no text block. No output written.')
+      process.exit(1)
+    }
+    rawContent = textBlock.text.trim()
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[ERROR] Anthropic API call failed: ${msg}`)
+    console.error('  No output written.')
+    process.exit(1)
+  }
+
+  const metaBase = { generated_at: new Date().toISOString(), generator: 'parser-ai-local.ts', fixture_mode: false, provider: 'anthropic', model, source_bundle: resolvedInput, bundle_document_id: docId, bundle_document_name: docName }
+  const parserOutput = parseAndValidateResponse(rawContent, outPath, metaBase)
+
+  const file = {
+    _meta: {
+      ...metaBase,
+      usage: usage ? { input_tokens: usage.input_tokens, output_tokens: usage.output_tokens } : null,
+    },
+    parser_output: parserOutput,
+  }
+  writeFileSync(outPath, JSON.stringify(file, null, 2), 'utf8')
+  printCounts(parserOutput, usage ? `${usage.input_tokens} in / ${usage.output_tokens} out` : null, outPath)
+}
+
+// ----------------------------------------------------------
+// OpenAI extraction
+// ----------------------------------------------------------
+
+async function runOpenAIExtraction(
+  bundle: Record<string, unknown>,
+  chunks: BundleChunk[],
+  outPath: string,
+  model: string,
+  docId: string,
+  docName: string,
+  resolvedInput: string,
+): Promise<void> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    console.error(
+      '\n[ERROR] Missing OPENAI_API_KEY.\n' +
+      '        Set it in .env.local or your shell environment.\n' +
+      '        No output written.\n' +
+      '        To use Anthropic instead: --provider anthropic\n' +
+      '        To test without an API key: --fixture\n'
+    )
+    process.exit(1)
+  }
+
+  console.log(`  Provider      : openai`)
+  console.log(`  Model         : ${model}`)
+
+  const client = new OpenAI({ apiKey })
+  const systemPrompt = buildSystemPrompt()
+  const userPrompt = buildUserPrompt(bundle, chunks)
+
+  let rawContent: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let usage: any = null
+
+  try {
+    const response = await client.chat.completions.create({
+      model,
+      max_tokens: 32768,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    })
+    usage = response.usage
+    const choice = response.choices[0]
+    if (choice?.finish_reason === 'length') {
+      console.error(
+        `[ERROR] OpenAI response was truncated (finish_reason=length, completion_tokens=${usage?.completion_tokens ?? '?'}).\n` +
+        '  The output JSON is incomplete and cannot be parsed.\n' +
+        '  Increase max_tokens or reduce the document size.'
+      )
+      process.exit(1)
+    }
+    rawContent = choice?.message?.content?.trim() ?? ''
+    if (!rawContent) {
+      console.error('[ERROR] OpenAI API returned empty content. No output written.')
+      process.exit(1)
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[ERROR] OpenAI API call failed: ${msg}`)
+    console.error('  No output written.')
+    process.exit(1)
+  }
+
+  const metaBase = { generated_at: new Date().toISOString(), generator: 'parser-ai-local.ts', fixture_mode: false, provider: 'openai', model, source_bundle: resolvedInput, bundle_document_id: docId, bundle_document_name: docName }
+  const parserOutput = parseAndValidateResponse(rawContent, outPath, metaBase)
+
+  const file = {
+    _meta: {
+      ...metaBase,
+      usage: usage ? { prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens, total_tokens: usage.total_tokens } : null,
+    },
+    parser_output: parserOutput,
+  }
+  writeFileSync(outPath, JSON.stringify(file, null, 2), 'utf8')
+  printCounts(parserOutput, usage ? `${usage.prompt_tokens} in / ${usage.completion_tokens} out` : null, outPath)
+}
+
+// ----------------------------------------------------------
+// Shared output summary
+// ----------------------------------------------------------
+
+function printCounts(parserOutput: Record<string, unknown>, tokenSummary: string | null, outPath: string): void {
+  console.log(`  Systems       : ${Array.isArray(parserOutput.systems) ? parserOutput.systems.length : '?'}`)
+  console.log(`  Profiles      : ${Array.isArray(parserOutput.system_profiles) ? parserOutput.system_profiles.length : '?'}`)
+  console.log(`  Components    : ${Array.isArray(parserOutput.components) ? parserOutput.components.length : '?'}`)
+  console.log(`  Colours       : ${Array.isArray(parserOutput.system_colours) ? parserOutput.system_colours.length : '?'}`)
+  if (tokenSummary) console.log(`  Tokens        : ${tokenSummary}`)
+  console.log(`  Output        : ${outPath}`)
+  console.log()
+  console.log('  Raw AI output saved. Run parser:dry-run --ai-output to validate.')
+  console.log('  No DB writes performed.')
+  console.log()
+}
+
+// ----------------------------------------------------------
 // Main
 // ----------------------------------------------------------
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const useFixture = args.fixture === true
-  const model = typeof args.model === 'string' ? args.model : DEFAULT_MODEL
 
+  const providerArg = typeof args.provider === 'string' ? args.provider.toLowerCase() : DEFAULT_PROVIDER
+  const provider: Provider = providerArg === 'openai' ? 'openai' : 'anthropic'
+
+  const defaultModel = provider === 'openai' ? DEFAULT_OPENAI_MODEL : DEFAULT_ANTHROPIC_MODEL
+  const model = typeof args.model === 'string' ? args.model : defaultModel
+
+  // ── --check-keys mode ──────────────────────────────────────────
+  if (args['check-keys']) {
+    checkKeys(provider)
+    return
+  }
+
+  // ── Validate --input ──────────────────────────────────────────
   const inputArg = args.input
   if (!inputArg || typeof inputArg !== 'string') {
     console.error('[ERROR] --input <path> is required')
@@ -419,7 +696,7 @@ async function main() {
   const docName: string = bundle.document?.document_name ?? 'unknown'
   const chunks: BundleChunk[] = bundle.chunks ?? []
 
-  // Resolve output path
+  // ── Resolve output path (includes provider in filename) ───────
   const outDir = path.join(REPO_ROOT, '.local', 'parser-ai-outputs')
   const docSlug = docName
     .toLowerCase()
@@ -427,7 +704,7 @@ async function main() {
     .replace(/^-|-$/g, '')
     .slice(0, 60)
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  const defaultOut = path.join(outDir, `${docSlug}-${timestamp}.json`)
+  const defaultOut = path.join(outDir, `${docSlug}-${provider}-${timestamp}.json`)
 
   let outPath: string
   if (args.out && typeof args.out === 'string') {
@@ -444,11 +721,13 @@ async function main() {
 
   mkdirSync(path.dirname(outPath), { recursive: true })
 
+  console.log('\n[parser:ai-local] Running AI extraction')
+  console.log(`  Document      : ${docName}`)
+  console.log(`  Chunks        : ${chunks.length}`)
+
   // ── Fixture mode ───────────────────────────────────────────────
-  if (useFixture) {
-    console.log('\n[parser:ai-local] Fixture mode — skipping API call')
-    console.log(`  Document      : ${docName}`)
-    console.log(`  Chunks        : ${chunks.length}`)
+  if (args.fixture === true) {
+    console.log('  Mode          : fixture (no API call)')
 
     const fixtureOutput: ParserOutput = {
       ...mockNTWAvenueDecking,
@@ -461,6 +740,7 @@ async function main() {
         generator: 'parser-ai-local.ts',
         fixture_mode: true,
         fixture_label: 'mockNTWAvenueDecking',
+        provider: 'fixture',
         model: 'fixture (no API call)',
         source_bundle: resolvedInput,
         bundle_document_id: docId,
@@ -471,145 +751,16 @@ async function main() {
     }
 
     writeFileSync(outPath, JSON.stringify(file, null, 2), 'utf8')
-
-    console.log(`  Fixture       : mockNTWAvenueDecking`)
-    console.log(`  Systems       : ${fixtureOutput.systems.length}`)
-    console.log(`  Profiles      : ${fixtureOutput.system_profiles.length}`)
-    console.log(`  Components    : ${fixtureOutput.components.length}`)
-    console.log(`  Colours       : ${fixtureOutput.system_colours.length}`)
-    console.log(`  Output        : ${outPath}`)
-    console.log()
+    printCounts(fixtureOutput as unknown as Record<string, unknown>, null, outPath)
     return
   }
 
-  // ── API mode ───────────────────────────────────────────────────
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.error(
-      '\n[ERROR] Missing required AI API key env var.\n' +
-      '        Set ANTHROPIC_API_KEY in .env.local or your shell environment.\n' +
-      '        No output written.\n' +
-      '        To test without an API key: pnpm parser:ai-local -- --input "..." --fixture\n'
-    )
-    process.exit(1)
+  // ── Live API mode ──────────────────────────────────────────────
+  if (provider === 'openai') {
+    await runOpenAIExtraction(bundle, chunks, outPath, model, docId, docName, resolvedInput)
+  } else {
+    await runAnthropicExtraction(bundle, chunks, outPath, model, docId, docName, resolvedInput)
   }
-
-  console.log('\n[parser:ai-local] Running AI extraction')
-  console.log(`  Document      : ${docName}`)
-  console.log(`  Chunks        : ${chunks.length}`)
-  console.log(`  Model         : ${model}`)
-
-  const client = new Anthropic({ apiKey })
-  const systemPrompt = buildSystemPrompt()
-  const userPrompt = buildUserPrompt(bundle, chunks)
-
-  let rawContent: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let usage: any = null
-
-  try {
-    const response = await client.messages.create({
-      model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    })
-
-    usage = response.usage
-
-    const textBlock = response.content.find(b => b.type === 'text')
-    if (!textBlock || textBlock.type !== 'text') {
-      console.error('[ERROR] API returned no text content block. No output written.')
-      process.exit(1)
-    }
-    rawContent = textBlock.text.trim()
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`[ERROR] API call failed: ${msg}`)
-    console.error('  No output written.')
-    process.exit(1)
-  }
-
-  // Strip accidental markdown fences if present
-  const jsonStr = rawContent
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim()
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let parserOutput: any
-  try {
-    parserOutput = JSON.parse(jsonStr)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`[ERROR] AI response is not valid JSON: ${msg}`)
-    console.error('  Raw response saved to output file for inspection.')
-    // Still save the raw response so it can be inspected
-    const errorFile = {
-      _meta: {
-        generated_at: new Date().toISOString(),
-        generator: 'parser-ai-local.ts',
-        fixture_mode: false,
-        model,
-        source_bundle: resolvedInput,
-        bundle_document_id: docId,
-        bundle_document_name: docName,
-        usage,
-        parse_error: msg,
-      },
-      raw_response: rawContent,
-      parser_output: null,
-    }
-    writeFileSync(outPath, JSON.stringify(errorFile, null, 2), 'utf8')
-    console.error(`  Saved to: ${outPath}`)
-    process.exit(1)
-  }
-
-  // Basic top-level shape check
-  const topLevelKeys = ['systems', 'system_profiles', 'components', 'system_components', 'system_colours']
-  const missing = topLevelKeys.filter(k => !Array.isArray(parserOutput[k]))
-  if (missing.length > 0) {
-    console.warn(`[WARN] AI output missing expected top-level arrays: ${missing.join(', ')}`)
-    console.warn('  Output saved anyway — run parser:dry-run to validate fully.')
-  }
-
-  const file = {
-    _meta: {
-      generated_at: new Date().toISOString(),
-      generator: 'parser-ai-local.ts',
-      fixture_mode: false,
-      model,
-      source_bundle: resolvedInput,
-      bundle_document_id: docId,
-      bundle_document_name: docName,
-      usage: usage
-        ? { input_tokens: usage.input_tokens, output_tokens: usage.output_tokens }
-        : null,
-    },
-    parser_output: parserOutput,
-  }
-
-  writeFileSync(outPath, JSON.stringify(file, null, 2), 'utf8')
-
-  const systemCount = Array.isArray(parserOutput.systems) ? parserOutput.systems.length : '?'
-  const profileCount = Array.isArray(parserOutput.system_profiles) ? parserOutput.system_profiles.length : '?'
-  const componentCount = Array.isArray(parserOutput.components) ? parserOutput.components.length : '?'
-  const colourCount = Array.isArray(parserOutput.system_colours) ? parserOutput.system_colours.length : '?'
-
-  console.log(`  Systems       : ${systemCount}`)
-  console.log(`  Profiles      : ${profileCount}`)
-  console.log(`  Components    : ${componentCount}`)
-  console.log(`  Colours       : ${colourCount}`)
-  if (usage) {
-    console.log(`  Input tokens  : ${usage.input_tokens}`)
-    console.log(`  Output tokens : ${usage.output_tokens}`)
-  }
-  console.log(`  Output        : ${outPath}`)
-  console.log()
-  console.log('  Raw AI output saved. Run parser:dry-run --ai-output to validate.')
-  console.log('  No DB writes performed.')
-  console.log()
 }
 
 main()
