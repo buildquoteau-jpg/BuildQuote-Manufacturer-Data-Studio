@@ -80,18 +80,30 @@ def _doc_to_json_str(doc):
             )
 
 
-def extract(input_path, document_id, out_dir):
-    from docling.document_converter import DocumentConverter  # noqa: PLC0415
+def extract(input_path, document_id, out_dir, no_ocr=False):
+    from docling.datamodel.base_models import InputFormat  # noqa: PLC0415
+    from docling.datamodel.pipeline_options import PdfPipelineOptions  # noqa: PLC0415
+    from docling.document_converter import DocumentConverter, PdfFormatOption  # noqa: PLC0415
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[docling] Converting: {input_path.name}")
-    print(
-        "[docling] Note: first run may download AI models (~1-2 GB). "
-        "This is expected."
-    )
+    if no_ocr:
+        print("[docling] OCR disabled — treating as text-native PDF.")
+    else:
+        print(
+            "[docling] Note: first run may download AI models (~1-2 GB). "
+            "This is expected."
+        )
 
-    converter = DocumentConverter()
+    pipeline_options = PdfPipelineOptions()
+    pipeline_options.do_ocr = not no_ocr
+
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+        }
+    )
     result = converter.convert(str(input_path))
     doc = result.document
 
@@ -161,6 +173,15 @@ def main():
             "Defaults to an auto-named subfolder based on the input filename."
         ),
     )
+    parser.add_argument(
+        "--no-ocr",
+        action="store_true",
+        default=False,
+        help=(
+            "Disable OCR. Use for text-native PDFs (not scanned). "
+            "Avoids memory crashes on large images in brochures."
+        ),
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -173,7 +194,7 @@ def main():
     out_dir = _resolve_output_dir(args.out, input_path.stem, ts)
 
     try:
-        extract(input_path, args.document_id, out_dir)
+        extract(input_path, args.document_id, out_dir, no_ocr=args.no_ocr)
     except ImportError as exc:
         sys.exit(
             f"[ERROR] Docling import failed: {exc}\n\n"

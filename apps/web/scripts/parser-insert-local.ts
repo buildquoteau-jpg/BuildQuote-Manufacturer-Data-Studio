@@ -54,7 +54,7 @@ function loadEnvFile(filepath: string): void {
     const key = trimmed.slice(0, eqIdx).trim()
     const rawVal = trimmed.slice(eqIdx + 1).split(' #')[0].trim()
     const val = rawVal.replace(/^["']|["']$/g, '')
-    if (key && !(key in process.env)) {
+    if (key && !process.env[key]) {
       process.env[key] = val
     }
   }

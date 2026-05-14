@@ -58,7 +58,7 @@ function loadEnvFile(filepath: string): void {
     const key = trimmed.slice(0, eqIdx).trim()
     const rawVal = trimmed.slice(eqIdx + 1).split(' #')[0].trim()
     const val = rawVal.replace(/^["']|["']$/g, '')
-    if (key && !(key in process.env)) {
+    if (key && !process.env[key]) {
       process.env[key] = val
     }
   }
@@ -512,19 +512,21 @@ async function runAnthropicExtraction(
   let usage: any = null
 
   try {
-    const response = await client.messages.create({
+    // Use streaming to avoid the 10-minute non-streaming timeout on large outputs.
+    const stream = client.messages.stream({
       model,
-      max_tokens: 16000,
+      max_tokens: 64000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
+    const response = await stream.finalMessage()
     usage = response.usage
     // Detect truncation before attempting to parse — truncated JSON is always invalid.
     if (response.stop_reason === 'max_tokens') {
       console.error(
         `[ERROR] Anthropic response was truncated (stop_reason=max_tokens, output_tokens=${usage?.output_tokens ?? '?'}).\n` +
         '  The output JSON is incomplete and cannot be parsed.\n' +
-        '  Try a model with higher output capacity or reduce the document size.'
+        '  Reduce the document size or split into smaller bundles.'
       )
       process.exit(1)
     }
@@ -583,7 +585,7 @@ async function runOpenAIExtraction(
   console.log(`  Provider      : openai`)
   console.log(`  Model         : ${model}`)
 
-  const client = new OpenAI({ apiKey })
+  const client = new OpenAI({ apiKey, timeout: 600_000 })
   const systemPrompt = buildSystemPrompt()
   const userPrompt = buildUserPrompt(bundle, chunks)
 
@@ -592,9 +594,11 @@ async function runOpenAIExtraction(
   let usage: any = null
 
   try {
+    // gpt-5.5 supports up to 65536; older gpt-4.x models cap at 32768
+    const maxCompletionTokens = model.startsWith('gpt-5') ? 65536 : 32768
     const response = await client.chat.completions.create({
       model,
-      max_completion_tokens: 65536,
+      max_completion_tokens: maxCompletionTokens,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
