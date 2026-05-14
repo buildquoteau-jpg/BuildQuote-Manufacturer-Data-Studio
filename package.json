@@ -12,7 +12,8 @@
     "parser:ai-local": "pnpm --filter web run parser:ai-local",
     "parser:dry-run": "pnpm --filter web run parser:dry-run",
     "parser:insert-preview": "pnpm --filter web run parser:insert-preview",
-    "parser:insert-local": "pnpm --filter web run parser:insert-local"
+    "parser:insert-local": "pnpm --filter web run parser:insert-local",
+    "parser:verify-local-insert": "pnpm --filter web run parser:verify-local-insert"
   },
   "engines": {
     "node": ">=18"

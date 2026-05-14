@@ -142,7 +142,60 @@ staged_system_colours / staged_system_components
 field_verifications / parser_field_evidence   ← this command
 ```
 
+## Verification after insert
+
+After `parser:insert-local` completes, verify what landed in the DB:
+
+```sh
+LOCAL_ONLY_ALLOW_SERVICE_ROLE=true pnpm parser:verify-local-insert -- \
+  --document <source_document_id>
+```
+
+With preview comparison:
+
+```sh
+LOCAL_ONLY_ALLOW_SERVICE_ROLE=true pnpm parser:verify-local-insert -- \
+  --document <source_document_id> \
+  --preview ".local/parser-insert-previews/<preview>.json" \
+  --strict
+```
+
+The verify command is read-only. It prints staged row counts, orphan link
+warnings, duplicate code/SKU warnings, and optionally compares against the
+insert-preview expected counts. With `--strict` it exits non-zero on any
+count mismatch or structural issue.
+
+## Parser inspection page
+
+The admin UI has a read-only inspection page showing all staged data for a
+document. After insert, visit:
+
+```
+/admin/manufacturers/<manufacturerId>/documents/<documentId>/parser
+```
+
+The page shows systems, profiles, components, colours, system–component links,
+field verifications, and parser field evidence. No write controls. No storage
+paths, keys, or secrets are shown. Row counts are capped at 150 per table
+for the preview — use the CLI verifier or Supabase Studio for full data.
+
+The inspection page can also be reached via the "View parser staging inspection"
+link at the bottom of the document detail page.
+
+## How to compare inserted rows to preview
+
+1. Run `parser:insert-preview` and save the report:
+   `.local/parser-insert-previews/<name>.json`
+2. Run `parser:insert-local` (all 9 gates must pass)
+3. Run `parser:verify-local-insert --preview <preview-path> --strict`
+   The CLI compares `row_counts` from the preview against actual DB counts.
+4. Alternatively, open the parser inspection page and compare
+   `Staged row counts` against the `insert_order` counts in the preview JSON.
+
 ## Production note
 
 This script refuses to run if `NEXT_PUBLIC_SUPABASE_URL` is not local. The
 production Supabase project is never touched by any local CLI script.
+
+All inspection and verification commands are read-only. No publish or export
+is implemented.

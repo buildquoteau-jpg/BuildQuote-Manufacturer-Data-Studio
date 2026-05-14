@@ -189,7 +189,8 @@ async function main(): Promise<void> {
   console.log(`[gate ok]  input/ai-output paths are under .local/ subdirs`)
 
   // ── Load bundle + AI output ────────────────────────────────────────────────
-  let bundle: { documentId: string; manufacturerId: string }
+  let bundle: { document?: { id?: string }; manufacturer?: { id?: string } }
+  let aiOutputFile: { parser_output?: ParserOutput }
   let aiOutput: ParserOutput
 
   try {
@@ -199,17 +200,22 @@ async function main(): Promise<void> {
     process.exit(1)
   }
   try {
-    aiOutput = JSON.parse(readFileSync(aiOutputPath, 'utf8'))
+    aiOutputFile = JSON.parse(readFileSync(aiOutputPath, 'utf8'))
   } catch (e) {
     console.error(`[ERROR] Failed to parse --ai-output JSON: ${(e as Error).message}`)
     process.exit(1)
   }
+  if (!aiOutputFile.parser_output) {
+    console.error('[ERROR] AI output file has no parser_output field.')
+    process.exit(1)
+  }
+  aiOutput = aiOutputFile.parser_output
 
-  const sourceDocumentId: string = bundle.documentId
-  const manufacturerId: string = bundle.manufacturerId
+  const sourceDocumentId: string = bundle.document?.id ?? ''
+  const manufacturerId: string = bundle.manufacturer?.id ?? ''
 
   if (!sourceDocumentId || !manufacturerId) {
-    console.error('[ERROR] Bundle is missing documentId or manufacturerId')
+    console.error('[ERROR] Bundle is missing document.id or manufacturer.id')
     process.exit(1)
   }
 
@@ -286,7 +292,7 @@ async function main(): Promise<void> {
   // ── Gate 8: manufacturer_id exists in local DB ────────────────────────────
   console.log('\n[gate]     Checking manufacturer_id exists in local DB...')
   const { data: mfgCheck, error: mfgErr } = await supabase
-    .from('manufacturers')
+    .from('data_studio_manufacturers')
     .select('id')
     .eq('id', manufacturerId)
     .maybeSingle()
@@ -380,6 +386,34 @@ async function main(): Promise<void> {
     source_document_id: sourceDocumentId,
   }
   const finalPlan = planParserOutputInsertion(aiOutput, realContext)
+
+  // ── Patch placeholder IDs with real values ────────────────────────────────
+  // The planner takes source_document_id, source_chunk_id, and manufacturer_id
+  // from parser output candidates, which may contain fixture/placeholder UUIDs.
+  // Replace source_document_id/manufacturer_id with the real bundle values.
+  // Null out source_chunk_id values: fixture chunks are placeholder UUIDs that
+  // don't exist in the local DB (FK → document_chunks.id would fail). For real
+  // AI output, chunks come from the bundle and are valid, but we null them here
+  // to keep the contract simple — source_chunk_id FK is ON DELETE SET NULL and
+  // the field is optional tracing metadata only.
+  for (const row of finalPlan.stagedSystems) {
+    if (row.source_document_id !== sourceDocumentId) row.source_document_id = sourceDocumentId
+    if (row.manufacturer_id !== manufacturerId) row.manufacturer_id = manufacturerId
+    row.source_chunk_id = null
+  }
+  for (const row of finalPlan.stagedComponents) {
+    if (row.source_document_id !== sourceDocumentId) row.source_document_id = sourceDocumentId
+    if (row.manufacturer_id !== manufacturerId) row.manufacturer_id = manufacturerId
+    row.source_chunk_id = null
+  }
+  for (const row of finalPlan.fieldVerifications) {
+    if (row.source_document_id !== sourceDocumentId) row.source_document_id = sourceDocumentId
+    row.source_chunk_id = null
+  }
+  for (const row of finalPlan.parserFieldEvidence) {
+    if (row.source_document_id !== sourceDocumentId) row.source_document_id = sourceDocumentId
+    row.source_chunk_id = null
+  }
 
   // ── Call insert RPC ────────────────────────────────────────────────────────
   console.log('\n[insert]   Calling insert_parser_output_plan_v1 RPC...')

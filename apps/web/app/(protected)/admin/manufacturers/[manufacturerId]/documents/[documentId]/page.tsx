@@ -406,6 +406,22 @@ export default async function AdminDocumentDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {/* Parser inspection link */}
+      <div className="studio-section">
+        <div className="studio-section-heading">Parser staging inspection</div>
+        <div style={{ background: 'var(--ds-card-bg)', border: '1px solid var(--ds-border)', borderRadius: 8, padding: '0.75rem 1.1rem', fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>
+          <p style={{ margin: '0 0 0.5rem' }}>
+            After running <code>parser:insert-local</code>, review what landed in the staged tables:
+          </p>
+          <a
+            href={`/admin/manufacturers/${manufacturerId}/documents/${documentId}/parser`}
+            style={{ display: 'inline-block', fontSize: '0.83rem', color: 'var(--ds-text)', fontWeight: 600, textDecoration: 'underline' }}
+          >
+            View parser staging inspection →
+          </a>
+        </div>
+      </div>
+
       {/* Footer note */}
       <div
         style={{

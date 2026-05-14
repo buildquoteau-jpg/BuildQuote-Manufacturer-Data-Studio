@@ -12,7 +12,8 @@
     "parser:ai-local": "tsx scripts/parser-ai-local.ts",
     "parser:dry-run": "tsx scripts/parser-dry-run.ts",
     "parser:insert-preview": "tsx scripts/parser-insert-preview.ts",
-    "parser:insert-local": "tsx scripts/parser-insert-local.ts"
+    "parser:insert-local": "tsx scripts/parser-insert-local.ts",
+    "parser:verify-local-insert": "tsx scripts/parser-verify-local-insert.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
