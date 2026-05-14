@@ -1,30 +1,49 @@
 import { NextResponse } from 'next/server'
+import { createStudioServerClient } from '@/lib/supabase/server'
 
 /**
- * Auth callback route — stub only.
+ * Auth callback route.
  *
- * This route exists to handle the redirect from Supabase Auth after OAuth or
- * magic-link sign-in. It is not functional yet.
+ * Handles the redirect from Supabase Auth after:
+ *   - Magic link sign-in (PKCE code exchange)
+ *   - OAuth provider redirect (future)
  *
- * When real auth is wired:
- *   1. Install @supabase/ssr
- *   2. Exchange the `code` query param for a session:
- *        const { code } = url.searchParams
- *        const supabase = createServerClient(...)
- *        await supabase.auth.exchangeCodeForSession(code)
- *   3. Redirect to /dashboard on success, /login?error=... on failure.
+ * Not needed for email + password sign-in (V1 default).
+ * This route is safe to leave in place — it only activates when Supabase
+ * sends a ?code= parameter (i.e. only during magic link or OAuth flows).
  *
- * Do not implement real code exchange until @supabase/ssr is installed and
- * the session model is confirmed.
+ * Security:
+ *   - Only internal relative paths are permitted for post-auth redirects.
+ *   - The `next` query param is validated to start with "/" before use.
+ *   - Auth codes are never reflected back in response URLs.
  */
 export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const next = url.searchParams.get('next') ?? '/login'
+  const { searchParams, origin } = new URL(request.url)
+  const code = searchParams.get('code')
+  const nextParam = searchParams.get('next') ?? '/dashboard'
 
-  // Stub: ignore any auth code and redirect back to login with a shell notice.
-  const redirectUrl = new URL('/login', url.origin)
-  redirectUrl.searchParams.set('notice', 'auth-callback-not-wired')
+  // Validate next — must be a relative path to prevent open redirect
+  const next = nextParam.startsWith('/') ? nextParam : '/dashboard'
 
-  void next // will be used by real implementation
-  return NextResponse.redirect(redirectUrl)
+  if (code) {
+    try {
+      const supabase = createStudioServerClient()
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (error) {
+        return NextResponse.redirect(
+          `${origin}/login?error=invalid-link`,
+        )
+      }
+
+      // Code exchanged successfully — redirect to intended destination
+      return NextResponse.redirect(`${origin}${next}`)
+    } catch {
+      // createStudioServerClient() throws if env vars are missing
+      return NextResponse.redirect(`${origin}/login?error=not-configured`)
+    }
+  }
+
+  // No code present — redirect to login
+  return NextResponse.redirect(`${origin}/login`)
 }

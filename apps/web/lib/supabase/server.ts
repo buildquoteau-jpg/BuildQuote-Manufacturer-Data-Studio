@@ -1,28 +1,44 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 /**
- * Server-side Supabase client factory using the public anon key only.
+ * Creates a server-side Supabase client that reads/writes session cookies
+ * via the Next.js request/response cookie store.
  *
- * SHELL NOTE: Uses the base @supabase/supabase-js createClient, which does not
- * read or write Next.js request cookies. This means session tokens set by
- * Supabase Auth are not accessible in server components with this client.
+ * Uses the public anon key only. Never passes a service role key.
  *
- * When real auth is wired:
- *   1. Install @supabase/ssr  (pnpm add @supabase/ssr)
- *   2. Replace this factory with createServerClient from @supabase/ssr, passing
- *      the Next.js cookies() store so session cookies are read correctly.
- *   3. Update session.ts to call supabase.auth.getUser() from the ssr client.
+ * Call from Server Components, Server Actions, and Route Handlers.
+ * Do not import from client components.
  *
- * Never add the service role key to this module.
+ * The setAll handler catches errors silently because Server Components
+ * operate in a read-only cookie context. Session refresh in read-only
+ * contexts requires either middleware or the auth callback route.
  */
-export function getServerSupabaseClient(): SupabaseClient | null {
-  if (!url || !anonKey) return null
-  return createClient(url, anonKey)
-}
+export function createStudioServerClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export function isServerSupabaseConfigured(): boolean {
-  return Boolean(url && anonKey)
+  if (!url) throw new Error('Missing env var: NEXT_PUBLIC_SUPABASE_URL')
+  if (!anonKey) throw new Error('Missing env var: NEXT_PUBLIC_SUPABASE_ANON_KEY')
+
+  const cookieStore = cookies()
+
+  return createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll()
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          )
+        } catch {
+          // Server Component context — cookies are read-only here.
+          // Token refresh is handled by the auth callback route.
+          // Add middleware later if continuous token refresh is needed.
+        }
+      },
+    },
+  })
 }

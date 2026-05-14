@@ -1,27 +1,43 @@
-import { getStudioSession } from '@/lib/studio/session'
+import { redirect } from 'next/navigation'
+import { getStudioSession } from '@/lib/studio-auth/session'
+import { LoginForm } from '@/components/studio/LoginForm'
 
 export default async function LoginPage() {
+  // If the user already has a valid Studio profile, skip the login form
   const session = await getStudioSession()
+  if (session.profile) {
+    redirect('/dashboard')
+  }
+
+  const envMissing =
+    !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   return (
     <div
       className="studio-page"
-      style={{ justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem' }}
+      style={{
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        padding: '1rem',
+      }}
     >
       <div style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h1 style={{ fontSize: '1.4rem', marginBottom: '0.25rem' }}>BuildQuote Data Studio</h1>
           <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.9rem', margin: 0 }}>
-            Private manufacturer / admin login
+            Private manufacturer and BuildQuote admin workspace
           </p>
         </div>
 
-        <div className="studio-warn" style={{ marginBottom: '1.5rem', fontSize: '0.83rem' }}>
-          Auth shell only — sign-in is not fully wired yet.{' '}
-          {session.reason === 'ENV_MISSING'
-            ? 'Supabase env vars missing.'
-            : 'Session reads not implemented.'}
-        </div>
+        {envMissing && (
+          <div className="studio-warn" style={{ marginBottom: '1.5rem', fontSize: '0.83rem' }}>
+            Supabase environment variables are not configured. Add{' '}
+            <code>NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
+            <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{' '}
+            <code>apps/web/.env.local</code>.
+          </div>
+        )}
 
         <div
           style={{
@@ -31,87 +47,21 @@ export default async function LoginPage() {
             padding: '1.75rem',
           }}
         >
-          <h2 style={{ fontSize: '1.05rem', marginBottom: '1.25rem' }}>Sign in</h2>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                marginBottom: '0.35rem',
-                color: 'var(--ds-text-sub)',
-              }}
-            >
-              Email
-            </label>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              style={{
-                width: '100%',
-                padding: '0.55rem 0.75rem',
-                border: '1px solid var(--ds-border)',
-                borderRadius: 6,
-                fontSize: '0.9rem',
-                background: 'var(--ds-page-bg)',
-                color: 'var(--ds-text)',
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                marginBottom: '0.35rem',
-                color: 'var(--ds-text-sub)',
-              }}
-            >
-              Password
-            </label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              style={{
-                width: '100%',
-                padding: '0.55rem 0.75rem',
-                border: '1px solid var(--ds-border)',
-                borderRadius: 6,
-                fontSize: '0.9rem',
-                background: 'var(--ds-page-bg)',
-                color: 'var(--ds-text)',
-              }}
-            />
-          </div>
-
-          <button
-            disabled
-            className="studio-btn studio-btn-primary"
-            style={{ width: '100%', justifyContent: 'center', cursor: 'not-allowed', opacity: 0.5 }}
-          >
-            Sign in — not connected yet
-          </button>
+          <h2 style={{ fontSize: '1.05rem', marginBottom: '1.25rem' }}>Sign in to continue</h2>
+          <LoginForm />
         </div>
 
-        <div
+        <p
           style={{
-            marginTop: '1.5rem',
+            marginTop: '1.25rem',
             textAlign: 'center',
-            fontSize: '0.82rem',
-            color: 'var(--ds-text-muted)',
+            fontSize: '0.8rem',
+            color: 'var(--ds-text-faint)',
+            margin: '1.25rem 0 0',
           }}
         >
-          <p style={{ margin: '0 0 0.5rem' }}>
-            While auth is not connected, navigate directly:
-          </p>
-          <a href="/dashboard" style={{ marginRight: '1rem' }}>
-            → Dashboard shell
-          </a>
-          <a href="/admin/manufacturers">→ Admin shell</a>
-        </div>
+          Authorised users only. Contact BuildQuote to request access.
+        </p>
       </div>
     </div>
   )
