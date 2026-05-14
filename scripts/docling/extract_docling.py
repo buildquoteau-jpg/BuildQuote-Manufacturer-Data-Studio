@@ -174,12 +174,13 @@ def main():
         ),
     )
     parser.add_argument(
-        "--no-ocr",
+        "--ocr",
         action="store_true",
         default=False,
         help=(
-            "Disable OCR. Use for text-native PDFs (not scanned). "
-            "Avoids memory crashes on large images in brochures."
+            "Enable OCR. Only needed for scanned PDFs. "
+            "Disabled by default — manufacturer catalogues are text-native "
+            "and OCR can cause memory crashes on large images."
         ),
     )
     args = parser.parse_args()
@@ -194,7 +195,7 @@ def main():
     out_dir = _resolve_output_dir(args.out, input_path.stem, ts)
 
     try:
-        extract(input_path, args.document_id, out_dir, no_ocr=args.no_ocr)
+        extract(input_path, args.document_id, out_dir, no_ocr=not args.ocr)
     except ImportError as exc:
         sys.exit(
             f"[ERROR] Docling import failed: {exc}\n\n"

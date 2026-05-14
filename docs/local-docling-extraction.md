@@ -67,6 +67,7 @@ pnpm docling:extract -- --input "C:\path\to\catalogue.pdf" --document-id b576c34
 | `--input` | Yes | Absolute or relative path to local PDF |
 | `--document-id` | No | UUID of the `source_documents` row to embed in `summary.json` |
 | `--out` | No | Custom output folder. Must be under `.local/docling-output/`. Auto-named if omitted. |
+| `--ocr` | No | Enable OCR. Only needed for scanned (image-based) PDFs. Off by default — manufacturer catalogues are text-native and OCR can cause memory crashes on large images. |
 
 ---
 
