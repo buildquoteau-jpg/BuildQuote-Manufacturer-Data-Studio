@@ -3,29 +3,37 @@
  * apps/web/scripts/parser-dry-run.ts
  *
  * Local-only dry-run: loads a parser input bundle, applies a fixture parser
- * output, validates it against the parser contract, and produces a staged
- * insertion plan — without writing anything to the database.
+ * output, runs the full validation + insertion planning contracts, saves a
+ * structured JSON report, and prints a readable summary.
  *
  * Usage:
- *   pnpm parser:dry-run -- --input ".local/parser-inputs/some-bundle.json"
+ *   pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"
+ *   pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" --strict
+ *
+ * --strict: exits non-zero if there are any validation errors, missing
+ *   required fields, unresolved links, or missing evidence for core entities.
+ *   Without --strict: saves report and prints warnings but exits 0.
  *
  * No DB writes. No AI calls. No Supabase client. No file uploads.
+ * Report is written to .local/parser-reports/ (gitignored).
  *
  * The fixture used here (mockNTWAvenueDecking) exercises the full pipeline
  * contract. It is NOT AI-extracted content from the real PDF — that step
  * comes after dry-run passes and AI parser integration is approved.
  */
 
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { mockNTWAvenueDecking } from '../lib/parser/fixtures'
 import { planParserOutputInsertion } from '../lib/parser/map-to-staged'
+import { buildDryRunReport } from '../lib/parser/dry-run-report'
 import type { ParserOutput, ParserRunContext } from '../lib/parser/types'
+import type { DryRunReport, DryRunCheck } from '../lib/parser/dry-run-report'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-// scripts/ → .. → apps/web → .. → monorepo root
+// scripts/ → .. → apps/web → .. → .. → monorepo root
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -50,8 +58,26 @@ function hr() {
   console.log('─'.repeat(60))
 }
 
+const MAX_ISSUES_PRINTED = 20
+
+function printIssues(label: string, items: DryRunCheck[], cap: number) {
+  if (items.length === 0) return
+  console.log(`[parser:dry-run] ${label}:`)
+  const shown = items.slice(0, cap)
+  for (const issue of shown) {
+    const tag = issue.severity === 'error' ? '[ERROR]' : issue.severity === 'warning' ? '[WARN] ' : '[INFO] '
+    const loc = issue.path ? ` ${issue.path}:` : ''
+    console.log(`  ${tag} [${issue.code}]${loc} ${issue.message}`)
+  }
+  if (items.length > cap) {
+    console.log(`  … and ${items.length - cap} more (see report file for full list)`)
+  }
+  hr()
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
+  const strict = args.strict === true
 
   const inputArg = args.input
   if (!inputArg || typeof inputArg !== 'string') {
@@ -86,7 +112,7 @@ async function main() {
   const { manufacturer, document, extraction_run, combined_text_metadata } = bundle
 
   hr()
-  console.log('[parser:dry-run] Bundle summary')
+  console.log(`[parser:dry-run] Bundle summary${strict ? ' (--strict mode)' : ''}`)
   console.log(`  Manufacturer  : ${manufacturer?.name ?? '?'} (${manufacturer?.slug ?? '?'})`)
   console.log(`  Document      : ${document?.document_name ?? document?.id ?? '?'}`)
   console.log(`  Doc status    : ${document?.status ?? '?'}`)
@@ -112,8 +138,9 @@ async function main() {
     source_document_id: document?.id ?? null,
   }
 
+  const FIXTURE_LABEL = 'mockNTWAvenueDecking (lib/parser/fixtures.ts)'
   console.log('[parser:dry-run] Parser output candidate')
-  console.log('  Fixture       : mockNTWAvenueDecking (lib/parser/fixtures.ts)')
+  console.log(`  Fixture       : ${FIXTURE_LABEL}`)
   console.log('  NOTE: No AI call made. This exercises pipeline contracts,')
   console.log('        not actual catalogue data from the real PDF.')
   hr()
@@ -129,6 +156,15 @@ async function main() {
   // Run planner (validates internally, then plans if valid)
   const plan = planParserOutputInsertion(candidate, context)
 
+  // Build full report
+  const report: DryRunReport = buildDryRunReport({
+    output: candidate,
+    plan,
+    fixtureLabel: FIXTURE_LABEL,
+    bundleDocumentId: document?.id ?? null,
+    bundleDocumentName: document?.document_name ?? null,
+  })
+
   // ── Candidate entity counts ───────────────────────────────────
   console.log('[parser:dry-run] Candidate entity counts')
   console.log(`  systems               : ${candidate.systems.length}`)
@@ -141,60 +177,84 @@ async function main() {
 
   // ── Staged insertion plan ─────────────────────────────────────
   console.log('[parser:dry-run] Staged insertion plan (no writes performed)')
-  console.log(`  staged_systems           : ${plan.summary.stagedSystems}`)
-  console.log(`  staged_system_profiles   : ${plan.summary.stagedSystemProfiles}`)
-  console.log(`  staged_components        : ${plan.summary.stagedComponents}`)
-  console.log(`  staged_system_colours    : ${plan.summary.stagedSystemColours}`)
-  console.log(`  staged_system_components : ${plan.summary.stagedSystemComponents}`)
-  console.log(`  field_verifications      : ${plan.summary.fieldVerifications}`)
-  console.log(`  parser_field_evidence    : ${plan.summary.parserFieldEvidence}`)
-  console.log(`  media_candidates         : ${plan.summary.mediaCandidates}`)
+  console.log(`  staged_systems           : ${report.counts.staged_systems}`)
+  console.log(`  staged_system_profiles   : ${report.counts.staged_system_profiles}`)
+  console.log(`  staged_components        : ${report.counts.staged_components}`)
+  console.log(`  staged_system_colours    : ${report.counts.staged_system_colours}`)
+  console.log(`  staged_system_components : ${report.counts.staged_system_components}`)
+  console.log(`  field_verifications      : ${report.counts.field_verifications}`)
+  console.log(`  parser_field_evidence    : ${report.counts.parser_field_evidence}`)
+  console.log(`  media_candidates         : ${report.counts.media_candidates}`)
+  hr()
+
+  // ── Evidence coverage ─────────────────────────────────────────
+  const cov = report.evidence_coverage
+  console.log('[parser:dry-run] Evidence coverage')
+  console.log(`  entities with field_sources    : ${cov.entities_with_field_sources}`)
+  console.log(`  entities without field_sources : ${cov.entities_without_field_sources}`)
+  console.log(`  total field_source entries     : ${cov.total_field_source_entries}`)
+  console.log(`  total uncertain fields         : ${cov.total_uncertain_fields}`)
+  console.log(`  evidence row parity            : ${cov.evidence_row_parity ? 'ok' : 'MISMATCH'}`)
   hr()
 
   // ── Issues ────────────────────────────────────────────────────
-  const errors = plan.issues.filter(i => i.severity === 'error')
-  const warnings = plan.issues.filter(i => i.severity === 'warning')
-  const infos = plan.issues.filter(i => i.severity === 'info')
+  const errors = report.checks.filter(c => c.severity === 'error')
+  const warnings = report.checks.filter(c => c.severity === 'warning')
+  const infos = report.checks.filter(c => c.severity === 'info')
 
-  if (errors.length > 0) {
-    console.log('[parser:dry-run] Errors:')
-    for (const e of errors) {
-      console.log(`  [ERROR] [${e.code}]${e.path ? ' ' + e.path + ':' : ''} ${e.message}`)
-    }
-    hr()
-  }
+  printIssues('Errors', errors, MAX_ISSUES_PRINTED)
+  printIssues('Warnings', warnings, MAX_ISSUES_PRINTED)
+  printIssues('Info', infos, MAX_ISSUES_PRINTED)
 
-  if (warnings.length > 0) {
-    console.log('[parser:dry-run] Warnings:')
-    for (const w of warnings) {
-      console.log(`  [WARN]  [${w.code}]${w.path ? ' ' + w.path + ':' : ''} ${w.message}`)
-    }
-    hr()
-  }
+  // ── Save report ───────────────────────────────────────────────
+  const reportDir = path.join(REPO_ROOT, '.local', 'parser-reports')
+  mkdirSync(reportDir, { recursive: true })
 
-  if (infos.length > 0) {
-    console.log('[parser:dry-run] Info:')
-    for (const info of infos) {
-      console.log(`  [INFO]  [${info.code}] ${info.message}`)
-    }
-    hr()
-  }
+  const docSlug = (document?.document_name ?? document?.id ?? 'unknown')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60)
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const reportFilename = `${docSlug}-${timestamp}.json`
+  const reportPath = path.join(reportDir, reportFilename)
 
-  // ── Result ────────────────────────────────────────────────────
-  console.log('[parser:dry-run] Result')
-  console.log(`  ok               : ${plan.ok}`)
-  console.log(`  planning errors  : ${plan.summary.planningErrors}`)
-  console.log(`  planning warnings: ${plan.summary.planningWarnings}`)
+  writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8')
+
+  // ── Summary ───────────────────────────────────────────────────
+  console.log('[parser:dry-run] Report')
+  console.log(`  Saved         : ${reportPath}`)
+  console.log(`  Errors        : ${report.totals.errors}`)
+  console.log(`  Warnings      : ${report.totals.warnings}`)
+  console.log(`  Info          : ${report.totals.infos}`)
+  console.log(`  plan_ok       : ${report.plan_ok}`)
   hr()
 
-  if (plan.ok) {
-    console.log('[parser:dry-run] PASS — plan is valid. No DB writes performed.')
-    console.log('  Next step: run AI parser against bundle, then re-run dry-run')
-    console.log('             with real parser output before approving staged writes.')
-  } else {
-    console.log('[parser:dry-run] FAIL — plan has errors. See issues above.')
+  const hasErrors = report.totals.errors > 0
+  const planFailed = !report.plan_ok
+
+  if (strict && (hasErrors || planFailed)) {
+    console.log('[parser:dry-run] FAIL (--strict) — errors present or plan failed.')
+    console.log('  Resolve all errors before proceeding to staged writes.')
     process.exit(1)
   }
+
+  if (planFailed) {
+    console.log('[parser:dry-run] FAIL — planner returned ok=false. See errors above.')
+    console.log('  Run with --strict to enforce exit code.')
+    process.exit(strict ? 1 : 0)
+  }
+
+  if (hasErrors && !strict) {
+    console.log('[parser:dry-run] PASS (with errors) — plan ok, but validation errors found.')
+    console.log('  Run with --strict to enforce exit code on errors.')
+  } else if (report.totals.warnings > 0 && !hasErrors) {
+    console.log('[parser:dry-run] PASS (with warnings) — plan ok. Review warnings before staged write.')
+  } else {
+    console.log('[parser:dry-run] PASS — plan valid, no errors.')
+  }
+
+  console.log('  No DB writes performed.')
   console.log()
 }
 

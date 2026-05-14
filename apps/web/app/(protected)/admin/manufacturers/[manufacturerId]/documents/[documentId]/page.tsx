@@ -364,8 +364,12 @@ export default async function AdminDocumentDetailPage({ params }: Props) {
               color: 'var(--ds-text)',
             }}
           >
-            {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. Dry-run parser contract validation (no DB writes)\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"`}
+            {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. Dry-run (normal — saves report, exits 0 even with warnings)\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"\n\n# 2b. Dry-run strict mode — exits non-zero on any errors\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" --strict`}
           </pre>
+          <p style={{ margin: '0 0 0.4rem', color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
+            Each dry-run saves a validation report to <code>.local/parser-reports/</code> (gitignored).
+            Reports include entity counts, evidence coverage, classification checks, and dimension warnings.
+          </p>
           <p style={{ margin: 0, color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
             No staged DB writes occur until the dry-run passes and writes are explicitly approved.
           </p>

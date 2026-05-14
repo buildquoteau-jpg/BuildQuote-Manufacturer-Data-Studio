@@ -4,8 +4,9 @@
 
 A two-step local CLI harness that takes extracted `document_chunks` from Supabase,
 builds a structured parser input bundle, then validates a parser output candidate
-against the existing parser contracts and produces a staged insertion plan — without
-writing anything to any database.
+against the existing parser contracts, runs hardened validation checks, saves a
+JSON report, and produces a staged insertion plan — without writing anything to
+any database.
 
 This sits between the extraction step (which populates `document_chunks`) and the
 eventual staged-write step (which would populate `staged_systems`, `staged_components`,
@@ -21,7 +22,8 @@ source_documents + document_chunks (in local Supabase)
   ↓  parser:bundle
 .local/parser-inputs/<bundle>.json   ← parser input bundle
   ↓  parser:dry-run
-validation result + insertion plan   ← printed to terminal, nothing written
+validation result + insertion plan   ← printed to terminal, nothing written to DB
+.local/parser-reports/<report>.json  ← structured JSON report saved locally
   ↓  (future, with explicit approval)
 staged_systems / staged_components / field_verifications / ...
 ```
@@ -46,25 +48,59 @@ pnpm parser:bundle -- \
 ```
 
 Output is written to `.local/parser-inputs/<doc-name>-<timestamp>.json`.
-The `.local/` directory is gitignored — bundles are never committed.
 
-### Step 2 — Run parser dry-run
+### Step 2 — Run parser dry-run (normal)
 
-Loads the bundle, applies the mock parser output fixture (`mockNTWAvenueDecking`),
-validates it against the parser contract, and prints the staged insertion plan.
-Nothing is written to the database.
+Loads the bundle, applies the mock parser output fixture, validates it, saves a
+report to `.local/parser-reports/`, and prints a summary. Exits 0 regardless of
+warnings; only crashes on script errors.
 
 ```sh
-pnpm parser:dry-run -- --input ".local/parser-inputs/newtechwood-product-brochure-october-2025-2026-01-15T12-00-00.json"
+pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"
 ```
 
-The output shows:
-- Bundle summary (document name, chunk count, total chars)
-- Parser output fixture used
-- Candidate entity counts (systems, profiles, components, colours, etc.)
-- Planned staged row counts for all tables
-- Validation errors and warnings
-- PASS / FAIL result
+### Step 2 (alternative) — Run parser dry-run in strict mode
+
+Same as above, but exits non-zero if there are any validation errors, unresolved
+entity links, missing required fields, or plan failures. Use this in CI or before
+approving a staged write.
+
+```sh
+pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" --strict
+```
+
+## What PASS / FAIL means
+
+| Result | Meaning |
+|---|---|
+| `PASS` | Plan ok, no errors, possibly some warnings |
+| `PASS (with errors)` | Plan ok but validation checks found errors. Use `--strict` to enforce exit code. |
+| `PASS (with warnings)` | Plan ok, no errors, review warnings before staged write |
+| `FAIL` | Planner returned ok=false (validation errors from existing parser contract) |
+| `FAIL (--strict)` | Strict mode: any errors present or plan failed |
+
+## Report files
+
+Each dry-run saves a structured JSON report to:
+
+```
+.local/parser-reports/<doc-name>-<timestamp>.json
+```
+
+The report includes:
+- Entity counts (staged_systems, profiles, components, etc.)
+- Planning error and warning counts
+- Evidence coverage summary (entities with/without field sources, uncertain fields)
+- All check results grouped by category:
+  - `required_fields` — missing name, category, uom, etc.
+  - `evidence` — entities without field sources, parity checks
+  - `classification` — profile/component heuristic warnings
+  - `pack_uom` — numeric UOM, pack size used as UOM
+  - `dimensions` — flat product dimension mapping warnings
+  - `duplicates` — duplicate product codes, SKUs, colour names
+  - `uncertain` — uncertain field summary
+
+The `.local/` directory is gitignored — reports are never committed.
 
 ## Prerequisites
 
@@ -96,7 +132,7 @@ The output shows:
 - **No production Supabase.** The bundle script requires `LOCAL_ONLY_ALLOW_SERVICE_ROLE=true`.
 - **No upload / R2 / storage.** Neither script touches file storage.
 - **No publish / export.** Nothing leaves the local environment.
-- **Bundles are gitignored.** `.local/` is in `.gitignore`. Never commit bundles.
+- **All outputs are gitignored.** `.local/` is in `.gitignore`. Never commit bundles or reports.
 
 ## What is not done yet
 
@@ -111,7 +147,7 @@ The output shows:
 
 ## Next step after dry-run passes
 
-1. Confirm dry-run PASS with the fixture output.
+1. Confirm dry-run PASS with the fixture output (and `--strict` passes clean).
 2. Agree on AI parser integration approach (prompt, model, calling convention).
 3. Hook the real AI parser into `parser-dry-run.ts` (or a new script) — replace
    the fixture with actual parser output from the bundle's chunk text.
