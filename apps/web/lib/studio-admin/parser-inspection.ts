@@ -83,7 +83,6 @@ export type ParserStagedProfile = {
   supplierPackUom: string | null
   supplierPackNote: string | null
   verificationStatus: string
-  extractionConfidence: number
 }
 
 export type ParserStagedComponent = {
@@ -359,7 +358,7 @@ export async function getAdminParserInspection(
     thickness_mm: number | null; depth_mm: number | null; diameter_mm: number | null
     roll_m: number | null; pack_format: string | null; supplier_pack_qty: number | null
     supplier_pack_uom: string | null; supplier_pack_note: string | null
-    verification_status: string; extraction_confidence: number
+    verification_status: string
   }> = []
   let rawColours: Array<{
     id: string; staged_system_id: string; colour_name: string; sku: string | null
@@ -375,7 +374,7 @@ export async function getAdminParserInspection(
     const [profRes, colRes, linkRes] = await Promise.all([
       c.supabase
         .from('staged_system_profiles')
-        .select('id, staged_system_id, name, profile_name, product_code, dimensions, uom, length_mm, width_mm, height_mm, thickness_mm, depth_mm, diameter_mm, roll_m, pack_format, supplier_pack_qty, supplier_pack_uom, supplier_pack_note, verification_status, extraction_confidence')
+        .select('id, staged_system_id, name, profile_name, product_code, dimensions, uom, length_mm, width_mm, height_mm, thickness_mm, depth_mm, diameter_mm, roll_m, pack_format, supplier_pack_qty, supplier_pack_uom, supplier_pack_note, verification_status')
         .in('staged_system_id', systemIds)
         .order('sort_order')
         .limit(ROW_CAP),
@@ -404,7 +403,7 @@ export async function getAdminParserInspection(
     thicknessMm: p.thickness_mm, depthMm: p.depth_mm, diameterMm: p.diameter_mm,
     rollM: p.roll_m, packFormat: p.pack_format, supplierPackQty: p.supplier_pack_qty,
     supplierPackUom: p.supplier_pack_uom, supplierPackNote: p.supplier_pack_note,
-    verificationStatus: p.verification_status, extractionConfidence: p.extraction_confidence,
+    verificationStatus: p.verification_status,
   }))
 
   const colours: ParserStagedColour[] = rawColours.map((c) => ({
