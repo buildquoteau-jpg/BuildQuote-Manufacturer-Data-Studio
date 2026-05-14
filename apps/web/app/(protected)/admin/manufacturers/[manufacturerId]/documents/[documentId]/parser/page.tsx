@@ -1,5 +1,6 @@
 import { StudioShell } from '@/components/studio/StudioShell'
 import { getAdminParserInspection } from '@/lib/studio-admin/parser-inspection'
+import { computeHealthWarnings } from '@/lib/studio-admin/parser-inspection-health'
 import type {
   ParserStagedSystem,
   ParserStagedProfile,
@@ -10,7 +11,9 @@ import type {
   ParserFieldEvidence,
   ParserExtractionRun,
   ParserInspectionCounts,
+  EvidenceCoverage,
 } from '@/lib/studio-admin/parser-inspection'
+import type { HealthWarning } from '@/lib/studio-admin/parser-inspection-health'
 
 type Props = {
   params: { manufacturerId: string; documentId: string }
@@ -32,8 +35,12 @@ function formatDate(iso: string | null): string {
   }
 }
 
-function pct(n: number): string {
+function fmtPct(n: number): string {
   return `${Math.round(n * 100)}%`
+}
+
+function fmtN(n: number | null): string {
+  return n !== null ? String(n) : '—'
 }
 
 const VSTAT_COLOUR: Record<string, string> = {
@@ -45,6 +52,18 @@ const VSTAT_COLOUR: Record<string, string> = {
 
 function vstatColour(s: string): string {
   return VSTAT_COLOUR[s] ?? 'var(--ds-text-muted)'
+}
+
+const SEV_COLOUR: Record<string, string> = {
+  error: '#991b1b',
+  warn:  '#92400e',
+  info:  'var(--ds-text-muted)',
+}
+
+const SEV_BG: Record<string, string> = {
+  error: '#fef2f2',
+  warn:  '#fffbeb',
+  info:  'var(--ds-card-bg)',
 }
 
 // ----------------------------------------------------------
@@ -64,31 +83,94 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-function CountGrid({ counts }: { counts: ParserInspectionCounts }) {
-  const rows: [string, number][] = [
-    ['Systems', counts.stagedSystems],
-    ['Profiles', counts.stagedProfiles],
-    ['Components', counts.stagedComponents],
-    ['Colours', counts.stagedColours],
-    ['Links', counts.stagedLinks],
-    ['Field verifications', counts.fieldVerifications],
-    ['Parser field evidence', counts.parserFieldEvidence],
+function Badge({ text, colour }: { text: string; colour?: string }) {
+  return (
+    <span style={{
+      display: 'inline-block',
+      fontSize: '0.7rem',
+      fontWeight: 600,
+      color: colour ?? 'var(--ds-text-muted)',
+      background: 'var(--ds-border-soft)',
+      borderRadius: 3,
+      padding: '0.1rem 0.4rem',
+    }}>
+      {text.replace(/_/g, ' ')}
+    </span>
+  )
+}
+
+function CountGrid({ counts, evidenceCoverage }: { counts: ParserInspectionCounts; evidenceCoverage: EvidenceCoverage }) {
+  const rows: [string, string][] = [
+    ['Systems', String(counts.stagedSystems)],
+    ['Profiles', String(counts.stagedProfiles)],
+    ['Components', String(counts.stagedComponents)],
+    ['Colours', String(counts.stagedColours)],
+    ['Links', String(counts.stagedLinks)],
+    ['Field verifications', String(counts.fieldVerifications)],
+    ['Parser field evidence', String(counts.parserFieldEvidence)],
+    ['Evidence coverage', evidenceCoverage.entitiesTotal > 0 ? `${evidenceCoverage.pct}%` : '—'],
   ]
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem' }}>
-      {rows.map(([label, count]) => (
+      {rows.map(([label, val]) => {
+        const n = parseInt(val, 10)
+        const isEmpty = !isNaN(n) && n === 0
+        return (
+          <div
+            key={label}
+            style={{
+              background: 'var(--ds-card-bg)',
+              border: '1px solid var(--ds-border)',
+              borderRadius: 8,
+              padding: '0.6rem 0.85rem',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: isEmpty ? 'var(--ds-text-faint)' : 'var(--ds-text)' }}>{val}</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', marginTop: '0.1rem' }}>{label}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function HealthPanel({ warnings }: { warnings: HealthWarning[] }) {
+  if (warnings.length === 0) {
+    return (
+      <div style={{ fontSize: '0.83rem', color: '#166534', padding: '0.5rem 0.75rem', background: '#f0fdf4', borderRadius: 6, border: '1px solid #bbf7d0' }}>
+        No issues detected.
+      </div>
+    )
+  }
+  const sorted = [...warnings].sort((a, b) => {
+    const order = { error: 0, warn: 1, info: 2 }
+    return (order[a.severity] ?? 3) - (order[b.severity] ?? 3)
+  })
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      {sorted.map((w) => (
         <div
-          key={label}
+          key={w.code}
           style={{
-            background: 'var(--ds-card-bg)',
-            border: '1px solid var(--ds-border)',
-            borderRadius: 8,
-            padding: '0.6rem 0.85rem',
-            textAlign: 'center',
+            fontSize: '0.82rem',
+            padding: '0.45rem 0.75rem',
+            borderRadius: 6,
+            border: `1px solid ${SEV_COLOUR[w.severity]}33`,
+            background: SEV_BG[w.severity],
+            color: SEV_COLOUR[w.severity],
+            display: 'flex',
+            gap: '0.5rem',
+            alignItems: 'flex-start',
           }}
         >
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: count > 0 ? 'var(--ds-text)' : 'var(--ds-text-faint)' }}>{count}</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', marginTop: '0.1rem' }}>{label}</div>
+          <span style={{ fontWeight: 700, flexShrink: 0 }}>
+            {w.severity === 'error' ? '✕' : w.severity === 'warn' ? '!' : 'i'}
+          </span>
+          <span>
+            <span style={{ fontWeight: 600, marginRight: '0.35rem' }}>[{w.code}]</span>
+            {w.message}
+          </span>
         </div>
       ))}
     </div>
@@ -114,22 +196,6 @@ function RunPanel({ run }: { run: ParserExtractionRun }) {
   )
 }
 
-function Badge({ text, colour }: { text: string; colour?: string }) {
-  return (
-    <span style={{
-      display: 'inline-block',
-      fontSize: '0.7rem',
-      fontWeight: 600,
-      color: colour ?? 'var(--ds-text-muted)',
-      background: 'var(--ds-border-soft)',
-      borderRadius: 3,
-      padding: '0.1rem 0.4rem',
-    }}>
-      {text.replace(/_/g, ' ')}
-    </span>
-  )
-}
-
 function SystemsTable({ systems }: { systems: ParserStagedSystem[] }) {
   if (systems.length === 0) return <div style={{ color: 'var(--ds-text-faint)', fontSize: '0.83rem' }}>No systems found.</div>
   return (
@@ -137,18 +203,27 @@ function SystemsTable({ systems }: { systems: ParserStagedSystem[] }) {
       <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
-            {['Name', 'Product code', 'Category', 'Confidence', 'Status'].map((h) => (
-              <th key={h} style={{ textAlign: 'left', padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
+            {['Name', 'Product code', 'Category', 'Profiles', 'Colours', 'Links', 'BAL', 'Confidence', 'Status'].map((h) => (
+              <th key={h} style={{ textAlign: 'left', padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {systems.map((s) => (
             <tr key={s.id} style={{ borderBottom: '1px solid var(--ds-border-soft)' }}>
-              <td style={{ padding: '0.35rem 0.5rem', fontWeight: 500 }}>{s.name}</td>
+              <td style={{ padding: '0.35rem 0.5rem', fontWeight: 500 }}>
+                <div>{s.name}</div>
+                {s.description && (
+                  <div style={{ fontSize: '0.73rem', color: 'var(--ds-text-faint)', marginTop: 1, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.description}</div>
+                )}
+              </td>
               <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{s.productCode ?? '—'}</td>
-              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{s.category ?? '—'}</td>
-              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)' }}>{pct(s.extractionConfidence)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{s.category ?? '—'}{s.subcategory ? ` / ${s.subcategory}` : ''}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: s.profileCount > 0 ? 'var(--ds-text)' : 'var(--ds-text-faint)', textAlign: 'right' }}>{s.profileCount}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: s.colourCount > 0 ? 'var(--ds-text)' : 'var(--ds-text-faint)', textAlign: 'right' }}>{s.colourCount}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: s.linkCount > 0 ? 'var(--ds-text)' : 'var(--ds-text-faint)', textAlign: 'right' }}>{s.linkCount}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)' }}>{s.balRating ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)' }}>{fmtPct(s.extractionConfidence)}</td>
               <td style={{ padding: '0.35rem 0.5rem' }}><Badge text={s.verificationStatus} colour={vstatColour(s.verificationStatus)} /></td>
             </tr>
           ))}
@@ -165,27 +240,30 @@ function ProfilesTable({ profiles }: { profiles: ParserStagedProfile[] }) {
       <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
-            {['Profile name', 'Product code', 'UOM', 'L×W×T (mm)', 'Pack format', 'Status'].map((h) => (
-              <th key={h} style={{ textAlign: 'left', padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
+            {['Profile name', 'Product code', 'UOM', 'L (mm)', 'W (mm)', 'T (mm)', 'H (mm)', 'D (mm)', 'Ø (mm)', 'Roll (m)', 'Pack format', 'Pack qty', 'Pack UOM', 'Status'].map((h) => (
+              <th key={h} style={{ textAlign: 'left', padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {profiles.map((p) => {
-            const dims = [p.lengthMm, p.widthMm, p.thicknessMm]
-              .map((v) => (v !== null ? String(v) : '—'))
-              .join(' × ')
-            return (
-              <tr key={p.id} style={{ borderBottom: '1px solid var(--ds-border-soft)' }}>
-                <td style={{ padding: '0.35rem 0.5rem', fontWeight: 500 }}>{p.profileName ?? p.name ?? '—'}</td>
-                <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.productCode ?? '—'}</td>
-                <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.uom ?? '—'}</td>
-                <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{dims}</td>
-                <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.packFormat ?? '—'}</td>
-                <td style={{ padding: '0.35rem 0.5rem' }}><Badge text={p.verificationStatus} colour={vstatColour(p.verificationStatus)} /></td>
-              </tr>
-            )
-          })}
+          {profiles.map((p) => (
+            <tr key={p.id} style={{ borderBottom: '1px solid var(--ds-border-soft)' }}>
+              <td style={{ padding: '0.35rem 0.5rem', fontWeight: 500 }}>{p.profileName ?? p.name ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.productCode ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.uom ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.lengthMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.widthMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.thicknessMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.heightMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.depthMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.diameterMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.rollM)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.packFormat ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(p.supplierPackQty)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)' }}>{p.supplierPackUom ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem' }}><Badge text={p.verificationStatus} colour={vstatColour(p.verificationStatus)} /></td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -199,19 +277,31 @@ function ComponentsTable({ components }: { components: ParserStagedComponent[] }
       <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
-            {['Name', 'SKU', 'Category', 'UOM', 'Pack format', 'Status'].map((h) => (
-              <th key={h} style={{ textAlign: 'left', padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
+            {['Name', 'SKU', 'Category', 'UOM', 'Material', 'Finish', 'Colour', 'L (mm)', 'W (mm)', 'T (mm)', 'Pack format', 'Pack qty', 'Status'].map((h) => (
+              <th key={h} style={{ textAlign: 'left', padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {components.map((c) => (
             <tr key={c.id} style={{ borderBottom: '1px solid var(--ds-border-soft)' }}>
-              <td style={{ padding: '0.35rem 0.5rem', fontWeight: 500 }}>{c.name}</td>
+              <td style={{ padding: '0.35rem 0.5rem', fontWeight: 500 }}>
+                <div>{c.name}</div>
+                {c.description && (
+                  <div style={{ fontSize: '0.73rem', color: 'var(--ds-text-faint)', marginTop: 1, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.description}</div>
+                )}
+              </td>
               <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{c.sku ?? '—'}</td>
               <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{c.category ?? '—'}</td>
               <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{c.uom ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)' }}>{c.material ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)' }}>{c.finish ?? (c.colour ?? '—')}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)' }}>{c.colour ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(c.lengthMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(c.widthMm)}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(c.thicknessMm)}</td>
               <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-muted)' }}>{c.packFormat ?? '—'}</td>
+              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--ds-text-faint)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(c.supplierPackQty)}</td>
               <td style={{ padding: '0.35rem 0.5rem' }}><Badge text={c.verificationStatus} colour={vstatColour(c.verificationStatus)} /></td>
             </tr>
           ))}
@@ -265,23 +355,24 @@ function LinksPanel({ links, orphanLinkCount }: { links: ParserStagedLink[]; orp
           <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
-                {['Role', 'Notes'].map((h) => (
+                {['Role', 'Notes', 'Status'].map((h) => (
                   <th key={h} style={{ textAlign: 'left', padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {links.slice(0, 50).map((l) => (
+              {links.slice(0, 60).map((l) => (
                 <tr key={l.id} style={{ borderBottom: '1px solid var(--ds-border-soft)' }}>
                   <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)' }}>{l.role}</td>
                   <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{l.notes ?? '—'}</td>
+                  <td style={{ padding: '0.3rem 0.5rem' }}><Badge text={l.verificationStatus} colour={vstatColour(l.verificationStatus)} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {links.length > 50 && (
+          {links.length > 60 && (
             <div style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)', marginTop: '0.35rem' }}>
-              Showing 50 of {links.length} links.
+              Showing 60 of {links.length} links.
             </div>
           )}
         </div>
@@ -290,52 +381,94 @@ function LinksPanel({ links, orphanLinkCount }: { links: ParserStagedLink[]; orp
   )
 }
 
+function EvidenceByType({ items, label }: { items: ParserFieldEvidence[] | ParserFieldVerification[]; label: string }) {
+  const grouped: Record<string, typeof items> = {}
+  for (const item of items) {
+    const et = item.entityType
+    if (!grouped[et]) grouped[et] = []
+    grouped[et].push(item as never)
+  }
+  const types = Object.keys(grouped).sort()
+
+  if (items.length === 0) {
+    return <div style={{ fontSize: '0.8rem', color: 'var(--ds-text-faint)' }}>No {label.toLowerCase()} found.</div>
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {types.map((et) => (
+        <div key={et}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--ds-text-faint)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {et.replace(/_/g, ' ')} ({grouped[et].length})
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)' }}>
+            {grouped[et].slice(0, 5).map((item: ParserFieldEvidence | ParserFieldVerification) =>
+              'confidence' in item
+                ? `${item.fieldName}=${item.extractedValue ?? '—'} (${item.confidence !== null ? fmtPct(item.confidence) : '?'}${item.isUncertain ? ' ?' : ''})`
+                : `${item.fieldName}=${item.extractedValue ?? '—'} [${item.status}]`
+            ).join(' · ')}
+            {grouped[et].length > 5 && ` · +${grouped[et].length - 5} more`}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function EvidencePanel({ fieldVerifications, parserFieldEvidence }: { fieldVerifications: ParserFieldVerification[]; parserFieldEvidence: ParserFieldEvidence[] }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Field verifications */}
       <div>
-        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem', color: 'var(--ds-text-muted)' }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--ds-text-muted)' }}>
           Field verifications ({fieldVerifications.length})
         </div>
         {fieldVerifications.length === 0 ? (
           <div style={{ fontSize: '0.8rem', color: 'var(--ds-text-faint)' }}>None found for this document.</div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '0.77rem', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
-                  {['Entity type', 'Field', 'Extracted value', 'Status', 'Page'].map((h) => (
-                    <th key={h} style={{ textAlign: 'left', padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {fieldVerifications.slice(0, 80).map((f) => (
-                  <tr key={f.id} style={{ borderBottom: '1px solid var(--ds-border-soft)' }}>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{f.entityType}</td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)' }}>{f.fieldName}</td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {f.extractedValue ?? '—'}
-                    </td>
-                    <td style={{ padding: '0.3rem 0.5rem' }}><Badge text={f.status} /></td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{f.sourcePageNumber ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {fieldVerifications.length > 80 && (
-              <div style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)', marginTop: '0.35rem' }}>
-                Showing 80 of {fieldVerifications.length} rows.
+          <>
+            <EvidenceByType items={fieldVerifications} label="Field verifications" />
+            <details style={{ marginTop: '0.75rem' }}>
+              <summary style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', cursor: 'pointer' }}>
+                Show full table ({fieldVerifications.length} rows)
+              </summary>
+              <div style={{ overflowX: 'auto', marginTop: '0.5rem' }}>
+                <table style={{ width: '100%', fontSize: '0.77rem', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
+                      {['Entity type', 'Field', 'Extracted value', 'Status', 'Page'].map((h) => (
+                        <th key={h} style={{ textAlign: 'left', padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fieldVerifications.slice(0, 100).map((f) => (
+                      <tr key={f.id} style={{ borderBottom: '1px solid var(--ds-border-soft)' }}>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{f.entityType}</td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)' }}>{f.fieldName}</td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {f.extractedValue ?? '—'}
+                        </td>
+                        <td style={{ padding: '0.3rem 0.5rem' }}><Badge text={f.status} /></td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{f.sourcePageNumber ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {fieldVerifications.length > 100 && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)', marginTop: '0.35rem' }}>
+                    Showing 100 of {fieldVerifications.length} rows.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </details>
+          </>
         )}
       </div>
 
       {/* Parser field evidence */}
       <div>
-        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem', color: 'var(--ds-text-muted)' }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--ds-text-muted)' }}>
           Parser field evidence ({parserFieldEvidence.length})
         </div>
         {parserFieldEvidence.length === 0 ? (
@@ -343,41 +476,80 @@ function EvidencePanel({ fieldVerifications, parserFieldEvidence }: { fieldVerif
             No parser field evidence for this extraction run.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '0.77rem', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
-                  {['Entity type', 'Field', 'Extracted value', 'Confidence', 'Uncertain', 'Page'].map((h) => (
-                    <th key={h} style={{ textAlign: 'left', padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {parserFieldEvidence.slice(0, 80).map((p) => (
-                  <tr key={p.id} style={{ borderBottom: '1px solid var(--ds-border-soft)', opacity: p.isUncertain ? 0.7 : 1 }}>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{p.entityType}</td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.fieldName}</td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.extractedValue ?? '—'}
-                    </td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>
-                      {p.confidence !== null ? pct(p.confidence) : '—'}
-                    </td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: p.isUncertain ? '#92400e' : 'var(--ds-text-faint)' }}>
-                      {p.isUncertain ? 'yes' : '—'}
-                    </td>
-                    <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{p.sourcePageNumber ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {parserFieldEvidence.length > 80 && (
-              <div style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)', marginTop: '0.35rem' }}>
-                Showing 80 of {parserFieldEvidence.length} rows.
+          <>
+            <EvidenceByType items={parserFieldEvidence} label="Parser field evidence" />
+            <details style={{ marginTop: '0.75rem' }}>
+              <summary style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', cursor: 'pointer' }}>
+                Show full table ({parserFieldEvidence.length} rows)
+              </summary>
+              <div style={{ overflowX: 'auto', marginTop: '0.5rem' }}>
+                <table style={{ width: '100%', fontSize: '0.77rem', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--ds-border)' }}>
+                      {['Entity type', 'Field', 'Extracted value', 'Confidence', 'Uncertain', 'Page'].map((h) => (
+                        <th key={h} style={{ textAlign: 'left', padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)', fontWeight: 600 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parserFieldEvidence.slice(0, 100).map((p) => (
+                      <tr key={p.id} style={{ borderBottom: '1px solid var(--ds-border-soft)', opacity: p.isUncertain ? 0.75 : 1 }}>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{p.entityType}</td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)' }}>{p.fieldName}</td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.extractedValue ?? '—'}
+                        </td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>
+                          {p.confidence !== null ? fmtPct(p.confidence) : '—'}
+                        </td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: p.isUncertain ? '#92400e' : 'var(--ds-text-faint)' }}>
+                          {p.isUncertain ? 'yes' : '—'}
+                        </td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: 'var(--ds-text-faint)' }}>{p.sourcePageNumber ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {parserFieldEvidence.length > 100 && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)', marginTop: '0.35rem' }}>
+                    Showing 100 of {parserFieldEvidence.length} rows.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </details>
+          </>
         )}
+      </div>
+    </div>
+  )
+}
+
+function EmptyState({ manufacturerId, documentId }: { manufacturerId: string; documentId: string }) {
+  return (
+    <div style={{ background: 'var(--ds-card-bg)', border: '1px solid var(--ds-border)', borderRadius: 8, padding: '1.25rem 1.5rem', fontSize: '0.83rem', color: 'var(--ds-text-muted)', lineHeight: 1.7 }}>
+      <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--ds-text)' }}>No staged parser data found for this document.</div>
+      <div style={{ marginBottom: '0.75rem' }}>Run the full pipeline to populate staged data:</div>
+      <pre style={{ background: 'var(--ds-border-soft)', borderRadius: 5, padding: '0.65rem 0.9rem', fontSize: '0.78rem', overflowX: 'auto', lineHeight: 1.6 }}>{
+`# 1. Bundle the document
+pnpm parser:bundle -- --document ${documentId}
+
+# 2. Run AI extraction
+pnpm parser:ai-local -- --input .local/parser-inputs/<bundle>.json
+
+# 3. Dry-run validation
+pnpm parser:dry-run -- --ai-output .local/parser-ai-outputs/<output>.json --strict
+
+# 4. Preview insert
+pnpm parser:insert-preview -- --ai-output .local/parser-ai-outputs/<output>.json --strict
+
+# 5. Insert to local DB
+pnpm parser:insert-local -- \\
+  --input .local/parser-inputs/<bundle>.json \\
+  --ai-output .local/parser-ai-outputs/<output>.json \\
+  --strict --confirm-local-write`
+      }</pre>
+      <div style={{ marginTop: '0.6rem', fontSize: '0.78rem', color: 'var(--ds-text-faint)' }}>
+        See <code>docs/local-parser-insert-local.md</code> for the full pipeline reference.
       </div>
     </div>
   )
@@ -400,7 +572,7 @@ export default async function AdminParserInspectionPage({ params }: Props) {
       <a href={`/admin/manufacturers/${manufacturerId}/documents`} style={{ color: 'var(--ds-text-muted)' }}>Documents</a>
       <span>›</span>
       <a href={`/admin/manufacturers/${manufacturerId}/documents/${documentId}`} style={{ color: 'var(--ds-text-muted)' }}>
-        {result.ok ? result.documentName : documentId}
+        {result.ok ? result.document.documentName : documentId}
       </a>
       <span>›</span>
       <span>Parser inspection</span>
@@ -416,44 +588,72 @@ export default async function AdminParserInspectionPage({ params }: Props) {
     )
   }
 
-  const { manufacturer: m, documentName, documentStatus, parseRun, counts, systems, profiles, components, colours, links, fieldVerifications, parserFieldEvidence, orphanLinkCount } = result
+  const {
+    manufacturer: m, document: doc, parseRun,
+    counts, evidenceCoverage,
+    systems, profiles, components, colours, links,
+    fieldVerifications, parserFieldEvidence,
+    orphanLinkCount,
+    systemIdsWithEvidence, componentIdsWithEvidence,
+  } = result
 
   const hasData = counts.stagedSystems > 0 || counts.stagedComponents > 0
 
+  const warnings = computeHealthWarnings({
+    systems, profiles, components, colours, links,
+    counts, orphanLinkCount,
+    entitiesWithEvidence: evidenceCoverage.entitiesWithEvidence,
+    entitiesTotal: evidenceCoverage.entitiesTotal,
+  })
+
+  const errorCount = warnings.filter((w) => w.severity === 'error').length
+  const warnCount  = warnings.filter((w) => w.severity === 'warn').length
+
   return (
-    <StudioShell role="admin" subtitle={`${m.name} · ${documentName} · Parser`}>
+    <StudioShell role="admin" subtitle={`${m.name} · ${doc.documentName} · Parser`}>
       {breadcrumb}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
         <h1 style={{ fontSize: '1.2rem' }}>Parser staging inspection</h1>
-        <span className={`studio-badge studio-badge-${documentStatus === 'parsed' || documentStatus === 'approved' ? 'approved' : 'draft'}`}>
-          {documentStatus}
+        <span className={`studio-badge studio-badge-${doc.status === 'parsed' || doc.status === 'approved' ? 'approved' : 'draft'}`}>
+          {doc.status}
         </span>
+        {errorCount > 0 && (
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991b1b' }}>{errorCount} error{errorCount !== 1 ? 's' : ''}</span>
+        )}
+        {warnCount > 0 && (
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#92400e' }}>{warnCount} warning{warnCount !== 1 ? 's' : ''}</span>
+        )}
         <span style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', fontWeight: 400 }}>read-only</span>
       </div>
-      <p style={{ fontSize: '0.83rem', color: 'var(--ds-text-muted)', marginBottom: '1.5rem' }}>
-        {m.name} · {documentName}
-      </p>
 
-      {/* No data warning */}
+      {/* IDs block */}
+      <div style={{ fontSize: '0.77rem', color: 'var(--ds-text-faint)', marginBottom: '1.25rem', lineHeight: 1.7 }}>
+        <div><span style={{ minWidth: 120, display: 'inline-block' }}>Manufacturer</span><code>{m.name}</code></div>
+        <div><span style={{ minWidth: 120, display: 'inline-block' }}>Document</span><code>{doc.documentName}</code> · <code style={{ opacity: 0.7 }}>{doc.id}</code></div>
+        {doc.documentType && <div><span style={{ minWidth: 120, display: 'inline-block' }}>Doc type</span>{doc.documentType}</div>}
+        {doc.documentDate && <div><span style={{ minWidth: 120, display: 'inline-block' }}>Doc date</span>{doc.documentDate}</div>}
+        {parseRun && <div><span style={{ minWidth: 120, display: 'inline-block' }}>Extraction run</span><code>{parseRun.id}</code></div>}
+      </div>
+
+      {/* No data */}
       {!hasData && (
-        <div className="studio-warn" style={{ marginBottom: '1.5rem' }}>
-          No staged parser data found for this document. Run <code>pnpm parser:insert-local</code> first.
+        <div style={{ marginBottom: '1.5rem' }}>
+          <EmptyState manufacturerId={manufacturerId} documentId={documentId} />
         </div>
       )}
 
-      {/* Orphan warning */}
-      {orphanLinkCount > 0 && (
-        <div className="studio-warn" style={{ marginBottom: '1rem' }}>
-          {orphanLinkCount} system–component link{orphanLinkCount !== 1 ? 's' : ''} reference a component not found in this document's staged_components. Run <code>pnpm parser:verify-local-insert</code> for details.
-        </div>
-      )}
+      {/* Health checks */}
+      <div className="studio-section" style={{ marginTop: 0 }}>
+        <SectionHeading>Health checks ({warnings.length} item{warnings.length !== 1 ? 's' : ''})</SectionHeading>
+        <HealthPanel warnings={warnings} />
+      </div>
 
       {/* Count summary */}
-      <div className="studio-section" style={{ marginTop: 0 }}>
+      <div className="studio-section">
         <SectionHeading>Staged row counts</SectionHeading>
-        <CountGrid counts={counts} />
+        <CountGrid counts={counts} evidenceCoverage={evidenceCoverage} />
       </div>
 
       {/* Extraction run */}
@@ -521,9 +721,13 @@ export default async function AdminParserInspectionPage({ params }: Props) {
       </div>
 
       {/* Footer */}
-      <div style={{ marginTop: '1rem', fontSize: '0.77rem', color: 'var(--ds-text-faint)', lineHeight: 1.6 }}>
-        Read-only inspection · No storage paths, keys, or secrets shown ·
-        Rows capped at 150 per table · Run <code>pnpm parser:verify-local-insert</code> for full CLI report
+      <div style={{ marginTop: '1rem', fontSize: '0.77rem', color: 'var(--ds-text-faint)', lineHeight: 1.7 }}>
+        <div>Read-only inspection · No storage paths, keys, or secrets shown · Rows capped at 200 per table</div>
+        <div>
+          Systems with evidence: {systemIdsWithEvidence.size} of {systems.length} ·
+          Components with evidence: {componentIdsWithEvidence.size} of {components.length} ·
+          Run <code>pnpm parser:verify-local-insert -- --document {documentId}</code> for full CLI report
+        </div>
       </div>
     </StudioShell>
   )
