@@ -364,11 +364,11 @@ export default async function AdminDocumentDetailPage({ params }: Props) {
               color: 'var(--ds-text)',
             }}
           >
-            {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. Dry-run (normal — saves report, exits 0 even with warnings)\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"\n\n# 2b. Dry-run strict mode — exits non-zero on any errors\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" --strict`}
+            {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. (Optional) Run AI parser — writes output to .local/parser-ai-outputs/\npnpm parser:ai-local -- --input ".local/parser-inputs/<bundle>.json"\n\n# 3. Dry-run with AI output (validates against parser contracts)\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json"\n\n# 3b. Strict mode — exits non-zero on any errors or plan failures\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" \\\n  --ai-output ".local/parser-ai-outputs/<output>.json" --strict`}
           </pre>
           <p style={{ margin: '0 0 0.4rem', color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
-            Each dry-run saves a validation report to <code>.local/parser-reports/</code> (gitignored).
-            Reports include entity counts, evidence coverage, classification checks, and dimension warnings.
+            Each dry-run saves a report to <code>.local/parser-reports/</code> (gitignored).
+            Skip step 2 to dry-run the built-in fixture instead of real AI output.
           </p>
           <p style={{ margin: 0, color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
             No staged DB writes occur until the dry-run passes and writes are explicitly approved.

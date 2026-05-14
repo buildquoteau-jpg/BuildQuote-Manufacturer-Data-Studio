@@ -9,6 +9,7 @@
     "lint": "next lint",
     "extract:local-pdf": "node scripts/extract-local-pdf.mjs",
     "parser:bundle": "node scripts/create-parser-input-bundle.mjs",
+    "parser:ai-local": "tsx scripts/parser-ai-local.ts",
     "parser:dry-run": "tsx scripts/parser-dry-run.ts"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "pdf-parse": "^2.4.5",
+    "@anthropic-ai/sdk": "^0.55.0",
     "tsx": "^4.19.3",
     "typescript": "^5"
   }

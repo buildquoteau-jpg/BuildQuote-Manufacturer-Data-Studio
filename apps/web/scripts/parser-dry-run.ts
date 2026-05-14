@@ -2,24 +2,25 @@
 /**
  * apps/web/scripts/parser-dry-run.ts
  *
- * Local-only dry-run: loads a parser input bundle, applies a fixture parser
- * output, runs the full validation + insertion planning contracts, saves a
+ * Local-only dry-run: loads a parser input bundle plus an optional AI output
+ * file, runs the full validation + insertion planning contracts, saves a
  * structured JSON report, and prints a readable summary.
  *
- * Usage:
+ * Usage (fixture mode — no AI output needed):
  *   pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"
  *   pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" --strict
  *
- * --strict: exits non-zero if there are any validation errors, missing
- *   required fields, unresolved links, or missing evidence for core entities.
- *   Without --strict: saves report and prints warnings but exits 0.
+ * Usage (AI output mode — validate real AI parser output):
+ *   pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" \
+ *                          --ai-output ".local/parser-ai-outputs/<output>.json"
+ *   pnpm parser:dry-run -- --input "..." --ai-output "..." --strict
+ *
+ * --input      Bundle JSON from parser:bundle (required — provides run context)
+ * --ai-output  AI output JSON from parser:ai-local (optional — replaces fixture)
+ * --strict     Exit non-zero on any validation errors or plan failures
  *
  * No DB writes. No AI calls. No Supabase client. No file uploads.
  * Report is written to .local/parser-reports/ (gitignored).
- *
- * The fixture used here (mockNTWAvenueDecking) exercises the full pipeline
- * contract. It is NOT AI-extracted content from the real PDF — that step
- * comes after dry-run passes and AI parser integration is approved.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
@@ -33,7 +34,6 @@ import type { DryRunReport, DryRunCheck } from '../lib/parser/dry-run-report'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-// scripts/ → .. → apps/web → .. → .. → monorepo root
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -54,6 +54,12 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
   return args
 }
 
+function resolveDotLocal(p: string): string {
+  return p.startsWith('.local/')
+    ? path.join(REPO_ROOT, p)
+    : path.resolve(p)
+}
+
 function hr() {
   console.log('─'.repeat(60))
 }
@@ -65,7 +71,9 @@ function printIssues(label: string, items: DryRunCheck[], cap: number) {
   console.log(`[parser:dry-run] ${label}:`)
   const shown = items.slice(0, cap)
   for (const issue of shown) {
-    const tag = issue.severity === 'error' ? '[ERROR]' : issue.severity === 'warning' ? '[WARN] ' : '[INFO] '
+    const tag =
+      issue.severity === 'error' ? '[ERROR]' :
+      issue.severity === 'warning' ? '[WARN] ' : '[INFO] '
     const loc = issue.path ? ` ${issue.path}:` : ''
     console.log(`  ${tag} [${issue.code}]${loc} ${issue.message}`)
   }
@@ -79,23 +87,20 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const strict = args.strict === true
 
+  // ── Load bundle (required for run context) ────────────────────
   const inputArg = args.input
   if (!inputArg || typeof inputArg !== 'string') {
-    console.error('[ERROR] --input <path> is required')
+    console.error('[ERROR] --input <bundle.json> is required')
     console.error(
       '  Example: pnpm parser:dry-run -- --input ".local/parser-inputs/some-bundle.json"'
     )
     process.exit(1)
   }
 
-  // Resolve .local/ paths relative to monorepo root (where the bundle script writes them)
-  const resolvedInput = inputArg.startsWith('.local/')
-    ? path.join(REPO_ROOT, inputArg)
-    : path.resolve(inputArg)
-
+  const resolvedInput = resolveDotLocal(inputArg)
   if (!existsSync(resolvedInput)) {
     console.error(`[ERROR] Bundle file not found: ${resolvedInput}`)
-    console.error('  Run pnpm parser:bundle first to generate a bundle.')
+    console.error('  Run pnpm parser:bundle first.')
     process.exit(1)
   }
 
@@ -111,8 +116,43 @@ async function main() {
 
   const { manufacturer, document, extraction_run, combined_text_metadata } = bundle
 
+  // ── Load AI output (optional) ─────────────────────────────────
+  const aiOutputArg = args['ai-output']
+  let aiOutputMeta: Record<string, unknown> | null = null
+  let candidateSource = 'fixture'
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let aiOutputFile: any = null
+  if (aiOutputArg && typeof aiOutputArg === 'string') {
+    const resolvedAiOutput = resolveDotLocal(aiOutputArg)
+    if (!existsSync(resolvedAiOutput)) {
+      console.error(`[ERROR] AI output file not found: ${resolvedAiOutput}`)
+      console.error('  Run pnpm parser:ai-local first.')
+      process.exit(1)
+    }
+    try {
+      aiOutputFile = JSON.parse(readFileSync(resolvedAiOutput, 'utf8'))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[ERROR] Could not parse AI output file: ${msg}`)
+      process.exit(1)
+    }
+    if (!aiOutputFile.parser_output) {
+      console.error('[ERROR] AI output file has no parser_output field.')
+      console.error('  The file may have a parse_error. Inspect it before re-running.')
+      process.exit(1)
+    }
+    aiOutputMeta = aiOutputFile._meta ?? null
+    candidateSource = aiOutputMeta?.fixture_mode
+      ? `fixture via parser:ai-local (${aiOutputMeta?.fixture_label ?? 'unknown'})`
+      : `AI (${aiOutputMeta?.model ?? 'unknown model'})`
+  }
+
+  // ── Print bundle summary ──────────────────────────────────────
+  const modeTag = strict ? ' (--strict mode)' : ''
+  const aiTag = aiOutputArg ? ' + AI output' : ''
   hr()
-  console.log(`[parser:dry-run] Bundle summary${strict ? ' (--strict mode)' : ''}`)
+  console.log(`[parser:dry-run] Bundle summary${modeTag}${aiTag}`)
   console.log(`  Manufacturer  : ${manufacturer?.name ?? '?'} (${manufacturer?.slug ?? '?'})`)
   console.log(`  Document      : ${document?.document_name ?? document?.id ?? '?'}`)
   console.log(`  Doc status    : ${document?.status ?? '?'}`)
@@ -131,21 +171,52 @@ async function main() {
   )
   hr()
 
-  // Build a parser output candidate from the existing fixture,
-  // overriding source_document_id to reference the real extracted document.
-  const candidate: ParserOutput = {
-    ...mockNTWAvenueDecking,
-    source_document_id: document?.id ?? null,
+  // ── Build parser output candidate ────────────────────────────
+  let candidate: ParserOutput
+  let fixtureLabel: string
+
+  if (aiOutputFile) {
+    // AI output path — validate the shape minimally before passing to planner
+    const raw = aiOutputFile.parser_output
+    const requiredArrays = ['systems', 'system_profiles', 'components', 'system_components', 'system_colours'] as const
+    const missingArrays = requiredArrays.filter(k => !Array.isArray(raw[k]))
+    if (missingArrays.length > 0) {
+      console.warn(`[WARN] AI output is missing top-level arrays: ${missingArrays.join(', ')}`)
+      console.warn('  Adding empty arrays — validation will flag missing entities.')
+      for (const k of missingArrays) raw[k] = []
+    }
+    if (!Array.isArray(raw.warnings)) raw.warnings = []
+    if (!Array.isArray(raw.ignored_content_notes)) raw.ignored_content_notes = []
+
+    candidate = raw as ParserOutput
+    fixtureLabel = candidateSource
+
+    console.log('[parser:dry-run] Parser output source')
+    console.log(`  Source        : ${candidateSource}`)
+    if (aiOutputMeta?.model) console.log(`  Model         : ${aiOutputMeta.model}`)
+    if (aiOutputMeta?.usage) {
+      const u = aiOutputMeta.usage as Record<string, unknown>
+      console.log(`  Input tokens  : ${u.input_tokens ?? '?'}`)
+      console.log(`  Output tokens : ${u.output_tokens ?? '?'}`)
+    }
+    console.log(`  AI output     : ${resolveDotLocal(aiOutputArg as string)}`)
+    hr()
+  } else {
+    // Fixture path (no AI output provided)
+    candidate = {
+      ...mockNTWAvenueDecking,
+      source_document_id: document?.id ?? null,
+    }
+    fixtureLabel = 'mockNTWAvenueDecking (lib/parser/fixtures.ts)'
+
+    console.log('[parser:dry-run] Parser output candidate')
+    console.log(`  Fixture       : ${fixtureLabel}`)
+    console.log('  NOTE: No AI call made. This exercises pipeline contracts,')
+    console.log('        not actual catalogue data from the real PDF.')
+    hr()
   }
 
-  const FIXTURE_LABEL = 'mockNTWAvenueDecking (lib/parser/fixtures.ts)'
-  console.log('[parser:dry-run] Parser output candidate')
-  console.log(`  Fixture       : ${FIXTURE_LABEL}`)
-  console.log('  NOTE: No AI call made. This exercises pipeline contracts,')
-  console.log('        not actual catalogue data from the real PDF.')
-  hr()
-
-  // Assemble run context from bundle data
+  // ── Run context ───────────────────────────────────────────────
   const context: Partial<ParserRunContext> = {
     source_document_id: document?.id ?? undefined,
     manufacturer_id: manufacturer?.id ?? undefined,
@@ -153,14 +224,13 @@ async function main() {
     parsed_at: new Date().toISOString(),
   }
 
-  // Run planner (validates internally, then plans if valid)
+  // ── Plan + report ─────────────────────────────────────────────
   const plan = planParserOutputInsertion(candidate, context)
 
-  // Build full report
   const report: DryRunReport = buildDryRunReport({
     output: candidate,
     plan,
-    fixtureLabel: FIXTURE_LABEL,
+    fixtureLabel,
     bundleDocumentId: document?.id ?? null,
     bundleDocumentName: document?.document_name ?? null,
   })
@@ -215,9 +285,9 @@ async function main() {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 60)
+  const aiSuffix = aiOutputFile ? '-ai' : '-fixture'
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  const reportFilename = `${docSlug}-${timestamp}.json`
-  const reportPath = path.join(reportDir, reportFilename)
+  const reportPath = path.join(reportDir, `${docSlug}${aiSuffix}-${timestamp}.json`)
 
   writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8')
 
@@ -241,7 +311,6 @@ async function main() {
 
   if (planFailed) {
     console.log('[parser:dry-run] FAIL — planner returned ok=false. See errors above.')
-    console.log('  Run with --strict to enforce exit code.')
     process.exit(strict ? 1 : 0)
   }
 

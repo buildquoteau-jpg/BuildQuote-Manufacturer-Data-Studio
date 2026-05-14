@@ -2,16 +2,15 @@
 
 ## What this is
 
-A two-step local CLI harness that takes extracted `document_chunks` from Supabase,
-builds a structured parser input bundle, then validates a parser output candidate
-against the existing parser contracts, runs hardened validation checks, saves a
-JSON report, and produces a staged insertion plan — without writing anything to
-any database.
+A local CLI harness that takes extracted `document_chunks` from Supabase,
+builds a structured parser input bundle, optionally calls the AI parser,
+validates a parser output candidate against the existing parser contracts,
+runs hardened validation checks, saves a JSON report, and produces a staged
+insertion plan — without writing anything to any database.
 
 This sits between the extraction step (which populates `document_chunks`) and the
 eventual staged-write step (which would populate `staged_systems`, `staged_components`,
-etc.). It lets you verify the pipeline contracts are sound before any AI integration
-or DB writes happen.
+etc.). It lets you verify the pipeline contracts are sound before any DB writes happen.
 
 ## How it relates to extraction
 
@@ -21,6 +20,8 @@ PDF file
 source_documents + document_chunks (in local Supabase)
   ↓  parser:bundle
 .local/parser-inputs/<bundle>.json   ← parser input bundle
+  ↓  parser:ai-local (optional)
+.local/parser-ai-outputs/<output>.json  ← AI parser output
   ↓  parser:dry-run
 validation result + insertion plan   ← printed to terminal, nothing written to DB
 .local/parser-reports/<report>.json  ← structured JSON report saved locally
@@ -49,24 +50,62 @@ pnpm parser:bundle -- \
 
 Output is written to `.local/parser-inputs/<doc-name>-<timestamp>.json`.
 
-### Step 2 — Run parser dry-run (normal)
+### Step 2a (optional) — Run AI parser locally
 
-Loads the bundle, applies the mock parser output fixture, validates it, saves a
-report to `.local/parser-reports/`, and prints a summary. Exits 0 regardless of
-warnings; only crashes on script errors.
+Sends the bundle's chunks to the Anthropic API and writes the parser output to
+`.local/parser-ai-outputs/`. Requires `ANTHROPIC_API_KEY` in `.env.local`.
+
+```sh
+pnpm parser:ai-local -- --input ".local/parser-inputs/<bundle>.json"
+```
+
+Available flags:
+
+| Flag | Description |
+|---|---|
+| `--input <path>` | Bundle JSON from `parser:bundle` (required) |
+| `--model <id>` | Override AI model (default: `claude-sonnet-4-6`) |
+| `--out <path>` | Custom output path (must be under `.local/`) |
+| `--fixture` | Skip AI call, write fixture output instead (useful for pipeline testing) |
+
+**Fixture mode** (no API key needed):
+
+```sh
+pnpm parser:ai-local -- --input ".local/parser-inputs/<bundle>.json" --fixture
+```
+
+Output is written to `.local/parser-ai-outputs/<doc-name>-<timestamp>.json`.
+
+### Step 2b — Run parser dry-run with fixture (no AI)
+
+Loads the bundle and applies the built-in mock fixture. Validates, saves a
+report to `.local/parser-reports/`, and prints a summary.
 
 ```sh
 pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"
 ```
 
-### Step 2 (alternative) — Run parser dry-run in strict mode
+### Step 3 — Run parser dry-run with AI output
 
-Same as above, but exits non-zero if there are any validation errors, unresolved
-entity links, missing required fields, or plan failures. Use this in CI or before
-approving a staged write.
+Loads the bundle for context and validates the real AI parser output against
+all parser contracts. Report filename gets an `-ai` suffix.
 
 ```sh
-pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" --strict
+pnpm parser:dry-run -- \
+  --input ".local/parser-inputs/<bundle>.json" \
+  --ai-output ".local/parser-ai-outputs/<output>.json"
+```
+
+### Strict mode
+
+Add `--strict` to either dry-run form to exit non-zero on any validation errors
+or plan failures. Use this before approving a staged write.
+
+```sh
+pnpm parser:dry-run -- \
+  --input ".local/parser-inputs/<bundle>.json" \
+  --ai-output ".local/parser-ai-outputs/<output>.json" \
+  --strict
 ```
 
 ## What PASS / FAIL means
@@ -79,12 +118,22 @@ pnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json" --strict
 | `FAIL` | Planner returned ok=false (validation errors from existing parser contract) |
 | `FAIL (--strict)` | Strict mode: any errors present or plan failed |
 
+## Output folders
+
+| Folder | Contents | Gitignored |
+|---|---|---|
+| `.local/parser-inputs/` | Parser input bundles from `parser:bundle` | Yes |
+| `.local/parser-ai-outputs/` | AI parser output from `parser:ai-local` | Yes |
+| `.local/parser-reports/` | Validation reports from `parser:dry-run` | Yes |
+
+All `.local/` output is gitignored and never committed.
+
 ## Report files
 
 Each dry-run saves a structured JSON report to:
 
 ```
-.local/parser-reports/<doc-name>-<timestamp>.json
+.local/parser-reports/<doc-name>-<fixture|ai>-<timestamp>.json
 ```
 
 The report includes:
@@ -100,8 +149,6 @@ The report includes:
   - `duplicates` — duplicate product codes, SKUs, colour names
   - `uncertain` — uncertain field summary
 
-The `.local/` directory is gitignored — reports are never committed.
-
 ## Prerequisites
 
 - Local Supabase must be running (`supabase start`)
@@ -111,7 +158,11 @@ The `.local/` directory is gitignored — reports are never committed.
   NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
   SUPABASE_SERVICE_ROLE_KEY=<local service role key>
   ```
-- Run `pnpm install` first if `tsx` is not yet installed (added as devDependency)
+- For AI parser calls, also add:
+  ```
+  ANTHROPIC_API_KEY=<your key>
+  ```
+- Run `pnpm install` first if `tsx` or `@anthropic-ai/sdk` are not yet installed
 
 ## Known reference IDs (NewTechWood extraction)
 
@@ -124,7 +175,6 @@ The `.local/` directory is gitignored — reports are never committed.
 
 ## Safety boundaries
 
-- **No AI call.** The dry-run uses an existing fixture, not real AI-extracted output.
 - **No DB writes.** The planner is read-only — it returns a plan struct, writes nothing.
 - **No staged table writes.** `staged_systems`, `staged_components`, etc. are untouched.
 - **No `parser_field_evidence` insertion.** Evidence rows are planned but not written.
@@ -132,14 +182,12 @@ The `.local/` directory is gitignored — reports are never committed.
 - **No production Supabase.** The bundle script requires `LOCAL_ONLY_ALLOW_SERVICE_ROLE=true`.
 - **No upload / R2 / storage.** Neither script touches file storage.
 - **No publish / export.** Nothing leaves the local environment.
-- **All outputs are gitignored.** `.local/` is in `.gitignore`. Never commit bundles or reports.
+- **All outputs are gitignored.** `.local/` is in `.gitignore`. Never commit bundles, AI outputs, or reports.
 
 ## What is not done yet
 
 | Capability | Status |
 |---|---|
-| AI parser call against real chunks | Not implemented |
-| Real AI parser output → dry-run | Not implemented |
 | Staged writes (`staged_systems`, etc.) | Not implemented |
 | `parser_field_evidence` insertion | Not implemented |
 | Correction UI / field verification UI | Not implemented |
@@ -147,13 +195,12 @@ The `.local/` directory is gitignored — reports are never committed.
 
 ## Next step after dry-run passes
 
-1. Confirm dry-run PASS with the fixture output (and `--strict` passes clean).
-2. Agree on AI parser integration approach (prompt, model, calling convention).
-3. Hook the real AI parser into `parser-dry-run.ts` (or a new script) — replace
-   the fixture with actual parser output from the bundle's chunk text.
-4. Re-run dry-run with the real parser output to verify the contract still passes.
+1. Run `parser:bundle` to build a fresh bundle from your local DB.
+2. Run `parser:ai-local` to get real AI parser output from the chunks.
+3. Run `parser:dry-run --ai-output` to validate the AI output against contracts.
+4. Re-run with `--strict` to confirm no errors before staged write.
 5. With explicit approval: implement the staged-write step using the
    `ParserInsertionPlan` from `planParserOutputInsertion`.
 
-This staged write step is a **separate work chunk** and requires explicit approval
+The staged write step is a **separate work chunk** and requires explicit approval
 before any code is written.
