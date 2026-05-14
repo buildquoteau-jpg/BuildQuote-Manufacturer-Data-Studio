@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "extract:local-pdf": "node scripts/extract-local-pdf.mjs"
+    "extract:local-pdf": "node scripts/extract-local-pdf.mjs",
+    "parser:bundle": "node scripts/create-parser-input-bundle.mjs",
+    "parser:dry-run": "tsx scripts/parser-dry-run.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -21,6 +23,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "pdf-parse": "^2.4.5",
+    "tsx": "^4.19.3",
     "typescript": "^5"
   }
 }

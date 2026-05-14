@@ -7,7 +7,9 @@
     "build": "pnpm --filter web build",
     "build:web": "pnpm --filter web build",
     "lint": "pnpm --filter web lint",
-    "extract:local-pdf": "pnpm --filter web run extract:local-pdf"
+    "extract:local-pdf": "pnpm --filter web run extract:local-pdf",
+    "parser:bundle": "pnpm --filter web run parser:bundle",
+    "parser:dry-run": "pnpm --filter web run parser:dry-run"
   },
   "engines": {
     "node": ">=18"

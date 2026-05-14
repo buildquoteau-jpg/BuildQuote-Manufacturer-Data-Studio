@@ -335,6 +335,43 @@ export default async function AdminDocumentDetailPage({ params }: Props) {
         )}
       </div>
 
+      {/* Parser dry-run note */}
+      <div className="studio-section">
+        <div className="studio-section-heading">Parser dry-run (local CLI)</div>
+        <div
+          style={{
+            background: 'var(--ds-card-bg)',
+            border: '1px solid var(--ds-border)',
+            borderRadius: 8,
+            padding: '0.9rem 1.1rem',
+            fontSize: '0.82rem',
+            color: 'var(--ds-text-muted)',
+            lineHeight: 1.7,
+          }}
+        >
+          <p style={{ margin: '0 0 0.6rem' }}>
+            The next step after extraction is a local CLI dry-run — not a UI action.
+            Run these commands from the monorepo root:
+          </p>
+          <pre
+            style={{
+              background: 'var(--ds-border-soft)',
+              borderRadius: 6,
+              padding: '0.55rem 0.8rem',
+              fontSize: '0.78rem',
+              overflowX: 'auto',
+              margin: '0 0 0.6rem',
+              color: 'var(--ds-text)',
+            }}
+          >
+            {`# 1. Build parser input bundle from extracted chunks\npnpm parser:bundle -- --document ${documentId}\n\n# 2. Dry-run parser contract validation (no DB writes)\npnpm parser:dry-run -- --input ".local/parser-inputs/<bundle>.json"`}
+          </pre>
+          <p style={{ margin: 0, color: 'var(--ds-text-faint)', fontSize: '0.78rem' }}>
+            No staged DB writes occur until the dry-run passes and writes are explicitly approved.
+          </p>
+        </div>
+      </div>
+
       {/* Footer note */}
       <div
         style={{
