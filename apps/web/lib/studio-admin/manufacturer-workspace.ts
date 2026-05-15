@@ -467,6 +467,164 @@ export async function getAdminManufacturerPreviewData(
 }
 
 // ============================================================
+// getAdminManufacturerSystemCards
+// Full system card data (systems + profiles + components + colours)
+// for the admin preview page.
+// ============================================================
+
+export type AdminSystemCardProfile = {
+  product_code: string | null
+  profile_name: string
+  dimensions: string | null
+  length_mm: number | null
+  width_mm: number | null
+  thickness_mm: number | null
+  uom: string | null
+  supplier_pack_qty: number | null
+  supplier_pack_uom: string | null
+  sort_order: number | null
+}
+
+export type AdminSystemCardComponent = {
+  sku: string | null
+  name: string
+  description: string | null
+  category: string | null
+  uom: string | null
+  supplier_pack_qty: number | null
+  supplier_pack_uom: string | null
+  role: string | null
+  sort_order: number | null
+}
+
+export type AdminSystemCardColour = {
+  colour_name: string
+  sku_suffix: string | null
+  is_stocked: boolean | null
+}
+
+export type AdminSystemCardSystem = {
+  id: string
+  name: string
+  category: string | null
+  subcategory: string | null
+  description: string | null
+  hero_image_url: string | null
+  bal_rating: string | null
+  notes: string | null
+  verification_status: string
+  profiles: AdminSystemCardProfile[]
+  components: AdminSystemCardComponent[]
+  colours: AdminSystemCardColour[]
+}
+
+export type AdminSystemCardsResult =
+  | { ok: true; manufacturer: AdminWorkspaceManufacturer; systems: AdminSystemCardSystem[] }
+  | { ok: false; error: string; forbidden?: boolean }
+
+export async function getAdminManufacturerSystemCards(
+  manufacturerId: string,
+): Promise<AdminSystemCardsResult> {
+  const authCheck = await assertAdminOrReviewer()
+  if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
+
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const [mfrResult, systemsResult] = await Promise.all([
+    fetchManufacturer(c.supabase, manufacturerId),
+    c.supabase
+      .from('staged_systems')
+      .select('id, name, category, subcategory, description, hero_image_url, bal_rating, notes, verification_status')
+      .eq('manufacturer_id', manufacturerId)
+      .order('sort_order')
+      .limit(50),
+  ])
+
+  if (!mfrResult.ok) return { ok: false, error: mfrResult.error }
+  if (systemsResult.error) return { ok: false, error: `Failed to load systems: ${systemsResult.error.message}` }
+
+  type SysRow = {
+    id: string; name: string; category: string | null; subcategory: string | null
+    description: string | null; hero_image_url: string | null; bal_rating: string | null
+    notes: string | null; verification_status: string
+  }
+  const systemRows = (systemsResult.data ?? []) as SysRow[]
+  const systemIds = systemRows.map((s) => s.id)
+
+  if (systemIds.length === 0) {
+    return { ok: true, manufacturer: mfrResult.manufacturer, systems: [] }
+  }
+
+  const [profilesResult, coloursResult, sysComponentsResult] = await Promise.all([
+    c.supabase
+      .from('staged_system_profiles')
+      .select('staged_system_id, product_code, profile_name, dimensions, length_mm, width_mm, thickness_mm, uom, supplier_pack_qty, supplier_pack_uom, sort_order')
+      .in('staged_system_id', systemIds)
+      .order('sort_order'),
+    c.supabase
+      .from('staged_system_colours')
+      .select('staged_system_id, colour_name, sku_suffix, is_stocked')
+      .in('staged_system_id', systemIds)
+      .order('sort_order'),
+    c.supabase
+      .from('staged_system_components')
+      .select('staged_system_id, staged_components(sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, role, sort_order)')
+      .in('staged_system_id', systemIds),
+  ])
+
+  type ProfileRow = AdminSystemCardProfile & { staged_system_id: string }
+  type ColourRow = AdminSystemCardColour & { staged_system_id: string }
+  type CompLinkRow = {
+    staged_system_id: string
+    staged_components: AdminSystemCardComponent | AdminSystemCardComponent[] | null
+  }
+
+  const profilesMap = new Map<string, AdminSystemCardProfile[]>()
+  for (const r of (profilesResult.data ?? []) as ProfileRow[]) {
+    const { staged_system_id, ...profile } = r
+    const list = profilesMap.get(staged_system_id) ?? []
+    list.push(profile)
+    profilesMap.set(staged_system_id, list)
+  }
+
+  const coloursMap = new Map<string, AdminSystemCardColour[]>()
+  for (const r of (coloursResult.data ?? []) as ColourRow[]) {
+    const { staged_system_id, ...colour } = r
+    const list = coloursMap.get(staged_system_id) ?? []
+    list.push(colour)
+    coloursMap.set(staged_system_id, list)
+  }
+
+  const componentsMap = new Map<string, AdminSystemCardComponent[]>()
+  for (const r of (sysComponentsResult.data as unknown as CompLinkRow[] | null) ?? []) {
+    if (!r.staged_components) continue
+    const comp = Array.isArray(r.staged_components) ? r.staged_components[0] : r.staged_components
+    if (!comp) continue
+    const list = componentsMap.get(r.staged_system_id) ?? []
+    list.push(comp)
+    componentsMap.set(r.staged_system_id, list)
+  }
+
+  const systems: AdminSystemCardSystem[] = systemRows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    subcategory: s.subcategory,
+    description: s.description,
+    hero_image_url: s.hero_image_url,
+    bal_rating: s.bal_rating,
+    notes: s.notes,
+    verification_status: s.verification_status,
+    profiles: profilesMap.get(s.id) ?? [],
+    components: componentsMap.get(s.id) ?? [],
+    colours: coloursMap.get(s.id) ?? [],
+  }))
+
+  return { ok: true, manufacturer: mfrResult.manufacturer, systems }
+}
+
+// ============================================================
 // getAdminDocumentDetail
 // Single document with extracted pages/chunks for the admin
 // document detail view. Storage bucket/key intentionally excluded.
