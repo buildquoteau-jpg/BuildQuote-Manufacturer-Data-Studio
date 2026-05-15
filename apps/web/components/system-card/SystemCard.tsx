@@ -196,7 +196,7 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
         }}>
           <thead>
             <tr style={{ background: 'var(--ds-page-bg)' }}>
-              {(['Code', 'Description', 'L', 'W', 'T', 'UOM', 'Pack'] as const).map((h) => (
+              {(['Code', 'Description', 'L', 'W', 'T', 'UOM'] as const).map((h) => (
                 <th key={h} style={{
                   padding: '0.45rem 0.65rem',
                   textAlign: 'left',
@@ -234,11 +234,6 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
                   {fmtUom(p.uom)}
-                </td>
-                <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-muted)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
-                  {p.supplier_pack_qty != null
-                    ? `${p.supplier_pack_qty} ${p.supplier_pack_uom ?? ''}`
-                    : '—'}
                 </td>
               </tr>
             ))}
