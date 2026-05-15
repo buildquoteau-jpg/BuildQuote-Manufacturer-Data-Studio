@@ -284,16 +284,14 @@ function ComponentsSection({ components }: { components: SystemComponent[] }) {
                 </div>
               )}
             </div>
-            {(c.supplier_pack_qty != null || c.uom) && (
+            {c.uom && (
               <div style={{
                 fontSize: '0.75rem',
                 color: 'var(--ds-text-faint)',
                 whiteSpace: 'nowrap',
                 textAlign: 'right',
               }}>
-                {c.supplier_pack_qty != null
-                  ? `${c.supplier_pack_qty} ${c.supplier_pack_uom ?? fmtUom(c.uom)}`
-                  : fmtUom(c.uom)}
+                {fmtUom(c.uom)}
               </div>
             )}
           </div>
