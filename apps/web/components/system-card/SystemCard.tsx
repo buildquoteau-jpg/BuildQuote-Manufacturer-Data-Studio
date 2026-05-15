@@ -99,19 +99,12 @@ function HeroArea({ imageUrl, manufacturerName, name, category, subcategory, bal
   balRating: string | null
 }) {
   return (
-    <div style={{
-      position: 'relative',
+    <div className="sc-hero" style={{
       borderRadius: '10px 10px 0 0',
-      overflow: 'hidden',
       background: imageUrl ? undefined : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)',
-      minHeight: 240,
     }}>
       {imageUrl && (
-        <img
-          src={imageUrl}
-          alt={name}
-          style={{ width: '100%', height: 280, objectFit: 'cover', display: 'block' }}
-        />
+        <img src={imageUrl} alt={name} />
       )}
 
       {/* Gradient overlay */}
@@ -189,12 +182,7 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
   return (
     <Section title={`Profiles · ${profiles.length} variant${profiles.length !== 1 ? 's' : ''}`}>
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <table style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          fontSize: '0.82rem',
-          minWidth: 480,
-        }}>
+        <table className="sc-profiles-table">
           <thead>
             <tr style={{ background: 'var(--ds-page-bg)' }}>
               {(['Code', 'Description', 'L', 'W', 'T', 'UOM'] as const).map((h) => (
@@ -380,13 +368,7 @@ function ColoursSection({ colours, notes }: { colours: SystemColour[]; notes: st
 
 export function SystemCard({ data }: { data: SystemCardData }) {
   return (
-    <div style={{
-      background: 'var(--ds-card-bg)',
-      borderRadius: 10,
-      border: '1px solid var(--ds-border)',
-      overflow: 'hidden',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-    }}>
+    <div className="sc-card">
       <HeroArea
         imageUrl={data.hero_image_url}
         manufacturerName={data.manufacturer_name}
@@ -396,7 +378,7 @@ export function SystemCard({ data }: { data: SystemCardData }) {
         balRating={data.bal_rating}
       />
 
-      <div style={{ padding: '1.25rem 1.5rem 1.75rem' }}>
+      <div className="sc-body">
         {data.description && (
           <p style={{
             fontSize: '0.875rem',

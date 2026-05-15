@@ -232,95 +232,49 @@ const JDS_REGALFRAME: SystemCardData = {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+const CARDS = [
+  { label: 'James Hardie — Axon™ Cladding', data: AXON_CLADDING },
+  { label: 'JDS Metal Doorframes — RegalFrame', data: JDS_REGALFRAME },
+]
+
 export default function SystemCardPreviewPage() {
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'var(--ds-page-bg)',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif',
-    }}>
-      {/* Preview banner */}
+    <div style={{ minHeight: '100vh', background: 'var(--ds-page-bg)' }}>
+      {/* Banner */}
       <div style={{
         background: 'var(--ds-navy)',
         color: '#fff',
-        padding: '0.6rem 1.5rem',
+        padding: '0.6rem 1rem',
         fontSize: '0.8rem',
         display: 'flex',
         alignItems: 'center',
-        gap: '1rem',
+        gap: '0.75rem',
         flexWrap: 'wrap',
       }}>
-        <span style={{ fontWeight: 700 }}>BuildQuote Data Studio</span>
-        <span style={{ opacity: 0.6 }}>·</span>
-        <span style={{ opacity: 0.8 }}>System card design preview</span>
-        <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: '0.72rem' }}>
-          No auth · Static seed data · Not connected to DB
+        <span style={{ fontWeight: 700 }}>BuildQuote</span>
+        <span style={{ opacity: 0.5 }}>·</span>
+        <span style={{ opacity: 0.8 }}>System cards</span>
+        <span style={{ marginLeft: 'auto', opacity: 0.5, fontSize: '0.7rem' }}>
+          Preview · Static data
         </span>
       </div>
 
-      <div style={{ maxWidth: 820, margin: '0 auto', padding: '2rem 1rem 4rem' }}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h1 style={{
-            fontSize: '1.1rem',
-            fontWeight: 700,
-            color: 'var(--ds-navy)',
-            margin: '0 0 0.25rem',
-          }}>
-            System card preview
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem 1rem 4rem' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--ds-navy)', margin: '0 0 0.2rem' }}>
+            System cards
           </h1>
-          <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: 0 }}>
-            Two cards shown — James Hardie Axon™ Cladding and JDS RegalFrame. Both seeded from
-            your uploaded CSV exports. Replace <code>hero_image_url: null</code> with a real URL
-            to preview with imagery.
+          <p style={{ fontSize: '0.8rem', color: 'var(--ds-text-muted)', margin: 0 }}>
+            {CARDS.length} systems · tap a card to explore profiles and accessories
           </p>
         </div>
 
-        {/* Cards */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
-          <div>
-            <div style={{
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: 'var(--ds-text-faint)',
-              marginBottom: '0.6rem',
-            }}>
-              Card 1 of 2 — James Hardie
+        <div className="sc-card-grid">
+          {CARDS.map(({ label, data }) => (
+            <div key={label}>
+              <SystemCard data={data} />
             </div>
-            <SystemCard data={AXON_CLADDING} />
-          </div>
-
-          <div>
-            <div style={{
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: 'var(--ds-text-faint)',
-              marginBottom: '0.6rem',
-            }}>
-              Card 2 of 2 — JDS Metal Doorframes
-            </div>
-            <SystemCard data={JDS_REGALFRAME} />
-          </div>
-        </div>
-
-        {/* Hero image placeholder note */}
-        <div style={{
-          marginTop: '2rem',
-          background: 'var(--ds-card-bg)',
-          border: '1px solid var(--ds-border-soft)',
-          borderRadius: 8,
-          padding: '1rem 1.25rem',
-          fontSize: '0.82rem',
-          color: 'var(--ds-text-muted)',
-        }}>
-          <strong style={{ color: 'var(--ds-text-sub)' }}>Hero image</strong>
-          {' '}— set <code style={{ fontSize: '0.8rem' }}>hero_image_url</code> on the card data
-          to any image URL and it will render at the top of the card with a gradient overlay.
-          Once Docling re-extraction is complete and images are uploaded to R2, those URLs feed
-          directly into this field.
+          ))}
         </div>
       </div>
     </div>
