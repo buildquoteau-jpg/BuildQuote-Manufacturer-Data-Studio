@@ -314,7 +314,7 @@ async function main() {
         sku: str(row.sku),
         sku_suffix: str(row.sku_suffix),
         image_url: str(row.image_url),
-        is_stocked: bool(row.is_stocked),
+        is_stocked: bool(row.is_stocked) ?? false,
         parser_notes: str(row.parser_notes) ? JSON.parse(row.parser_notes) : null,
         sort_order: num(row.sort_order),
         verification_status: str(row.verification_status) ?? 'pending_review',
