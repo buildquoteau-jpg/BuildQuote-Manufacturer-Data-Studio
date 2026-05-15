@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 
 // ─── Data types ───────────────────────────────────────────────────────────────
@@ -247,10 +248,41 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
 // ─── Accessories ──────────────────────────────────────────────────────────────
 
 function ComponentsSection({ components }: { components: SystemComponent[] }) {
+  const [open, setOpen] = useState(false)
   if (components.length === 0) return null
 
   return (
-    <Section title="Accessories & components">
+    <div style={{ marginTop: '1.75rem' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'none',
+          border: 'none',
+          borderBottom: '1px solid var(--ds-border-soft)',
+          padding: '0 0 0.5rem',
+          cursor: 'pointer',
+          marginBottom: open ? '0.75rem' : 0,
+        }}
+      >
+        <span style={{
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--ds-text-faint)',
+        }}>
+          {`Accessories & components · ${components.length}`}
+        </span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)' }}>
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+
+      {open && (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {components.map((c, i) => (
           <div key={i} style={{
@@ -297,7 +329,8 @@ function ComponentsSection({ components }: { components: SystemComponent[] }) {
           </div>
         ))}
       </div>
-    </Section>
+      )}
+    </div>
   )
 }
 
