@@ -32,8 +32,9 @@
  * --provider   anthropic (default) | openai  — only with --ai
  * --model      Model ID override              — only with --ai
  * --out-dir    Custom output dir (must be under .local/)
- * --only-pass  Run a single named pass only: systems | profiles | components | colours | relationships
- * --check-keys Print API key diagnostics and exit
+ * --manufacturer  Manufacturer slug matching a file in prompts/manufacturer-hints/ (e.g. james_hardie)
+ * --only-pass     Run a single named pass only: systems | profiles | components | colours | relationships
+ * --check-keys    Print API key diagnostics and exit
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
@@ -105,6 +106,7 @@ interface PassResult {
   components: unknown[]
   system_colours: unknown[]
   system_components: unknown[]
+  image_candidates: unknown[]
   warnings: string[]
   ignored_content_notes: string[]
 }
@@ -192,31 +194,31 @@ const PASS_DESCRIPTIONS: Record<PassName, string> = {
     'Extract ONLY the top-level product systems/ranges from these chunks. ' +
     'A system is a broad named product category (e.g. "Avenue Decking", "Shadowline Cladding"). ' +
     'Do NOT extract individual profile sizes or accessories here. ' +
-    'Return JSON: { "systems": [...], "warnings": [], "ignored_content_notes": [] }',
+    'Return JSON: { "systems": [...], "image_candidates": [...], "warnings": [], "ignored_content_notes": [] }',
 
   profiles:
     'Extract ONLY the main sellable dimensional board/panel variants (system profiles). ' +
     'Focus on spec tables and lines containing "Product Code". ' +
     'Profiles are the primary product a builder orders by size — not accessories, clips, or trims. ' +
-    'Return JSON: { "system_profiles": [...], "warnings": [], "ignored_content_notes": [] }',
+    'Return JSON: { "system_profiles": [...], "image_candidates": [...], "warnings": [], "ignored_content_notes": [] }',
 
   components:
     'Extract ONLY accessories, fixings, trims, clips, and screws (components). ' +
     'Focus on FIXINGS and TRIMS tables. ' +
     'NEVER put board/panel variants here — those are profiles. ' +
-    'Return JSON: { "components": [...], "warnings": [], "ignored_content_notes": [] }',
+    'Return JSON: { "components": [...], "image_candidates": [...], "warnings": [], "ignored_content_notes": [] }',
 
   colours:
     'Extract colour names for each product system. ' +
     'Colours appear inline in text chunks (e.g. ANTIQUE, TEAK, BLACKBUTT). ' +
     'Include sku_suffix if stated. Do NOT invent SKUs. ' +
-    'Return JSON: { "system_colours": [...], "warnings": [], "ignored_content_notes": [] }',
+    'Return JSON: { "system_colours": [...], "image_candidates": [...], "warnings": [], "ignored_content_notes": [] }',
 
   relationships:
     'Using the previously extracted systems and components, identify which components ' +
     'are required, optional, or accessory for each system. ' +
     'Use compatibility tables and fixings tables. ' +
-    'Return JSON: { "system_components": [...], "warnings": [], "ignored_content_notes": [] }',
+    'Return JSON: { "system_components": [...], "image_candidates": [...], "warnings": [], "ignored_content_notes": [] }',
 }
 
 function loadExtractionSkill(): string {
@@ -225,9 +227,15 @@ function loadExtractionSkill(): string {
   return readFileSync(skillPath, 'utf8')
 }
 
+function loadManufacturerHint(manufacturerSlug: string): string {
+  const hintPath = path.join(REPO_ROOT, 'prompts', 'manufacturer-hints', `${manufacturerSlug}.md`)
+  if (!existsSync(hintPath)) return ''
+  return readFileSync(hintPath, 'utf8')
+}
+
 const EXTRACTION_SKILL = loadExtractionSkill()
 
-function buildPassSystemPrompt(pass: PassName): string {
+function buildPassSystemPrompt(pass: PassName, manufacturerHint?: string): string {
   const tempKeyConvention =
     pass === 'systems' ? '"system_0", "system_1"...' :
     pass === 'profiles' ? '"profile_0", "profile_1"...' :
@@ -235,7 +243,11 @@ function buildPassSystemPrompt(pass: PassName): string {
     pass === 'colours' ? '"colour_0"...' :
     '"link_0"...'
 
-  return `${EXTRACTION_SKILL}
+  const hintBlock = manufacturerHint
+    ? `\n\n---\n\n## Manufacturer-specific guidance\n\n${manufacturerHint}`
+    : ''
+
+  return `${EXTRACTION_SKILL}${hintBlock}
 
 ---
 
@@ -247,7 +259,7 @@ ${PASS_DESCRIPTIONS[pass]}
 - Return ONLY the JSON object. No markdown fences, no prose.
 - Temp key convention for this pass: ${tempKeyConvention}
 - source_chunk_id format: "docling:chunk_N" where N is the chunk_index from the source chunk header.
-- role on system_components must be exactly "required", "optional", or "accessory".
+- role on system_components is free-text describing what the component does — e.g. "timber fix clip", "external_corner", "sealing tape". Do not use required/optional/accessory.
 - uom: only set if the source explicitly states or clearly implies the sell/request unit. If not stated, set uom to null, add "uom" to uncertain_fields, and put the likely value as a suggestion in parser_note. Never infer uom from product category alone.
 - Never guess dimensions, SKUs, product codes, pack quantities, BAL ratings, or uom. If a value is not in the source text, use null.
 - Do not write field_verifications. Do not write to Supabase. Output JSON only.`
@@ -537,6 +549,7 @@ function runFixturePass(
     components,
     system_colours,
     system_components,
+    image_candidates: [],
     warnings,
     ignored_content_notes: [],
   }
@@ -551,10 +564,11 @@ async function runAIPass(
   provider: Provider,
   model: string,
   previousSystems?: unknown[],
+  manufacturerHint?: string,
 ): Promise<PassResult> {
   const selected = selectChunks(chunks, pass)
   const charsUsed = selected.reduce((s, c) => s + c.char_count, 0)
-  const systemPrompt = buildPassSystemPrompt(pass)
+  const systemPrompt = buildPassSystemPrompt(pass, manufacturerHint)
   const userPrompt = buildPassUserPrompt(selected, pass, documentId, previousSystems)
 
   let rawJson: string
@@ -642,6 +656,7 @@ async function runAIPass(
     components: (parsed.components as unknown[] | undefined) ?? [],
     system_colours: (parsed.system_colours as unknown[] | undefined) ?? [],
     system_components: (parsed.system_components as unknown[] | undefined) ?? [],
+    image_candidates: (parsed.image_candidates as unknown[] | undefined) ?? [],
     warnings: (parsed.warnings as string[] | undefined) ?? [],
     ignored_content_notes: (parsed.ignored_content_notes as string[] | undefined) ?? [],
   }
@@ -682,6 +697,11 @@ async function main(): Promise<void> {
   const useAI = args.ai === true
   const isDryRun = args['dry-run'] === true
   const onlyPassArg = typeof args['only-pass'] === 'string' ? args['only-pass'] as PassName : null
+  const manufacturerSlug = typeof args.manufacturer === 'string' ? args.manufacturer : null
+  const manufacturerHint = manufacturerSlug ? loadManufacturerHint(manufacturerSlug) : ''
+  if (manufacturerSlug && !manufacturerHint) {
+    console.warn(`[WARN] No hint file found for manufacturer "${manufacturerSlug}" — expected prompts/manufacturer-hints/${manufacturerSlug}.md`)
+  }
   const passesToRun: PassName[] = onlyPassArg
     ? PASSES.filter(p => p === onlyPassArg)
     : [...PASSES]
@@ -695,6 +715,7 @@ async function main(): Promise<void> {
   console.log(`  Mode          : ${useAI ? `AI (${provider}/${model})` : 'fixture (no API call)'}`)
   if (isDryRun) console.log('  DRY-RUN — no files will be written')
   if (onlyPassArg) console.log(`  Only pass     : ${onlyPassArg}`)
+  if (manufacturerSlug) console.log(`  Manufacturer  : ${manufacturerSlug}${manufacturerHint ? '' : ' (no hint file found)'}`)
 
   // ── --check-keys ───────────────────────────────────────────────
   if (args['check-keys']) {
@@ -786,7 +807,8 @@ async function main(): Promise<void> {
     let result: PassResult
     if (useAI) {
       result = await runAIPass(pass, chunks, documentId, provider, model,
-        pass !== 'systems' ? extractedSystems : undefined)
+        pass !== 'systems' ? extractedSystems : undefined,
+        manufacturerHint || undefined)
     } else {
       result = runFixturePass(pass, chunks, documentId)
     }
@@ -813,6 +835,7 @@ async function main(): Promise<void> {
       ...(result.components.length > 0 ? { components: result.components } : {}),
       ...(result.system_colours.length > 0 ? { system_colours: result.system_colours } : {}),
       ...(result.system_components.length > 0 ? { system_components: result.system_components } : {}),
+      ...(result.image_candidates.length > 0 ? { image_candidates: result.image_candidates } : {}),
       warnings: result.warnings,
       ignored_content_notes: result.ignored_content_notes,
     }, null, 2), 'utf8')
@@ -826,6 +849,13 @@ async function main(): Promise<void> {
     components: results.components?.components ?? [],
     system_components: results.relationships?.system_components ?? [],
     system_colours: results.colours?.system_colours ?? [],
+    image_candidates: [
+      ...(results.systems?.image_candidates ?? []),
+      ...(results.profiles?.image_candidates ?? []),
+      ...(results.components?.image_candidates ?? []),
+      ...(results.colours?.image_candidates ?? []),
+      ...(results.relationships?.image_candidates ?? []),
+    ],
     warnings: [
       ...(results.systems?.warnings ?? []),
       ...(results.profiles?.warnings ?? []),
@@ -904,6 +934,7 @@ async function main(): Promise<void> {
     },
     field_sources_count: totalFieldSources,
     fields_missing_evidence: missingEvidence,
+    image_candidates_count: combinedParserOutput.image_candidates.length,
     warnings_count: combinedParserOutput.warnings.length,
     ignored_content_notes_count: combinedParserOutput.ignored_content_notes.length,
     output_files: [
@@ -928,6 +959,7 @@ async function main(): Promise<void> {
   console.log(`  components       : ${combinedParserOutput.components.length}`)
   console.log(`  system_colours   : ${combinedParserOutput.system_colours.length}`)
   console.log(`  system_components: ${combinedParserOutput.system_components.length}`)
+  console.log(`  image_candidates : ${combinedParserOutput.image_candidates.length}`)
   console.log(`  field_sources    : ${totalFieldSources}`)
   console.log(`  missing evidence : ${missingEvidence}`)
   console.log(`  warnings         : ${combinedParserOutput.warnings.length}`)

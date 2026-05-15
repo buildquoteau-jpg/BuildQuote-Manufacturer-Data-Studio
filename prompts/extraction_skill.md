@@ -132,7 +132,7 @@ A **profile** is a distinct size, format, thickness, width, length, model, grade
 
 ### Component
 
-A **component** is a separately purchasable supporting item. It is not the primary product a builder quantifies — it accompanies, enables, or finishes the installation of the primary product.
+A **component** is a separately purchasable supporting item. It is not the primary product a builder quantifies — it accompanies, enables, or finishes the installation of the primary product. Components are listed so the builder can select what they need — do not attempt to determine whether a component is mandatory or optional unless the source states it explicitly.
 
 Usually a component when listed as an accessory to or requirement of another system:
 
@@ -217,12 +217,16 @@ Use these mappings only when the source text explicitly states or strongly impli
 | Source text | UOM value |
 |---|---|
 | "per lineal metre", "per lm", "lin m", "per metre run" | `lm` |
+| Fixed-length boards sold per board (e.g. decking, cladding boards with a set length) | `length` |
 | "per sheet", "per board", "per panel", "each sheet" | `sheet` |
 | "per roll", "roll", "supplied as a roll" | `roll` |
 | "each", "per piece", "per item", "per unit" | `ea` |
 | "per m²", "per square metre" | `m2` |
 | "per kg" | `kg` |
 | "per box", "per carton" (when sold as a box) | `box` |
+| Fixings, clips, fasteners sold in packs | `pack` |
+
+**`lm` vs `length`:** Use `lm` only when the source explicitly prices or orders by the running metre (e.g. "price per lm", "order in lm"). Use `length` when the product is a discrete fixed-length board — the builder orders X boards, not X metres. Most composite decking, cladding, and screening boards with a stated fixed length fall into `length`.
 
 **If UOM is not stated or cannot be clearly determined from the source:** set `uom` to `null`, add `"uom"` to `uncertain_fields`, and put the likely UOM as a suggestion in `parser_note` (e.g. `"UOM not stated — likely lm for this product type, but not confirmed in source"`). Do not write a guessed UOM into the `uom` field.
 
@@ -281,7 +285,24 @@ For roll products: **roll width** maps to `width_mm`, **roll length** maps to `r
 Docling produces different chunk types. Adjust extraction per type.
 
 ### `system_description` chunks
-Product introduction, overview, or marketing page. Extract system identity, category, description (factual sentences only — strip marketing claims, awards, lifestyle language), and system-wide ratings. Do not extract dimensional profiles from marketing-only description text. If a size, model, SKU, roll, sheet, board, or orderable format is clearly stated within a description chunk, extract it as a profile.
+Product introduction, overview, or marketing page. Extract system identity, category, description, and system-wide ratings. Do not extract dimensional profiles from marketing-only description text. If a size, model, SKU, roll, sheet, board, or orderable format is clearly stated within a description chunk, extract it as a profile.
+
+**Description extraction rule — keep the spec, drop the sales language:**
+
+Product feature bullets almost always mix factual specifications with marketing phrasing in the same sentence. Do not discard the whole bullet because part of it is marketing. Extract the factual claim and drop the sales wrapper.
+
+| Source bullet | Keep | Drop |
+|---|---|---|
+| "Engineered for strength and durability, capable of spanning up to 450mm" | "capable of spanning up to 450mm" | "Engineered for strength and durability" |
+| "Fully capped (360°), perfect for long-lasting residential decking projects" | "Fully capped (360°)" | "perfect for long-lasting residential decking projects" |
+| "Re-engineered, with a commercial-grade, slip-resistant surface backing, for enhanced safety and durability" | "commercial-grade, slip-resistant surface backing" | "Re-engineered", "for enhanced safety and durability" |
+| "No compromise on quality — premium features at excellent value" | *(nothing factual)* | entire bullet |
+| "Available in a range of colours to suit any project" | *(nothing factual)* | entire bullet |
+| "Non-combustible, BAL-FZ rated" | "BAL-FZ rated" → set `bal_rating: BAL-FZ` | "Non-combustible" (already implied by BAL-FZ) |
+
+Factual claims to always retain: span ratings, load ratings, structural properties (hollow/solid core, capping type), thickness ranges, treatment class, slip ratings, acoustic ratings, fire/BAL ratings, moisture resistance, recycled content percentage, country of manufacture when it is a product specification.
+
+Populate `staged_systems.description` with a short factual summary built from these retained claims. If no factual claims are present at all, set `description: null`. Do not leave description null just because the bullets also contain marketing language.
 
 ### `product_table` / `specification_table` chunks
 Most data-rich chunks. Extract all dimensional profiles, pack information, UOM, SKUs per variant, and variant-specific BAL ratings. Prefer `table_json` over `chunk_text` when both are available.
@@ -336,7 +357,7 @@ Each example shows source text, the resulting records, and a mapping note. These
 
 | system | component | role | notes |
 |---|---|---|---|
-| INTELLO Plus | TESCON VANA Tape | required | Required at all laps and penetrations |
+| INTELLO Plus | TESCON VANA Tape | seam tape | Required at all laps and penetrations |
 
 **Mapping note:** `roll_m: 50` comes from "Roll length: 50m" — metres written directly to `roll_m`, not converted. `width_mm: 1500` comes from "1500mm" — already in mm, written directly. Original values preserved in `field_sources`.
 
@@ -423,9 +444,9 @@ Each example shows source text, the resulting records, and a mapping note. These
 
 **staged_components:**
 
-| name | category | uom |
-|---|---|---|
-| Hume MDF Door Frame Kit | Frames | set |
+| name | category | uom | role (on system_components) |
+|---|---|---|---|
+| Hume MDF Door Frame Kit | Frames | set | door frame kit |
 
 **Mapping note:** Source lists `820×2040mm` — in Australian door catalogues this convention is typically **width × height**, so `width_mm: 820, height_mm: 2040`. Thickness 35mm is stated separately. If the catalogue had listed `2040×820×35mm` the convention would be height × width × thickness. When axis labels are absent, record the assumed convention in `parser_note`. Core type creates separate profiles only because the catalogue explicitly lists both as orderable options.
 
@@ -460,6 +481,56 @@ Each example shows source text, the resulting records, and a mapping note. These
 | Paperbark | -PB |
 
 **Mapping note:** BAL-12.5 is system-wide (applies to all profiles) — goes on `staged_systems.bal_rating`, not on each profile. Face width maps to `width_mm`. `sku_suffix` captures the colour code suffix from the SKU pattern. Do not create separate profiles per colour.
+
+---
+
+### Example 6 — James Hardie Axon™ Cladding (large-format fibre cement panel)
+
+**Source excerpt (catalogue pages 24–25):**
+> Axon™ Cladding is a range of vertically grooved panel range which incorporate the beauty and fine detail of painted vertical joint timber with the benefits of Hardie™ fibre cement. 1200mm wide x 9mm thick. Groove spacings: 133mm Smooth, 133mm Grained, 400mm Smooth. Lengths: 2450mm, 2750mm, 3000mm, 3600mm. Selling units per pack: 30 sheets. [Accessories page:] 306100 Hardie™ 9mm Aluminium External Square Corner — 5 per pack. 306190 Hardie™ 9mm Aluminium Recessed Horizontal Jointer — 5 per pack. 306191 Hardie™ 9mm Aluminium Recessed Horizontal Jointer Connector — 5 per pack. 304560 Hardie™ 50mm Foam Back Sealing Tape 25m roll — 1 each.
+
+**staged_systems:**
+
+| name | category | subcategory | description | notes |
+|---|---|---|---|---|
+| Axon™ Cladding | Exterior cladding | Vertically grooved fibre cement panel | Vertically grooved fibre cement panel system with stepped shiplap long edge. Available in 133mm Smooth, 133mm Grained, and 400mm Smooth groove spacing. 1200mm wide panels, 9mm thick. | Pre-primed/site-painted — no stocked colours. |
+
+**staged_system_profiles:**
+
+| profile_name | product_code | length_mm | width_mm | thickness_mm | uom | supplier_pack_qty | supplier_pack_uom |
+|---|---|---:|---:|---:|---|---:|---|
+| Axon™ Cladding 133mm Smooth — 2450mm | 403931 | 2450 | 1200 | 9 | sheet | 30 | sheets |
+| Axon™ Cladding 400mm Smooth — 2450mm | 404417 | 2450 | 1200 | 9 | sheet | 30 | sheets |
+| Axon™ Cladding 133mm Smooth — 3000mm | 403933 | 3000 | 1200 | 9 | sheet | 30 | sheets |
+| Axon™ Cladding 133mm Grained — 3000mm | 404512 | 3000 | 1200 | 9 | sheet | 30 | sheets |
+
+**staged_system_colours:** none — product is pre-primed/site-painted. No colour rows created.
+
+**staged_components:**
+
+| sku | name | category | uom | supplier_pack_qty |
+|---|---|---|---|---:|
+| 306100 | Hardie™ 9mm Aluminium External Square Corner 3,000mm | Axon accessory | pack | 5 |
+| 306190 | Hardie™ 9mm Aluminium Recessed Horizontal Jointer | Axon accessory | pack | 5 |
+| 306191 | Hardie™ 9mm Aluminium Recessed Horizontal Jointer Connector | Axon accessory | pack | 5 |
+| 304560 | Hardie™ 50mm Foam Back Sealing Tape 25m roll | Axon accessory | each | 1 |
+
+**staged_system_components:**
+
+| component | role |
+|---|---|
+| External Square Corner | `external_corner` |
+| Recessed Horizontal Jointer | `horizontal_jointer` |
+| Recessed Horizontal Jointer Connector | `horizontal_jointer_connector` |
+| Foam Back Sealing Tape | `foam_back_sealing_tape` |
+
+**Mapping notes:**
+- UOM is `sheet` — large-format panels are sold per sheet, not per lineal metre.
+- Profile name pattern: `[System] [groove_spacing]mm [texture] — [length]mm`. Apply consistently so profiles sort and display cleanly.
+- Extra spec fields (`groove_spacing_mm`, `surface_texture`, `weight_kg`, `coverage_m2`) have no dedicated staging columns — store them as structured JSON in `parser_notes` on the profile row.
+- Jointers and connectors come in pairs. Document the pairing in `parser_notes`: on the jointer `"paired_connector": "306191"`, on the connector `"paired_jointer": "306190"`. This allows the insertion layer to link them correctly.
+- No colours: when a product is pre-primed or site-painted and no named colour options are listed in the source, leave `staged_system_colours` empty and note this in `staged_systems.notes`. Do not invent colours.
+- BAL rating: not stated on the Axon pages — set `bal_rating: null`. Do not assume.
 
 ---
 
@@ -525,6 +596,48 @@ Set `is_uncertain: true` for any field with confidence below 0.75. Do not omit u
 
 ---
 
+## Image candidates
+
+The parser cannot extract or download images from PDFs. However, it should output an `image_candidates` array so a downstream image pipeline or reviewer knows where to look.
+
+Output one candidate per entity where an image is likely present. A candidate is not a URL — it is a pointer to a source location.
+
+### When to emit a candidate
+
+| Entity | Candidate type | Emit when |
+|---|---|---|
+| System | `hero_image` | The source page for this system clearly contains product photography, a lifestyle shot, or a rendered product image alongside the system heading |
+| Colour | `colour_swatch` | The source lists colour names alongside visible swatches, chips, or photography showing the colour applied |
+| Component | `component_image` | The source page shows a product photo of the component (clip, trim, tape, etc.) |
+
+If the source chunk is text-only with no indication of accompanying imagery, do not emit a candidate. Do not guess.
+
+### Candidate shape
+
+```json
+{
+  "entity_type": "system | colour | component",
+  "entity_temp_id": "system_0 | colour_3 | component_2",
+  "candidate_type": "hero_image | colour_swatch | component_image",
+  "source_chunk_id": "docling:chunk_N",
+  "source_page_number": 3,
+  "description": "Short description of what the image shows",
+  "confidence": 0.85
+}
+```
+
+`description` should be specific enough for a reviewer to find the right image on the page — e.g. `"Product hero shot of Axon™ Cladding 133mm Smooth on page 24"`, not just `"image"`.
+
+### Image candidates are separate from field_sources
+
+Do not put image candidates inside `field_sources`. They are not field evidence — they are pointers for the image pipeline. Output them as a top-level `image_candidates` array alongside `warnings` and `ignored_content_notes`.
+
+### The parser never sets image URLs
+
+`hero_image_url`, `image_url` — these columns exist in the staging tables but the parser must never populate them. Leave them null. The image pipeline reads `image_candidates` from the parser output and fills the URL columns after images are uploaded.
+
+---
+
 ## Edge cases
 
 ### Orphaned profiles — system_match not resolvable
@@ -577,7 +690,7 @@ Extract the record. Note in `parser_notes.extraction_summary`: `"Product describ
 6. **Do not write `field_verifications`.** That is the insertion layer's responsibility.
 7. **Every non-null field must have a `field_sources` entry.**
 8. **`supplier_pack_qty` is not the customer order quantity.** It is the manufacturer's pack size.
-9. **`staged_system_components.role` accepts only: `required`, `optional`, `accessory`.** Use `staged_components.category` to describe the item type (e.g. `"Fixings"`, `"Tapes"`, `"Frames"`).
+9. **`staged_system_components.role` is a free-text description of what the component does** — e.g. `"timber fix clip"`, `"metal fix clip"`, `"starter clip"`, `"edge board"`, `"window flashing"`. Use `staged_components.category` for the broader item type (e.g. `"Fixings"`, `"Tapes"`, `"Frames"`). Do not classify components as required/optional — the builder selects what they need.
 10. **Confidence must be numeric (0.0–1.0).** Never use `"high"`, `"medium"`, or `"low"`.
 
 ---
