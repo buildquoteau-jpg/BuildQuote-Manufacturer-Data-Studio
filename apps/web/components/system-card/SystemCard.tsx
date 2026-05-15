@@ -179,6 +179,48 @@ function HeroArea({ imageUrl, manufacturerName, name, category, subcategory, bal
 function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
   if (profiles.length === 0) return null
 
+  // Code-only: all profiles have no distinct name (profile_name == product_code or missing)
+  const isCodeOnly = profiles.every(
+    (p) => !p.profile_name || p.profile_name === p.product_code
+  )
+
+  if (isCodeOnly) {
+    // Find a shared dimensions note (first non-null dimensions value)
+    const dimensionsNote = profiles.find((p) => p.dimensions)?.dimensions ?? null
+    return (
+      <Section title={`Profiles · ${profiles.length} variant${profiles.length !== 1 ? 's' : ''}`}>
+        {dimensionsNote && (
+          <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', marginBottom: '0.65rem', lineHeight: 1.5 }}>
+            {dimensionsNote}
+          </p>
+        )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+          {profiles.map((p, i) => (
+            <span key={i} style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.25rem 0.6rem',
+              background: 'var(--ds-page-bg)',
+              border: '1px solid var(--ds-border)',
+              borderRadius: 6,
+              fontSize: '0.78rem',
+              fontFamily: 'monospace',
+              color: 'var(--ds-text-sub)',
+            }}>
+              {p.product_code ?? p.profile_name}
+              {p.uom && (
+                <span style={{ fontSize: '0.7rem', color: 'var(--ds-text-faint)' }}>
+                  {fmtUom(p.uom)}
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+      </Section>
+    )
+  }
+
   return (
     <Section title={`Profiles · ${profiles.length} variant${profiles.length !== 1 ? 's' : ''}`}>
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -201,9 +243,7 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
             </tr>
           </thead>
           <tbody>
-            {profiles.map((p, i) => {
-              const hasName = p.profile_name && p.profile_name !== p.product_code
-              return (
+            {profiles.map((p, i) => (
               <tr key={i} style={{
                 borderBottom: '1px solid var(--ds-border-soft)',
                 background: i % 2 === 0 ? undefined : 'var(--ds-page-bg)',
@@ -211,24 +251,23 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
                 <td style={{ padding: '0.45rem 0.65rem', fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
                   {p.product_code ?? '—'}
                 </td>
-                <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text)', maxWidth: 260 }}>
-                  {hasName ? p.profile_name : (p.dimensions ?? '—')}
+                <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text)' }}>
+                  {p.profile_name}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
-                  {hasName ? fmtDim(p.length_mm ?? p.height_mm) : '—'}
+                  {fmtDim(p.length_mm ?? p.height_mm)}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
-                  {hasName ? fmtDim(p.width_mm) : '—'}
+                  {fmtDim(p.width_mm)}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
-                  {hasName ? fmtDim(p.thickness_mm) : '—'}
+                  {fmtDim(p.thickness_mm)}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
                   {fmtUom(p.uom)}
                 </td>
               </tr>
-              )
-            })}
+            ))}
           </tbody>
         </table>
       </div>
