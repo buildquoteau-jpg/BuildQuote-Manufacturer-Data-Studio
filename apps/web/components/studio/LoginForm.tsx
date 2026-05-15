@@ -33,7 +33,7 @@ export function LoginForm() {
 
   return (
     <form action={formAction} noValidate>
-      {state.error && (
+      {state?.error && (
         <div
           role="alert"
           style={{
