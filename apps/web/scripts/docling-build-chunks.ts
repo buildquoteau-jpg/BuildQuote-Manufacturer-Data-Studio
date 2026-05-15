@@ -46,6 +46,9 @@ interface DoclingSummary {
   input_filename: string
   document_id: string | null
   page_count: number | null
+  extracted_pages_count?: number | null
+  extracted_pages_max?: number | null
+  extraction_complete?: boolean | null
   character_count: number | null
   table_count: number | null
   output_files: Record<string, string>
@@ -257,10 +260,12 @@ function splitMarkdownIntoChunks(markdown: string): ChunkResult {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
   const isDryRun = args['dry-run'] === true
+  const allowPartial = args['allow-partial'] === true
 
   hr()
   console.log('[docling:chunks] Docling markdown → parser chunks')
   if (isDryRun) console.log('[docling:chunks] DRY-RUN — no file will be written')
+  if (allowPartial) console.log('[docling:chunks] --allow-partial: page-coverage guard disabled')
 
   // ── Validate input ─────────────────────────────────────────────
   const inputArg = args.input
@@ -301,6 +306,39 @@ async function main(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[ERROR] Could not parse summary.json: ${msg}`)
     process.exit(1)
+  }
+
+  // ── Page-coverage guard ────────────────────────────────────────
+  // Docling sometimes silently stops extracting partway through a PDF. Detect
+  // this by reading extracted_pages_max written by extract_docling.py and
+  // comparing against page_count. Fail fast before spending API credits.
+  if (!allowPartial) {
+    const pageCount = summary.page_count
+    const extractedMax = summary.extracted_pages_max ?? null
+    const extractionComplete = summary.extraction_complete ?? null
+
+    const incomplete =
+      extractionComplete === false ||
+      (extractionComplete === null && pageCount != null && extractedMax != null && extractedMax / pageCount < 0.9)
+
+    if (incomplete) {
+      const maxPage = extractedMax ?? '?'
+      const pct = pageCount && extractedMax ? `${Math.round((extractedMax / pageCount) * 100)}%` : '?'
+      console.error(`[ERROR] Incomplete Docling extraction — cannot build chunks.`)
+      console.error(`  PDF pages declared : ${pageCount ?? '?'}`)
+      console.error(`  Highest page found : ${maxPage}`)
+      console.error(`  Coverage           : ${pct}`)
+      console.error(``)
+      console.error(`  Pages ${typeof extractedMax === 'number' ? extractedMax + 1 : '?'}–${pageCount ?? '?'} are missing from the Docling output.`)
+      console.error(`  The parser will produce incorrect results from incomplete chunks.`)
+      console.error(``)
+      console.error(`  Fix: re-run Docling extraction with a complete PDF:`)
+      console.error(`    python scripts/docling/extract_docling.py --input <path/to/full.pdf>`)
+      console.error(``)
+      console.error(`  To skip this guard (only if missing pages have no product data):`)
+      console.error(`    pnpm docling:chunks -- --input <dir> --allow-partial`)
+      process.exit(1)
+    }
   }
 
   const markdownText = readFileSync(mdPath, 'utf8')

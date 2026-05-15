@@ -169,10 +169,18 @@ const PASS_CHUNK_FILTERS: Record<PassName, (c: DoclingChunk) => boolean> = {
     c.chunk_type === 'spec_table' ||
     (c.chunk_type === 'text' && c.raw_text.includes('Product Code')),
 
-  // Components: fixings/trims spec tables + compatibility table chunks
+  // Components: fixings/trims spec tables + compatibility table chunks.
+  // Also include text chunks that signal accessory content — some manufacturers
+  // (e.g. James Hardie) list accessories in plain text sections, not tables.
+  // The keyword check runs on the heading first; if no heading, it checks the
+  // first 300 chars of raw_text so continuation paragraphs are also captured.
   components: c =>
     c.chunk_type === 'spec_table' ||
-    c.chunk_type === 'table',
+    c.chunk_type === 'table' ||
+    (c.chunk_type === 'text' &&
+      /accessor|trim|fixing|clip|screw|sealer|adhesive|corner|jointer|starter|flashing/i.test(
+        c.heading ?? c.raw_text.slice(0, 300),
+      )),
 
   // Colours: colour names appear inline in text chunks and in stocked-colours columns of spec tables
   colours: c =>
