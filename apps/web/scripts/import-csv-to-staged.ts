@@ -17,6 +17,7 @@
  *     --systems    data/extractions/james-hardie/systems.csv \
  *     --profiles   data/extractions/james-hardie/profiles.csv \
  *     --components data/extractions/james-hardie/components.csv \
+ *     --colours    data/extractions/james-hardie/colours.csv \
  *     --confirm-local-write
  *
  * Flags:
@@ -87,6 +88,7 @@ const manufacturerName = getArg('--manufacturer')
 const systemsPath = getArg('--systems')
 const profilesPath = getArg('--profiles')
 const componentsPath = getArg('--components')
+const coloursPath = getArg('--colours')
 
 if (!manufacturerName) fail('--manufacturer "Name" is required')
 if (!systemsPath) fail('--systems <path> is required')
@@ -125,6 +127,7 @@ async function main() {
   console.log(`   Mode         : ${isDryRun ? 'DRY RUN' : 'LIVE WRITE'}`)
   console.log(`   Systems      : ${systemsPath}`)
   console.log(`   Profiles     : ${profilesPath ?? '(skipped)'}`)
+  console.log(`   Colours      : ${coloursPath ?? '(skipped)'}`)
   console.log(`   Components   : ${componentsPath ?? '(skipped)'}\n`)
 
   const supabase = isDryRun
@@ -289,20 +292,71 @@ async function main() {
     console.log(`   → ${ok} inserted, ${skip} skipped`)
   }
 
-  // ── 4. Insert components + system links ──────────────────
+  // ── 4. Insert colours ────────────────────────────────────
+
+  if (coloursPath) {
+    const colourRows = readCsv(coloursPath)
+    console.log(`\n🎨 Colours: ${colourRows.length} rows`)
+    let ok = 0
+    let skip = 0
+
+    for (const row of colourRows) {
+      const systemId = systemIdMap[row.system_name ?? '']
+      if (!systemId) {
+        console.warn(`   ⚠️  No system found for colour system_name="${row.system_name}" — skipping`)
+        skip++
+        continue
+      }
+
+      const payload = {
+        staged_system_id: isDryRun ? null : systemId,
+        colour_name: str(row.colour_name),
+        sku: str(row.sku),
+        sku_suffix: str(row.sku_suffix),
+        image_url: str(row.image_url),
+        is_stocked: bool(row.is_stocked),
+        parser_notes: str(row.parser_notes) ? JSON.parse(row.parser_notes) : null,
+        sort_order: num(row.sort_order),
+        verification_status: str(row.verification_status) ?? 'pending_review',
+        reviewer_notes: str(row.reviewer_notes),
+      }
+
+      if (isDryRun) {
+        console.log(`   [dry] colour: ${payload.colour_name} (${row.system_name})`)
+        ok++
+        continue
+      }
+
+      if (!supabase) continue
+
+      const { error } = await supabase.from('staged_system_colours').insert(payload)
+      if (error) {
+        console.error(`   ❌ Failed to insert colour "${row.colour_name}": ${error.message}`)
+        skip++
+      } else {
+        ok++
+      }
+    }
+
+    console.log(`   → ${ok} inserted, ${skip} skipped`)
+  }
+
+  // ── 5. Insert components + system links ──────────────────
 
   if (componentsPath) {
     const componentRows = readCsv(componentsPath)
     console.log(`\n🔩 Components: ${componentRows.length} rows`)
 
-    // De-duplicate components by SKU — same component can appear under multiple systems
-    const componentIdMap: Record<string, string> = {} // sku → staged_component UUID
+    // De-duplicate components by SKU (or name when SKU absent) — same component can appear under multiple systems
+    const componentIdMap: Record<string, string> = {} // dedup key → staged_component UUID
     let newComponents = 0
     let linkedRows = 0
     let skipRows = 0
 
     for (const row of componentRows) {
       const sku = str(row.sku)
+      // Fall back to name-based dedup when no SKU is present
+      const dedupKey = sku ?? `name:${str(row.name)}`
       const systemId = systemIdMap[row.system_name ?? '']
 
       if (!systemId) {
@@ -311,8 +365,8 @@ async function main() {
         continue
       }
 
-      // Insert component only once per SKU
-      if (sku && !componentIdMap[sku]) {
+      // Insert component only once per dedup key
+      if (dedupKey && !componentIdMap[dedupKey]) {
         const payload = {
           manufacturer_id: manufacturerId,
           sku,
@@ -352,8 +406,8 @@ async function main() {
         }
 
         if (isDryRun) {
-          componentIdMap[sku] = `dry-run-component-${sku}`
-          console.log(`   [dry] component: ${payload.name} (${sku})`)
+          componentIdMap[dedupKey] = `dry-run-component-${dedupKey}`
+          console.log(`   [dry] component: ${payload.name} (${sku ?? 'no-sku'})`)
         } else if (supabase) {
           const { data, error } = await supabase
             .from('staged_components')
@@ -365,14 +419,14 @@ async function main() {
             console.error(`   ❌ Failed to insert component "${row.name}": ${error.message}`)
             continue
           }
-          componentIdMap[sku] = data.id
+          componentIdMap[dedupKey] = data.id
         }
 
         newComponents++
       }
 
       // Insert system ↔ component link
-      const componentId = sku ? componentIdMap[sku] : null
+      const componentId = componentIdMap[dedupKey] ?? null
       if (!componentId) continue
 
       const linkPayload = {
