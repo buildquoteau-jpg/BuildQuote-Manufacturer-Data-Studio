@@ -189,7 +189,7 @@ async function main() {
       source_url: str(row.source_url),
       bal_rating: str(row.bal_rating),
       acoustic_rating: str(row.acoustic_rating),
-      moisture_resistant: bool(row.moisture_resistant),
+      moisture_resistant: bool(row.moisture_resistant) ?? false,
       structural_grade: str(row.structural_grade),
       notes: str(row.notes),
       parser_notes: str(row.parser_notes) ? JSON.parse(row.parser_notes) : null,
