@@ -27,7 +27,6 @@ export interface SystemComponent {
   uom: string | null
   supplier_pack_qty: number | null
   supplier_pack_uom: string | null
-  role: string | null
   sort_order: number | null
 }
 

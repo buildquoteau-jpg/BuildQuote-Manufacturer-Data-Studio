@@ -494,7 +494,6 @@ export type AdminSystemCardComponent = {
   uom: string | null
   supplier_pack_qty: number | null
   supplier_pack_uom: string | null
-  role: string | null
   sort_order: number | null
 }
 
@@ -570,7 +569,7 @@ export async function getAdminManufacturerSystemCards(
       .order('sort_order'),
     c.supabase
       .from('staged_system_components')
-      .select('staged_system_id, staged_components(sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, role, sort_order)')
+      .select('staged_system_id, staged_components(sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order)')
       .in('staged_system_id', systemIds),
   ])
 
