@@ -1,0 +1,450 @@
+// Server-only data helpers for the manufacturer workspace pages.
+// Uses the anon/session Supabase client only. No service role key. No writes.
+//
+// RLS note: migrations 004–006 grant open SELECT to anon and authenticated
+// roles on all data_studio_* and staged_* tables. No policy changes needed.
+
+import { createStudioServerClient } from '@/lib/supabase/server'
+import type { StudioSession, StudioManufacturerMembership } from '@/lib/studio-auth/session'
+
+// ============================================================
+// Workspace context resolver (pure, no DB call)
+// ============================================================
+
+export type WorkspaceContext =
+  | {
+      found: true
+      manufacturerId: string
+      membership: StudioManufacturerMembership
+      // TODO: expose allMemberships for a future workspace switcher UI
+      allMemberships: StudioManufacturerMembership[]
+    }
+  | {
+      found: false
+      reason: 'no_membership' | 'admin_no_context'
+      allMemberships: StudioManufacturerMembership[]
+    }
+
+/**
+ * Determines the active manufacturer workspace from the resolved session.
+ * buildquote_admin gets admin_no_context (no memberships).
+ * manufacturer_user with no active memberships gets no_membership.
+ * Multiple memberships: first active membership used as default.
+ */
+export function resolveWorkspaceContext(session: StudioSession): WorkspaceContext {
+  if (session.globalRole === 'buildquote_admin') {
+    return { found: false, reason: 'admin_no_context', allMemberships: [] }
+  }
+
+  const membership = session.memberships[0] ?? null
+  if (!membership) {
+    return { found: false, reason: 'no_membership', allMemberships: session.memberships }
+  }
+
+  return {
+    found: true,
+    manufacturerId: membership.manufacturerId,
+    membership,
+    allMemberships: session.memberships,
+  }
+}
+
+// ============================================================
+// Types
+// ============================================================
+
+export type ManufacturerInfo = {
+  id: string
+  name: string
+  slug: string
+  status: string
+  description: string | null
+  websiteUrl: string | null
+}
+
+export type ManufacturerDocument = {
+  id: string
+  documentName: string
+  documentType: string | null
+  documentDate: string | null
+  status: string
+  uploadedAt: string
+  fileSizeBytes: number | null
+}
+
+export type WorkspaceCounts = {
+  documentCount: number
+  systemCount: number
+  componentCount: number
+}
+
+export type ReviewSystem = {
+  id: string
+  name: string
+  category: string | null
+  verificationStatus: string
+}
+
+export type StatusCount = {
+  status: string
+  count: number
+}
+
+export type ManufacturerReviewData = {
+  systems: ReviewSystem[]
+  systemCount: number
+  componentCount: number
+  profileCount: number
+  colourCount: number
+  systemStatusGroups: StatusCount[]
+  componentStatusGroups: StatusCount[]
+}
+
+export type PreviewSystem = {
+  id: string
+  name: string
+  category: string | null
+  verificationStatus: string
+  colours: string[]
+}
+
+// ============================================================
+// Result envelope types
+// ============================================================
+
+export type ManufacturerInfoResult =
+  | { ok: true; manufacturer: ManufacturerInfo }
+  | { ok: false; error: string }
+
+export type ManufacturerDocumentsResult =
+  | { ok: true; documents: ManufacturerDocument[] }
+  | { ok: false; error: string }
+
+export type WorkspaceCountsResult =
+  | { ok: true; counts: WorkspaceCounts }
+  | { ok: false; error: string }
+
+export type ManufacturerReviewResult =
+  | { ok: true; data: ManufacturerReviewData }
+  | { ok: false; error: string }
+
+export type ManufacturerPreviewResult =
+  | { ok: true; manufacturer: ManufacturerInfo; systems: PreviewSystem[] }
+  | { ok: false; error: string }
+
+// ============================================================
+// Internal helpers
+// ============================================================
+
+function makeClient() {
+  try {
+    return { ok: true as const, supabase: createStudioServerClient() }
+  } catch {
+    return { ok: false as const, error: 'Supabase client not configured — check env vars.' }
+  }
+}
+
+function groupByStatus(
+  rows: Array<{ verification_status: string }>,
+): StatusCount[] {
+  const map = new Map<string, number>()
+  for (const r of rows) {
+    map.set(r.verification_status, (map.get(r.verification_status) ?? 0) + 1)
+  }
+  return Array.from(map.entries())
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+// ============================================================
+// getManufacturerInfo
+// Table: data_studio_manufacturers
+// ============================================================
+
+export async function getManufacturerInfo(
+  manufacturerId: string,
+): Promise<ManufacturerInfoResult> {
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const { data, error } = await c.supabase
+    .from('data_studio_manufacturers')
+    .select('id, name, slug, status, description, website_url')
+    .eq('id', manufacturerId)
+    .single()
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? 'Manufacturer not found.' }
+  }
+
+  const m = data as {
+    id: string; name: string; slug: string; status: string
+    description: string | null; website_url: string | null
+  }
+
+  return {
+    ok: true,
+    manufacturer: {
+      id: m.id,
+      name: m.name,
+      slug: m.slug,
+      status: m.status,
+      description: m.description,
+      websiteUrl: m.website_url,
+    },
+  }
+}
+
+// ============================================================
+// getWorkspaceCounts
+// Uses count/head queries — no row data returned.
+// ============================================================
+
+export async function getWorkspaceCounts(
+  manufacturerId: string,
+): Promise<WorkspaceCountsResult> {
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const [docsResult, systemsResult, componentsResult] = await Promise.all([
+    c.supabase
+      .from('source_documents')
+      .select('*', { count: 'exact', head: true })
+      .eq('manufacturer_id', manufacturerId),
+    c.supabase
+      .from('staged_systems')
+      .select('*', { count: 'exact', head: true })
+      .eq('manufacturer_id', manufacturerId),
+    c.supabase
+      .from('staged_components')
+      .select('*', { count: 'exact', head: true })
+      .eq('manufacturer_id', manufacturerId),
+  ])
+
+  return {
+    ok: true,
+    counts: {
+      documentCount: docsResult.count ?? 0,
+      systemCount: systemsResult.count ?? 0,
+      componentCount: componentsResult.count ?? 0,
+    },
+  }
+}
+
+// ============================================================
+// getManufacturerDocuments
+// Table: source_documents
+// Storage fields (storage_bucket, storage_key, storage_provider,
+// public_url, original_filename) are intentionally excluded.
+// ============================================================
+
+export async function getManufacturerDocuments(
+  manufacturerId: string,
+): Promise<ManufacturerDocumentsResult> {
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const { data, error } = await c.supabase
+    .from('source_documents')
+    .select('id, document_name, document_type, document_date, status, uploaded_at, file_size_bytes')
+    .eq('manufacturer_id', manufacturerId)
+    .order('uploaded_at', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    return { ok: false, error: `Failed to load documents: ${error.message}` }
+  }
+
+  type DocRow = {
+    id: string; document_name: string; document_type: string | null
+    document_date: string | null; status: string; uploaded_at: string
+    file_size_bytes: number | null
+  }
+
+  const documents: ManufacturerDocument[] = ((data ?? []) as DocRow[]).map((d) => ({
+    id: d.id,
+    documentName: d.document_name,
+    documentType: d.document_type,
+    documentDate: d.document_date,
+    status: d.status,
+    uploadedAt: d.uploaded_at,
+    fileSizeBytes: d.file_size_bytes,
+  }))
+
+  return { ok: true, documents }
+}
+
+// ============================================================
+// getManufacturerReviewData
+// Tables: staged_systems, staged_components,
+//         staged_system_profiles, staged_system_colours
+// Returns a read-only summary for the review overview page.
+// ============================================================
+
+export async function getManufacturerReviewData(
+  manufacturerId: string,
+): Promise<ManufacturerReviewResult> {
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  // Fetch systems list + component statuses + counts in parallel
+  const [systemsResult, componentStatusResult, systemCountResult, componentCountResult] =
+    await Promise.all([
+      c.supabase
+        .from('staged_systems')
+        .select('id, name, category, verification_status')
+        .eq('manufacturer_id', manufacturerId)
+        .order('sort_order')
+        .limit(20),
+      c.supabase
+        .from('staged_components')
+        .select('verification_status')
+        .eq('manufacturer_id', manufacturerId),
+      c.supabase
+        .from('staged_systems')
+        .select('*', { count: 'exact', head: true })
+        .eq('manufacturer_id', manufacturerId),
+      c.supabase
+        .from('staged_components')
+        .select('*', { count: 'exact', head: true })
+        .eq('manufacturer_id', manufacturerId),
+    ])
+
+  if (systemsResult.error) {
+    return { ok: false, error: `Failed to load staged systems: ${systemsResult.error.message}` }
+  }
+
+  type SystemRow = { id: string; name: string; category: string | null; verification_status: string }
+
+  const systems: ReviewSystem[] = ((systemsResult.data ?? []) as SystemRow[]).map((s) => ({
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    verificationStatus: s.verification_status,
+  }))
+
+  // Count profiles and colours scoped to this manufacturer's systems
+  let profileCount = 0
+  let colourCount = 0
+
+  const systemIds = systems.map((s) => s.id)
+  if (systemIds.length > 0) {
+    const [profilesResult, coloursResult] = await Promise.all([
+      c.supabase
+        .from('staged_system_profiles')
+        .select('*', { count: 'exact', head: true })
+        .in('staged_system_id', systemIds),
+      c.supabase
+        .from('staged_system_colours')
+        .select('*', { count: 'exact', head: true })
+        .in('staged_system_id', systemIds),
+    ])
+    profileCount = profilesResult.count ?? 0
+    colourCount = coloursResult.count ?? 0
+  }
+
+  type CompStatusRow = { verification_status: string }
+  const componentRows = (componentStatusResult.data ?? []) as CompStatusRow[]
+
+  return {
+    ok: true,
+    data: {
+      systems,
+      systemCount: systemCountResult.count ?? 0,
+      componentCount: componentCountResult.count ?? 0,
+      profileCount,
+      colourCount,
+      systemStatusGroups: groupByStatus(
+        systems.map((s) => ({ verification_status: s.verificationStatus })),
+      ),
+      componentStatusGroups: groupByStatus(componentRows),
+    },
+  }
+}
+
+// ============================================================
+// getManufacturerPreviewData
+// Tables: data_studio_manufacturers, staged_systems,
+//         staged_system_colours
+// Returns lightweight read-only data for the Studio preview page.
+// ============================================================
+
+export async function getManufacturerPreviewData(
+  manufacturerId: string,
+): Promise<ManufacturerPreviewResult> {
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const [mfrResult, systemsResult] = await Promise.all([
+    c.supabase
+      .from('data_studio_manufacturers')
+      .select('id, name, slug, status, description, website_url')
+      .eq('id', manufacturerId)
+      .single(),
+    c.supabase
+      .from('staged_systems')
+      .select('id, name, category, verification_status')
+      .eq('manufacturer_id', manufacturerId)
+      .order('sort_order')
+      .limit(20),
+  ])
+
+  if (mfrResult.error || !mfrResult.data) {
+    return { ok: false, error: mfrResult.error?.message ?? 'Manufacturer not found.' }
+  }
+
+  const m = mfrResult.data as {
+    id: string; name: string; slug: string; status: string
+    description: string | null; website_url: string | null
+  }
+
+  type SystemRow = { id: string; name: string; category: string | null; verification_status: string }
+  const systemRows = (systemsResult.data ?? []) as SystemRow[]
+
+  // Fetch colours for all systems in one query
+  let systemsWithColours: PreviewSystem[] = systemRows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    verificationStatus: s.verification_status,
+    colours: [],
+  }))
+
+  if (systemRows.length > 0) {
+    const systemIds = systemRows.map((s) => s.id)
+    const { data: coloursData } = await c.supabase
+      .from('staged_system_colours')
+      .select('staged_system_id, colour_name')
+      .in('staged_system_id', systemIds)
+      .order('sort_order')
+
+    type ColourRow = { staged_system_id: string; colour_name: string }
+    const coloursMap = new Map<string, string[]>()
+    for (const r of (coloursData ?? []) as ColourRow[]) {
+      const list = coloursMap.get(r.staged_system_id) ?? []
+      list.push(r.colour_name)
+      coloursMap.set(r.staged_system_id, list)
+    }
+
+    systemsWithColours = systemRows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      category: s.category,
+      verificationStatus: s.verification_status,
+      colours: coloursMap.get(s.id) ?? [],
+    }))
+  }
+
+  return {
+    ok: true,
+    manufacturer: {
+      id: m.id,
+      name: m.name,
+      slug: m.slug,
+      status: m.status,
+      description: m.description,
+      websiteUrl: m.website_url,
+    },
+    systems: systemsWithColours,
+  }
+}

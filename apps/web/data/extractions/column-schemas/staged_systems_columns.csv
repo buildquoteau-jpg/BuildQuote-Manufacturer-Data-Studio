@@ -1,0 +1,38 @@
+column,type,notes
+id,uuid,Primary key
+manufacturer_id,uuid,FK → data_studio_manufacturers
+source_document_id,uuid,FK → source_documents
+source_chunk_id,uuid,FK → document_chunks
+production_system_id,uuid,Populated after export to production
+name,text,Required
+product_code,text,
+slug,text,
+category,text,
+subcategory,text,
+description,text,Factual only — no marketing language
+dimensions,text,Raw dimension string from source
+length_m,numeric,
+double_sided,boolean,
+sheet_format,text,
+hero_image_url,text,Hero image — set by image pipeline not parser
+website_url,text,Manufacturer product page URL
+source_label,text,Human-readable source label
+source_url,text,Direct URL to source document
+fire_rating,text,Deprecated — use bal_rating
+bal_rating,text,e.g. BAL-12.5 / BAL-FZ
+acoustic_rating,text,
+moisture_resistant,boolean,
+structural_grade,text,
+install_guide_url,text,
+tech_data_url,text,
+notes,text,Product-facing freetext note
+parser_notes,jsonb,Entity-level extraction notes from AI parser
+sort_order,integer,
+extraction_confidence,numeric,0.0–1.0
+extracted_at,timestamptz,When AI parser extracted this record
+verification_status,text,pending_review | in_review | approved | rejected | needs_source_check | exported
+verified_by,uuid,auth_user_id of reviewer
+verified_at,timestamptz,
+reviewer_notes,text,Internal annotation — not published
+created_at,timestamptz,DB row insert time
+updated_at,timestamptz,

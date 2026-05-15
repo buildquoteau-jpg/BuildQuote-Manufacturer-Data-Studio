@@ -6,7 +6,18 @@
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "build:web": "pnpm --filter web build",
-    "lint": "pnpm --filter web lint"
+    "lint": "pnpm --filter web lint",
+    "extract:local-pdf": "pnpm --filter web run extract:local-pdf",
+    "parser:bundle": "pnpm --filter web run parser:bundle",
+    "parser:ai-local": "pnpm --filter web run parser:ai-local",
+    "parser:dry-run": "pnpm --filter web run parser:dry-run",
+    "parser:insert-preview": "pnpm --filter web run parser:insert-preview",
+    "parser:insert-local": "pnpm --filter web run parser:insert-local",
+    "parser:verify-local-insert": "pnpm --filter web run parser:verify-local-insert",
+    "docling:extract": "python scripts/docling/extract_docling.py",
+    "docling:chunks": "pnpm --filter web run parser:docling-chunks",
+    "docling:parse": "pnpm --filter web run parser:docling-parse",
+    "import:csv": "pnpm --filter web run import:csv"
   },
   "engines": {
     "node": ">=18"

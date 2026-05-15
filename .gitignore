@@ -13,6 +13,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 .venv/
+.venv-docling/
 venv/
 dist/
 *.egg-info/
@@ -39,3 +40,6 @@ npm-debug.log*
 
 # Supabase local
 supabase/.temp/
+
+# Local extraction artifacts (gitignored — may contain copyrighted catalogue text)
+.local/

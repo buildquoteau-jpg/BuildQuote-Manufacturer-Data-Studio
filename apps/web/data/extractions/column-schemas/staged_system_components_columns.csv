@@ -1,0 +1,15 @@
+column,type,notes
+id,uuid,Primary key
+staged_system_id,uuid,FK → staged_systems
+staged_component_id,uuid,FK → staged_components
+role,text,Free-text role description — e.g. external_corner / seam_tape / base_trim
+notes,text,
+sort_order,integer,
+extraction_confidence,numeric,0.0–1.0
+extracted_at,timestamptz,When AI parser extracted this record
+verification_status,text,pending_review | approved | rejected | needs_source_check | exported
+verified_by,uuid,
+verified_at,timestamptz,
+reviewer_notes,text,
+parser_notes,jsonb,Entity-level extraction notes from AI parser
+created_at,timestamptz,
