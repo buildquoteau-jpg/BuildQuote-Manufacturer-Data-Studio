@@ -201,7 +201,9 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
             </tr>
           </thead>
           <tbody>
-            {profiles.map((p, i) => (
+            {profiles.map((p, i) => {
+              const hasName = p.profile_name && p.profile_name !== p.product_code
+              return (
               <tr key={i} style={{
                 borderBottom: '1px solid var(--ds-border-soft)',
                 background: i % 2 === 0 ? undefined : 'var(--ds-page-bg)',
@@ -209,25 +211,24 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
                 <td style={{ padding: '0.45rem 0.65rem', fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
                   {p.product_code ?? '—'}
                 </td>
-                <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text)' }}>
-                  {p.profile_name && p.profile_name !== p.product_code
-                    ? p.profile_name
-                    : (p.dimensions ?? '—')}
+                <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text)', maxWidth: 260 }}>
+                  {hasName ? p.profile_name : (p.dimensions ?? '—')}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
-                  {fmtDim(p.length_mm ?? p.height_mm)}
+                  {hasName ? fmtDim(p.length_mm ?? p.height_mm) : '—'}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
-                  {fmtDim(p.width_mm)}
+                  {hasName ? fmtDim(p.width_mm) : '—'}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
-                  {fmtDim(p.thickness_mm)}
+                  {hasName ? fmtDim(p.thickness_mm) : '—'}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
                   {fmtUom(p.uom)}
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
