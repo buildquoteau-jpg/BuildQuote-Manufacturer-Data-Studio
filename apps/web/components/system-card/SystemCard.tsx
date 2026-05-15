@@ -1,3 +1,5 @@
+'use client'
+
 import type { MouseEvent, ReactNode } from 'react'
 
 // ─── Data types ───────────────────────────────────────────────────────────────
