@@ -101,7 +101,7 @@ function readCsv(filePath: string): Row[] {
   const fullPath = path.isAbsolute(filePath) ? filePath : path.join(REPO_ROOT, filePath)
   if (!existsSync(fullPath)) fail(`File not found: ${fullPath}`)
   const content = readFileSync(fullPath, 'utf8')
-  return parse(content, { columns: true, skip_empty_lines: true, trim: true }) as Row[]
+  return parse(content, { columns: true, skip_empty_lines: true, trim: true, relax_column_count: true }) as Row[]
 }
 
 function str(v: string | undefined): string | null {
