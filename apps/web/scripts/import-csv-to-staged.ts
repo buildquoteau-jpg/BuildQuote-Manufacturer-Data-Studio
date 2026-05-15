@@ -153,7 +153,7 @@ async function main() {
       console.log(`   Manufacturer not found — creating "${manufacturerName}"...`)
       const { data: created, error: createErr } = await supabase
         .from('data_studio_manufacturers')
-        .insert({ name: manufacturerName })
+        .insert({ name: manufacturerName, slug: manufacturerName!.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') })
         .select('id')
         .single()
       if (createErr) fail(`Failed to create manufacturer: ${createErr.message}`)
