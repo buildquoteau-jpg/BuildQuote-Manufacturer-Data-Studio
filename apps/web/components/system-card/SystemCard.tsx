@@ -10,6 +10,7 @@ export interface SystemProfile {
   profile_name: string
   dimensions: string | null
   length_mm: number | null
+  height_mm: number | null
   width_mm: number | null
   thickness_mm: number | null
   uom: string | null
@@ -210,10 +211,12 @@ function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
                   {p.product_code ?? '—'}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text)' }}>
-                  {p.profile_name}
+                  {p.profile_name && p.profile_name !== p.product_code
+                    ? p.profile_name
+                    : (p.dimensions ?? '—')}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
-                  {fmtDim(p.length_mm)}
+                  {fmtDim(p.length_mm ?? p.height_mm)}
                 </td>
                 <td style={{ padding: '0.45rem 0.65rem', color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>
                   {fmtDim(p.width_mm)}

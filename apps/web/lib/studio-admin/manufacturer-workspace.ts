@@ -477,6 +477,7 @@ export type AdminSystemCardProfile = {
   profile_name: string
   dimensions: string | null
   length_mm: number | null
+  height_mm: number | null
   width_mm: number | null
   thickness_mm: number | null
   uom: string | null
@@ -559,7 +560,7 @@ export async function getAdminManufacturerSystemCards(
   const [profilesResult, coloursResult, sysComponentsResult] = await Promise.all([
     c.supabase
       .from('staged_system_profiles')
-      .select('staged_system_id, product_code, profile_name, dimensions, length_mm, width_mm, thickness_mm, uom, supplier_pack_qty, supplier_pack_uom, sort_order')
+      .select('staged_system_id, product_code, profile_name, dimensions, length_mm, height_mm, width_mm, thickness_mm, uom, supplier_pack_qty, supplier_pack_uom, sort_order')
       .in('staged_system_id', systemIds)
       .order('sort_order'),
     c.supabase
