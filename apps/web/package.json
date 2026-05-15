@@ -13,7 +13,9 @@
     "parser:dry-run": "tsx scripts/parser-dry-run.ts",
     "parser:insert-preview": "tsx scripts/parser-insert-preview.ts",
     "parser:insert-local": "tsx scripts/parser-insert-local.ts",
-    "parser:verify-local-insert": "tsx scripts/parser-verify-local-insert.ts"
+    "parser:verify-local-insert": "tsx scripts/parser-verify-local-insert.ts",
+    "parser:docling-chunks": "tsx scripts/docling-build-chunks.ts",
+    "parser:docling-parse": "tsx scripts/parse-docling-chunks.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
