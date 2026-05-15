@@ -1,0 +1,14 @@
+column,type,notes
+id,uuid,Primary key
+staged_system_id,uuid,FK → staged_systems
+colour_name,text,Exact colour name as printed in source
+sku,text,Full SKU for this colour variant
+sku_suffix,text,Colour code suffix appended to base SKU
+image_url,text,Colour swatch or lifestyle image URL
+is_stocked,boolean,
+parser_notes,jsonb,Entity-level extraction notes from AI parser
+extracted_at,timestamptz,When AI parser extracted this record
+sort_order,integer,
+verification_status,text,pending_review | approved | rejected | needs_source_check | exported
+reviewer_notes,text,
+created_at,timestamptz,DB row insert time

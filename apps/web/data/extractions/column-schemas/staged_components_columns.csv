@@ -1,0 +1,45 @@
+column,type,notes
+id,uuid,Primary key
+manufacturer_id,uuid,FK → data_studio_manufacturers
+source_document_id,uuid,FK → source_documents
+source_chunk_id,uuid,FK → document_chunks
+production_component_id,uuid,Populated after export to production
+sku,text,
+name,text,Required
+description,text,
+category,text,
+uom,text,Sell/quote unit — maps to components.unit on export
+length_mm,numeric,
+width_mm,numeric,
+height_mm,numeric,
+thickness_mm,numeric,
+depth_mm,numeric,
+gauge_mm,numeric,
+diameter_mm,numeric,
+roll_m,numeric,
+weight_kg,numeric,
+pieces,integer,
+volume_ml,numeric,
+weight_g,numeric,
+pack_format,text,e.g. Box / Pallet / Bundle
+supplier_pack_qty,numeric,Units per manufacturer pack
+supplier_pack_uom,text,Unit name inside pack
+supplier_pack_note,text,Pack constraint or sell minimum
+material,text,
+finish,text,
+colour,text,
+profile,text,
+texture,text,
+coverage_m2,numeric,
+image_url,text,Component product image URL
+website_url,text,Manufacturer product page for this component
+parser_notes,jsonb,Entity-level extraction notes from AI parser
+extracted_at,timestamptz,When AI parser extracted this record
+sort_order,integer,
+extraction_confidence,numeric,0.0–1.0
+verification_status,text,pending_review | in_review | approved | rejected | needs_source_check | exported
+verified_by,uuid,
+verified_at,timestamptz,
+reviewer_notes,text,
+created_at,timestamptz,
+updated_at,timestamptz,

@@ -15,11 +15,13 @@
     "parser:insert-local": "tsx scripts/parser-insert-local.ts",
     "parser:verify-local-insert": "tsx scripts/parser-verify-local-insert.ts",
     "parser:docling-chunks": "tsx scripts/docling-build-chunks.ts",
-    "parser:docling-parse": "tsx scripts/parse-docling-chunks.ts"
+    "parser:docling-parse": "tsx scripts/parse-docling-chunks.ts",
+    "import:csv": "tsx scripts/import-csv-to-staged.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "csv-parse": "^6.2.1",
     "next": "14.2.29",
     "react": "^18",
     "react-dom": "^18"
