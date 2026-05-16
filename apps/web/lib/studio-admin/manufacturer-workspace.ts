@@ -511,6 +511,10 @@ export type AdminSystemCardSystem = {
   description: string | null
   hero_image_url: string | null
   bal_rating: string | null
+  fire_rating: string | null
+  moisture_resistant: boolean | null
+  acoustic_rating: string | null
+  structural_grade: string | null
   notes: string | null
   verification_status: string
   profiles: AdminSystemCardProfile[]
@@ -535,7 +539,7 @@ export async function getAdminManufacturerSystemCards(
     fetchManufacturer(c.supabase, manufacturerId),
     c.supabase
       .from('staged_systems')
-      .select('id, name, category, subcategory, description, hero_image_url, bal_rating, notes, verification_status')
+      .select('id, name, category, subcategory, description, hero_image_url, bal_rating, fire_rating, moisture_resistant, acoustic_rating, structural_grade, notes, verification_status')
       .eq('manufacturer_id', manufacturerId)
       .order('sort_order')
       .limit(50),
@@ -546,8 +550,10 @@ export async function getAdminManufacturerSystemCards(
 
   type SysRow = {
     id: string; name: string; category: string | null; subcategory: string | null
-    description: string | null; hero_image_url: string | null; bal_rating: string | null
-    notes: string | null; verification_status: string
+    description: string | null; hero_image_url: string | null
+    bal_rating: string | null; fire_rating: string | null
+    moisture_resistant: boolean | null; acoustic_rating: string | null
+    structural_grade: string | null; notes: string | null; verification_status: string
   }
   const systemRows = (systemsResult.data ?? []) as SysRow[]
   const systemIds = systemRows.map((s) => s.id)
@@ -614,6 +620,10 @@ export async function getAdminManufacturerSystemCards(
     description: s.description,
     hero_image_url: s.hero_image_url,
     bal_rating: s.bal_rating,
+    fire_rating: s.fire_rating,
+    moisture_resistant: s.moisture_resistant,
+    acoustic_rating: s.acoustic_rating,
+    structural_grade: s.structural_grade,
     notes: s.notes,
     verification_status: s.verification_status,
     profiles: profilesMap.get(s.id) ?? [],

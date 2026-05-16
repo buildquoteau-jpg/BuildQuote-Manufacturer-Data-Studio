@@ -16,8 +16,12 @@ const AXON_CLADDING: SystemCardData = {
   subcategory: 'Vertically grooved fibre cement panel',
   description:
     'Axon™ Cladding is a vertically grooved fibre cement panel system that brings the look of painted vertical joint timber with the durability and efficiency of large-format Hardie™ fibre cement panels. The stepped shiplap long edge supports easy installation, and the range includes 133mm Smooth, 133mm Grained, and 400mm Smooth groove-spacing options.',
-  hero_image_url: null, // replace with real URL once available
+  hero_image_url: null,
   bal_rating: null,
+  fire_rating: null,
+  moisture_resistant: null,
+  acoustic_rating: null,
+  structural_grade: null,
   notes: 'Pre-primed/site-painted — no stocked colours.',
 
   profiles: [
@@ -152,6 +156,10 @@ const JDS_REGALFRAME: SystemCardData = {
     'RegalFrame is a welded metal doorframe with a built-in architrave, designed to give a timber-look doorframe with the strength and durability of metal. Made from 1.05mm Zincanneal. Available in 95mm or 114mm back opening.',
   hero_image_url: null,
   bal_rating: null,
+  fire_rating: null,
+  moisture_resistant: null,
+  acoustic_rating: null,
+  structural_grade: null,
   notes: null,
 
   profiles: [
