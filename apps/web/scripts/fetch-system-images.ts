@@ -141,7 +141,7 @@ interface StagedSystem {
   name: string
   website_url: string | null
   hero_image_url: string | null
-  data_studio_manufacturers: { name: string } | null
+  data_studio_manufacturers: { name: string } | { name: string }[] | null
 }
 
 async function main() {
@@ -184,8 +184,14 @@ async function main() {
   const rows = (systems ?? []) as StagedSystem[]
 
   // Filter by manufacturer name if requested
+  function getMfrName(r: StagedSystem): string {
+    const raw = r.data_studio_manufacturers
+    const obj = Array.isArray(raw) ? raw[0] : raw
+    return (obj as { name: string } | null)?.name ?? ''
+  }
+
   const filtered = manufacturerFilter
-    ? rows.filter(r => r.data_studio_manufacturers?.name?.toLowerCase().includes(manufacturerFilter.toLowerCase()))
+    ? rows.filter(r => getMfrName(r).toLowerCase().includes(manufacturerFilter.toLowerCase()))
     : rows
 
   if (filtered.length === 0) {
@@ -201,7 +207,9 @@ async function main() {
 
   for (let i = 0; i < filtered.length; i++) {
     const sys = filtered[i]
-    const mfr = sys.data_studio_manufacturers?.name ?? 'Unknown'
+    const mfrRaw = sys.data_studio_manufacturers
+    const mfrObj = Array.isArray(mfrRaw) ? mfrRaw[0] : mfrRaw
+    const mfr = (mfrObj as { name: string } | null)?.name ?? 'Unknown'
     const label = `[${i + 1}/${filtered.length}] ${mfr} — ${sys.name}`
 
     if (!sys.website_url) {

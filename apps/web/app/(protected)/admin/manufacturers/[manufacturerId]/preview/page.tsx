@@ -1,6 +1,8 @@
 import { StudioShell } from '@/components/studio/StudioShell'
 import { SystemCard, type SystemCardData } from '@/components/system-card/SystemCard'
+import { AdminVerificationBar } from '@/components/admin/AdminVerificationBar'
 import { getAdminManufacturerSystemCards } from '@/lib/studio-admin/manufacturer-workspace'
+import type { VerificationStatus } from '@/lib/studio-admin/system-verification-actions'
 
 type Props = {
   params: { manufacturerId: string }
@@ -25,24 +27,6 @@ export default async function AdminManufacturerPreviewPage({ params }: Props) {
 
   const { manufacturer: m, systems } = result
 
-  const cards: SystemCardData[] = systems.map((sys) => ({
-    name: sys.name,
-    manufacturer_name: m.name,
-    category: sys.category,
-    subcategory: sys.subcategory,
-    description: sys.description,
-    hero_image_url: sys.hero_image_url,
-    bal_rating: sys.bal_rating,
-    fire_rating: sys.fire_rating,
-    moisture_resistant: sys.moisture_resistant,
-    acoustic_rating: sys.acoustic_rating,
-    structural_grade: sys.structural_grade,
-    notes: sys.notes,
-    profiles: sys.profiles,
-    components: sys.components,
-    colours: sys.colours,
-  }))
-
   return (
     <StudioShell role="admin" subtitle={`${m.name} · System card preview`}>
       <div style={{ marginBottom: '1.25rem' }}>
@@ -66,9 +50,46 @@ export default async function AdminManufacturerPreviewPage({ params }: Props) {
         </p>
       ) : (
         <div className="sc-card-grid">
-          {cards.map((card, i) => (
-            <SystemCard key={systems[i].id} data={card} />
-          ))}
+          {systems.map((sys) => {
+            const card: SystemCardData = {
+              name: sys.name,
+              manufacturer_name: m.name,
+              category: sys.category,
+              subcategory: sys.subcategory,
+              description: sys.description,
+              hero_image_url: sys.hero_image_url,
+              bal_rating: sys.bal_rating,
+              fire_rating: sys.fire_rating,
+              moisture_resistant: sys.moisture_resistant,
+              acoustic_rating: sys.acoustic_rating,
+              structural_grade: sys.structural_grade,
+              notes: sys.notes,
+              profiles: sys.profiles,
+              components: sys.components,
+              colours: sys.colours,
+            }
+            const validStatuses: VerificationStatus[] = [
+              'pending_review', 'in_review', 'manufacturer_verified',
+            ]
+            const safeStatus: VerificationStatus = validStatuses.includes(
+              sys.verification_status as VerificationStatus,
+            )
+              ? (sys.verification_status as VerificationStatus)
+              : 'pending_review'
+
+            return (
+              <div key={sys.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flex: 1 }}>
+                  <SystemCard data={card} />
+                </div>
+                <AdminVerificationBar
+                  systemId={sys.id}
+                  initialStatus={safeStatus}
+                  initialNotes={sys.reviewer_notes}
+                />
+              </div>
+            )
+          })}
         </div>
       )}
     </StudioShell>

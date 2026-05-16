@@ -517,6 +517,7 @@ export type AdminSystemCardSystem = {
   structural_grade: string | null
   notes: string | null
   verification_status: string
+  reviewer_notes: string | null
   profiles: AdminSystemCardProfile[]
   components: AdminSystemCardComponent[]
   colours: AdminSystemCardColour[]
@@ -539,7 +540,7 @@ export async function getAdminManufacturerSystemCards(
     fetchManufacturer(c.supabase, manufacturerId),
     c.supabase
       .from('staged_systems')
-      .select('id, name, category, subcategory, description, hero_image_url, bal_rating, fire_rating, moisture_resistant, acoustic_rating, structural_grade, notes, verification_status')
+      .select('id, name, category, subcategory, description, hero_image_url, bal_rating, fire_rating, moisture_resistant, acoustic_rating, structural_grade, notes, verification_status, reviewer_notes')
       .eq('manufacturer_id', manufacturerId)
       .order('sort_order')
       .limit(50),
@@ -553,7 +554,7 @@ export async function getAdminManufacturerSystemCards(
     description: string | null; hero_image_url: string | null
     bal_rating: string | null; fire_rating: string | null
     moisture_resistant: boolean | null; acoustic_rating: string | null
-    structural_grade: string | null; notes: string | null; verification_status: string
+    structural_grade: string | null; notes: string | null; verification_status: string; reviewer_notes: string | null
   }
   const systemRows = (systemsResult.data ?? []) as SysRow[]
   const systemIds = systemRows.map((s) => s.id)
@@ -626,6 +627,7 @@ export async function getAdminManufacturerSystemCards(
     structural_grade: s.structural_grade,
     notes: s.notes,
     verification_status: s.verification_status,
+    reviewer_notes: s.reviewer_notes,
     profiles: profilesMap.get(s.id) ?? [],
     components: componentsMap.get(s.id) ?? [],
     colours: coloursMap.get(s.id) ?? [],
