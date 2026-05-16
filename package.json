@@ -17,7 +17,8 @@
     "docling:extract": "python scripts/docling/extract_docling.py",
     "docling:chunks": "pnpm --filter web run parser:docling-chunks",
     "docling:parse": "pnpm --filter web run parser:docling-parse",
-    "import:csv": "pnpm --filter web run import:csv"
+    "import:csv": "pnpm --filter web run import:csv",
+    "import:images": "pnpm --filter web run import:images"
   },
   "engines": {
     "node": ">=18"
