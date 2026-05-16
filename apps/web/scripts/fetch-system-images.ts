@@ -108,7 +108,16 @@ function extractImageUrl(html: string): string | null {
   return m?.[1]?.trim() ?? null
 }
 
-async function fetchImageUrl(pageUrl: string): Promise<string | null> {
+function normalizeUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return `https://${trimmed}`
+  }
+  return trimmed
+}
+
+async function fetchImageUrl(rawUrl: string): Promise<string | null> {
+  const pageUrl = normalizeUrl(rawUrl)
   try {
     const res = await fetch(pageUrl, {
       headers: {
