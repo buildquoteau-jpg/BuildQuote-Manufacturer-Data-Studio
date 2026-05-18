@@ -142,6 +142,8 @@ def main():
     parser.add_argument("--input", required=True, help="Path to local PDF file")
     parser.add_argument("--chunk-size", type=int, default=14, help="Pages per chunk (default: 14)")
     parser.add_argument("--out", default=None, help="Output directory under .local/docling-output/")
+    parser.add_argument("--start-page", type=int, default=None, help="First page to extract (1-indexed, default: 1)")
+    parser.add_argument("--end-page", type=int, default=None, help="Last page to extract (1-indexed, default: last page)")
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -152,7 +154,13 @@ def main():
     doc = pdfium.PdfDocument(str(input_path))
     total_pages = len(doc)
     doc.close()
-    print(f"[chunked] PDF has {total_pages} pages, chunk size {args.chunk_size}")
+
+    start_page = args.start_page or 1
+    end_page   = args.end_page   or total_pages
+    if start_page < 1 or end_page > total_pages or start_page > end_page:
+        sys.exit(f"[ERROR] Invalid page range {start_page}-{end_page} (PDF has {total_pages} pages)")
+
+    print(f"[chunked] PDF has {total_pages} pages, extracting p{start_page}-p{end_page}, chunk size {args.chunk_size}")
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     stem = _make_safe_name(input_path.stem)
@@ -161,17 +169,18 @@ def main():
     if args.out:
         final_out = SAFE_OUTPUT_ROOT / args.out
     else:
-        final_out = SAFE_OUTPUT_ROOT / f"{stem}_chunked_{ts}"
+        suffix = f"_p{start_page}-p{end_page}" if (args.start_page or args.end_page) else ""
+        final_out = SAFE_OUTPUT_ROOT / f"{stem}_chunked{suffix}_{ts}"
 
     chunks_dir = final_out / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
     # Split and extract each chunk
     chunk_dirs = []
-    page = 1
+    page = start_page
     chunk_no = 1
-    while page <= total_pages:
-        page_end = min(page + args.chunk_size - 1, total_pages)
+    while page <= end_page:
+        page_end = min(page + args.chunk_size - 1, end_page)
 
         chunk_pdf = chunks_dir / f"chunk_{chunk_no:02d}_p{page:03d}-p{page_end:03d}.pdf"
         chunk_out = chunks_dir / f"chunk_{chunk_no:02d}_out"
@@ -186,7 +195,7 @@ def main():
         chunk_no += 1
 
     # Merge all outputs
-    merge_outputs(chunk_dirs, total_pages, final_out, input_path)
+    merge_outputs(chunk_dirs, end_page - start_page + 1, final_out, input_path)
 
 
 if __name__ == "__main__":
