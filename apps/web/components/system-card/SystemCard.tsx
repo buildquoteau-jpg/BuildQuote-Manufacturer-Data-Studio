@@ -48,6 +48,7 @@ export interface SystemCardData {
   moisture_resistant: boolean | null
   acoustic_rating: string | null
   structural_grade: string | null
+  australian_made: boolean | null
   notes: string | null
   profiles: SystemProfile[]
   components: SystemComponent[]
@@ -100,7 +101,7 @@ const TD_STYLE: React.CSSProperties = {
   verticalAlign: 'top',
 }
 
-function LineItemTable({ rows }: {
+function LineItemTable({ rows, showDesc = true, showSpecs = true }: {
   rows: {
     productName: string
     shortDesc: string
@@ -108,23 +109,27 @@ function LineItemTable({ rows }: {
     skuMpn: string
     uom: string
   }[]
+  showDesc?: boolean
+  showSpecs?: boolean
 }) {
   return (
     <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 480 }}>
         <thead>
           <tr>
-            {(['Product name', 'Short description', 'Specs', 'SKU', 'UOM'] as const).map(h => (
-              <th key={h} style={TH_STYLE}>{h}</th>
-            ))}
+            <th style={TH_STYLE}>Product name</th>
+            {showDesc  && <th style={TH_STYLE}>Short description</th>}
+            {showSpecs && <th style={TH_STYLE}>Specs</th>}
+            <th style={TH_STYLE}>SKU</th>
+            <th style={TH_STYLE}>UOM</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} style={{ borderBottom: '1px solid var(--ds-border-soft)', background: i % 2 ? 'var(--ds-page-bg)' : undefined }}>
               <td style={{ ...TD_STYLE, color: 'var(--ds-text)', fontWeight: 500 }}>{r.productName}</td>
-              <td style={{ ...TD_STYLE, color: 'var(--ds-text-muted)', maxWidth: 220 }}>{r.shortDesc}</td>
-              <td style={{ ...TD_STYLE, color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>{r.specs}</td>
+              {showDesc  && <td style={{ ...TD_STYLE, color: 'var(--ds-text-muted)', maxWidth: 220 }}>{r.shortDesc}</td>}
+              {showSpecs && <td style={{ ...TD_STYLE, color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>{r.specs}</td>}
               <td style={{ ...TD_STYLE, color: 'var(--ds-text-faint)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{r.skuMpn}</td>
               <td style={{ ...TD_STYLE, color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>{r.uom}</td>
             </tr>
@@ -141,10 +146,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div style={{ marginTop: '1.75rem' }}>
       <div style={{
-        fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em',
-        textTransform: 'uppercase', color: 'var(--ds-text-faint)',
-        marginBottom: '0.75rem', paddingBottom: '0.5rem',
-        borderBottom: '1px solid var(--ds-border-soft)',
+        fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.1em',
+        textTransform: 'uppercase', color: '#334155',
+        marginBottom: '0.85rem', paddingBottom: '0.5rem',
+        borderBottom: '2px solid #e2e8f0',
       }}>
         {title}
       </div>
@@ -191,12 +196,14 @@ function HeroArea({ imageUrl, manufacturerName, name, category, subcategory, bal
 
 // ─── System attribute badges ──────────────────────────────────────────────────
 
-function AttributeBadges({ balRating, fireRating, moistureResistant, acousticRating, structuralGrade, notes }: {
+function AttributePills({ systemName, balRating, fireRating, moistureResistant, acousticRating, structuralGrade, australianMade, notes }: {
+  systemName: string
   balRating: string | null
   fireRating: string | null
   moistureResistant: boolean | null
   acousticRating: string | null
   structuralGrade: string | null
+  australianMade: boolean | null
   notes: string | null
 }) {
   const badges: { label: string; bg: string; color: string }[] = []
@@ -206,47 +213,138 @@ function AttributeBadges({ balRating, fireRating, moistureResistant, acousticRat
   if (moistureResistant) badges.push({ label: 'Moisture resistant',   bg: '#f0f9ff', color: '#0369a1' })
   if (acousticRating)    badges.push({ label: acousticRating,         bg: '#faf5ff', color: '#7e22ce' })
   if (structuralGrade)   badges.push({ label: structuralGrade,        bg: '#f0fdf4', color: '#15803d' })
+  if (australianMade)    badges.push({ label: 'Australian made',      bg: '#f0fdf4', color: '#166534' })
   if (notes?.toLowerCase().includes('primed') || notes?.toLowerCase().includes('site paint'))
-    badges.push({ label: 'Pre-primed / site painted', bg: '#f8fafc', color: '#475569' })
+    badges.push({ label: 'Pre-primed / site painted',                 bg: '#f8fafc', color: '#475569' })
 
   if (badges.length === 0) return null
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.75rem' }}>
-      {badges.map((b, i) => (
-        <span key={i} style={{
-          display: 'inline-block',
-          padding: '0.2rem 0.6rem',
-          borderRadius: 99,
-          fontSize: '0.72rem',
-          fontWeight: 600,
-          letterSpacing: '0.02em',
-          background: b.bg,
-          color: b.color,
-          border: `1px solid ${b.color}33`,
-        }}>
-          {b.label}
-        </span>
-      ))}
+    <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--ds-border-soft)' }}>
+      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ds-text)', marginBottom: '0.6rem' }}>
+        {systemName}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+        {badges.map((b, i) => (
+          <span key={i} style={{
+            display: 'inline-block',
+            padding: '0.2rem 0.6rem',
+            borderRadius: 99,
+            fontSize: '0.72rem',
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            background: b.bg,
+            color: b.color,
+            border: `1px solid ${b.color}33`,
+          }}>
+            {b.label}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
 
 // ─── Profiles ─────────────────────────────────────────────────────────────────
 
-function ProfilesSection({ profiles }: { profiles: SystemProfile[] }) {
+interface ProfileGroupItem { sizeLabel: string; profile: SystemProfile }
+interface ProfileGroup     { key: string; items: ProfileGroupItem[] }
+
+function computeProfileGroups(profiles: SystemProfile[]): ProfileGroup[] {
+  // Strategy 1: " — " separator  e.g. "50 — 2200mm" → key "50", label "2200mm"
+  if (profiles.some(p => p.profile_name.includes(' — '))) {
+    const map = new Map<string, ProfileGroupItem[]>()
+    for (const p of profiles) {
+      const sep = p.profile_name.indexOf(' — ')
+      const key       = sep !== -1 ? p.profile_name.slice(0, sep) : ''
+      const sizeLabel = sep !== -1 ? p.profile_name.slice(sep + 3) : p.profile_name
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push({ sizeLabel, profile: p })
+    }
+    return Array.from(map.entries()).map(([key, items]) => ({ key, items }))
+  }
+
+  // Strategy 2: common word-prefix  e.g. "9mm Square Edge 3000 x 1200"
+  // Find the longest prefix (by word count) where ≥2 profiles share it.
+  const tokenized = profiles.map(p => p.profile_name.trim().split(/\s+/))
+  const maxLen    = Math.max(...tokenized.map(t => t.length))
+  let bestPrefix  = 0
+  for (let n = 1; n < maxLen; n++) {
+    const counts = new Map<string, number>()
+    for (const tokens of tokenized) {
+      const k = tokens.slice(0, n).join(' ')
+      counts.set(k, (counts.get(k) ?? 0) + 1)
+    }
+    if (Array.from(counts.values()).some(c => c > 1)) bestPrefix = n
+  }
+
+  if (bestPrefix > 0) {
+    const map = new Map<string, ProfileGroupItem[]>()
+    for (let i = 0; i < profiles.length; i++) {
+      const tokens    = tokenized[i]
+      const key       = tokens.slice(0, bestPrefix).join(' ')
+      const sizeLabel = tokens.slice(bestPrefix).join(' ') || tokens.join(' ')
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push({ sizeLabel, profile: profiles[i] })
+    }
+    return Array.from(map.entries()).map(([key, items]) => ({ key, items }))
+  }
+
+  // Strategy 3: no grouping — all under one unnamed group  e.g. "3000mm", "4200mm"
+  return [{ key: '', items: profiles.map(p => ({ sizeLabel: p.profile_name, profile: p })) }]
+}
+
+function ProfilesSection({ profiles, systemName }: { profiles: SystemProfile[]; systemName: string }) {
   if (profiles.length === 0) return null
 
-  const rows = profiles.map(p => ({
-    productName: p.profile_name || p.product_code || '—',
-    shortDesc:   truncate(p.dimensions),
-    specs:       fmtSpec(p.length_mm ?? p.height_mm, p.width_mm, p.thickness_mm),
-    skuMpn:      p.product_code && p.product_code !== p.profile_name ? p.product_code : '—',
-    uom:         fmtUom(p.uom),
-  }))
+  const systemLower = systemName.toLowerCase()
+  const groups      = computeProfileGroups(profiles)
+
+  function headerLabel(key: string): string {
+    if (!key) return systemName
+    if (key.toLowerCase().startsWith(systemLower)) return key
+    const suffix = /^\d+(\.\d+)?$/.test(key) ? `${key}mm` : key
+    return `${systemName} ${suffix}`
+  }
 
   return (
     <Section title={`Profiles · ${profiles.length} variant${profiles.length !== 1 ? 's' : ''}`}>
-      <LineItemTable rows={rows} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        {groups.map(({ key, items }) => (
+          <div key={key || '__all__'}>
+            <div style={{
+              fontSize: '0.88rem', fontWeight: 700, color: '#0f172a',
+              marginBottom: '0.55rem',
+              paddingLeft: '0.6rem',
+              borderLeft: '3px solid #185D7A',
+            }}>
+              {headerLabel(key)}
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+              gap: '0.5rem',
+            }}>
+              {items.map(({ sizeLabel, profile: p }, i) => {
+                const sku   = p.product_code && p.product_code !== p.profile_name ? p.product_code : null
+                const specs = fmtSpec(p.length_mm ?? p.height_mm, p.width_mm, p.thickness_mm)
+                return (
+                  <div key={i} style={{
+                    display: 'flex', flexDirection: 'column', gap: '0.15rem',
+                    padding: '0.55rem 0.7rem',
+                    background: '#0f2d3d',
+                    borderRadius: '8px',
+                  }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>{sizeLabel}</span>
+                    {specs !== '—' && <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)' }}>{specs}</span>}
+                    {sku && <span style={{ fontSize: '0.68rem', fontFamily: 'monospace', color: 'rgba(255,255,255,0.45)' }}>{sku}</span>}
+                    <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{fmtUom(p.uom)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </Section>
   )
 }
@@ -257,61 +355,66 @@ function ComponentsSection({ components }: { components: SystemComponent[] }) {
   const [open, setOpen] = useState(false)
   if (components.length === 0) return null
 
-  const rows = components.map(c => ({
-    productName: c.name,
-    shortDesc:   truncate(c.description),
-    specs:       '—',
-    skuMpn:      c.sku ?? '—',
-    uom:         fmtUom(c.uom),
-  }))
-
   return (
     <div style={{ marginTop: '1.75rem' }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'none', border: 'none', borderBottom: '1px solid var(--ds-border-soft)',
-          padding: '0 0 0.5rem', cursor: 'pointer', marginBottom: open ? '0.75rem' : 0,
+          background: 'none', border: 'none', borderBottom: '2px solid #e2e8f0',
+          padding: '0 0 0.5rem', cursor: 'pointer', marginBottom: open ? '0.25rem' : 0,
         }}
       >
-        <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ds-text-faint)' }}>
+        <span style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#334155' }}>
           {`Accessories & components · ${components.length}`}
         </span>
-        <span style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)' }}>{open ? '▲' : '▼'}</span>
+        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{open ? '▲' : '▼'}</span>
       </button>
-      {open && <LineItemTable rows={rows} />}
+      {open && (
+        <div>
+          {components.map((c, i) => (
+            <div key={i} style={{
+              padding: '0.65rem 0',
+              borderBottom: '1px solid #f1f5f9',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>{c.name}</span>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'baseline', flexShrink: 0 }}>
+                  {c.sku && <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#64748b' }}>{c.sku}</span>}
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{fmtUom(c.uom)}</span>
+                </div>
+              </div>
+              {c.description && (
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.55 }}>{c.description}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
 
-function ColoursSection({ colours, notes }: { colours: SystemColour[]; notes: string | null }) {
+function ColoursSection({ colours }: { colours: SystemColour[] }) {
+  if (colours.length === 0) return null
   return (
     <Section title="Colours & finishes">
-      {colours.length === 0 ? (
-        <p style={{ fontSize: '0.83rem', color: 'var(--ds-text-muted)', margin: 0 }}>
-          {notes?.toLowerCase().includes('primed') || notes?.toLowerCase().includes('painted')
-            ? 'Pre-primed — site painted. No stocked colour options.'
-            : 'No colour options listed for this system.'}
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-          {colours.map((c, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.3rem 0.7rem', background: 'var(--ds-page-bg)',
-              border: '1px solid var(--ds-border)', borderRadius: 99,
-              fontSize: '0.82rem', color: 'var(--ds-text-sub)',
-            }}>
-              <span>{c.colour_name}</span>
-              {c.sku_suffix && <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', fontFamily: 'monospace' }}>{c.sku_suffix}</span>}
-              {c.is_stocked === false && <span style={{ fontSize: '0.68rem', color: 'var(--ds-text-faint)' }}>EOI</span>}
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {colours.map((c, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            padding: '0.3rem 0.7rem', background: 'var(--ds-page-bg)',
+            border: '1px solid var(--ds-border)', borderRadius: 99,
+            fontSize: '0.82rem', color: 'var(--ds-text-sub)',
+          }}>
+            <span>{c.colour_name}</span>
+            {c.sku_suffix && <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', fontFamily: 'monospace' }}>{c.sku_suffix}</span>}
+            {c.is_stocked === false && <span style={{ fontSize: '0.68rem', color: 'var(--ds-text-faint)' }}>EOI</span>}
+          </div>
+        ))}
+      </div>
     </Section>
   )
 }
@@ -331,26 +434,28 @@ export function SystemCard({ data }: { data: SystemCardData }) {
       />
 
       <div className="sc-body">
-        <AttributeBadges
-          balRating={data.bal_rating}
-          fireRating={data.fire_rating}
-          moistureResistant={data.moisture_resistant}
-          acousticRating={data.acoustic_rating}
-          structuralGrade={data.structural_grade}
-          notes={data.notes}
-        />
-
         {data.description && (
           <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-sub)', lineHeight: 1.6, margin: 0 }}>
             {data.description}
           </p>
         )}
 
-        <ProfilesSection profiles={data.profiles} />
+        <ColoursSection colours={data.colours} />
+        <ProfilesSection profiles={data.profiles} systemName={data.name} />
         <ComponentsSection components={data.components} />
-        <ColoursSection colours={data.colours} notes={data.notes} />
 
-        <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--ds-border-soft)', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <AttributePills
+          systemName={data.name}
+          balRating={data.bal_rating}
+          fireRating={data.fire_rating}
+          moistureResistant={data.moisture_resistant}
+          acousticRating={data.acoustic_rating}
+          structuralGrade={data.structural_grade}
+          australianMade={data.australian_made}
+          notes={data.notes}
+        />
+
+        <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <a href="#" className="studio-btn studio-btn-primary" style={{ fontSize: '0.875rem' }} onClick={(e: MouseEvent) => e.preventDefault()}>
             Add to RFQ
           </a>
