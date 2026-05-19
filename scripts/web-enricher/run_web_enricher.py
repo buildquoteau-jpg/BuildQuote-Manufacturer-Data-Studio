@@ -636,7 +636,8 @@ def main():
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(".local/web-enricher-dry-run")
     out_dir.mkdir(parents=True, exist_ok=True)
-    patch_path = out_dir / f"patch_{ts}.json"
+    mfr_slug = re.sub(r"[^\w]+", "_", args.manufacturer_name).strip("_").lower()
+    patch_path = out_dir / f"patch_{mfr_slug}_{ts}.json"
     patch_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[enricher] Patch file saved: {patch_path}")
 
