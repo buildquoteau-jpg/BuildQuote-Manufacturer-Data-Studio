@@ -50,6 +50,7 @@ export interface SystemCardData {
   structural_grade: string | null
   australian_made: boolean | null
   notes: string | null
+  source_url: string | null
   profiles: SystemProfile[]
   components: SystemComponent[]
   colours: SystemColour[]
@@ -172,11 +173,6 @@ function HeroArea({ imageUrl, manufacturerName, name, category, subcategory, bal
     <div className="sc-hero" style={{ borderRadius: '10px 10px 0 0', background: imageUrl ? undefined : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)' }}>
       {imageUrl && <img src={imageUrl} alt={name} />}
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,30,45,0.85) 0%, rgba(15,30,45,0.2) 60%, transparent 100%)' }} />
-      {balRating && (
-        <div style={{ position: 'absolute', top: '0.875rem', right: '0.875rem', background: '#f97316', color: '#fff', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em', padding: '0.25rem 0.6rem', borderRadius: 99 }}>
-          {balRating}
-        </div>
-      )}
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '1rem 1.25rem 1.1rem' }}>
         <div style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: '0.3rem' }}>
           {manufacturerName}
@@ -361,17 +357,20 @@ function ComponentsSection({ components }: { components: SystemComponent[] }) {
         onClick={() => setOpen(o => !o)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'none', border: 'none', borderBottom: '2px solid #e2e8f0',
-          padding: '0 0 0.5rem', cursor: 'pointer', marginBottom: open ? '0.25rem' : 0,
+          background: open ? '#f1f5f9' : '#f8fafc',
+          border: '2px solid #e2e8f0',
+          borderRadius: open ? '8px 8px 0 0' : '8px',
+          padding: '0.6rem 0.85rem',
+          cursor: 'pointer',
         }}
       >
         <span style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#334155' }}>
           {`Accessories & components · ${components.length}`}
         </span>
-        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{open ? '▲' : '▼'}</span>
+        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#185D7A' }}>{open ? '▲ Hide' : '▼ Show'}</span>
       </button>
       {open && (
-        <div>
+        <div style={{ border: '2px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '0 0.85rem' }}>
           {components.map((c, i) => (
             <div key={i} style={{
               padding: '0.65rem 0',
@@ -457,11 +456,26 @@ export function SystemCard({ data }: { data: SystemCardData }) {
 
         <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <a href="#" className="studio-btn studio-btn-primary" style={{ fontSize: '0.875rem' }} onClick={(e: MouseEvent) => e.preventDefault()}>
-            Add to RFQ
+            Add selected items to a Request for Quotation
           </a>
-          <a href="#" className="studio-btn studio-btn-ghost" style={{ fontSize: '0.875rem' }} onClick={(e: MouseEvent) => e.preventDefault()}>
-            View technical data
-          </a>
+          {data.source_url ? (
+            <a
+              href={data.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="studio-btn studio-btn-ghost"
+              style={{ fontSize: '0.875rem' }}
+            >
+              View {data.name} at {data.manufacturer_name}
+            </a>
+          ) : (
+            <span
+              className="studio-btn studio-btn-ghost"
+              style={{ fontSize: '0.875rem', opacity: 0.4, cursor: 'not-allowed' }}
+            >
+              View {data.name} at {data.manufacturer_name}
+            </span>
+          )}
         </div>
       </div>
     </div>
