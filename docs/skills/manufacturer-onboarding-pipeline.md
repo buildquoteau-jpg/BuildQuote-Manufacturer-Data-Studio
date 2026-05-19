@@ -142,6 +142,20 @@ python scripts/parser/run_parser.py `
 
 ---
 
+## Step 4b — Fix mojibake characters
+
+Run immediately after every live parser insert. The PDF parser sometimes produces
+mojibake (™ → â„¢, — → â€", ® → Â®) in profile and component names.
+
+```powershell
+python scripts/fix_mojibake.py --manufacturer-id "<uuid>"
+```
+
+Fixes `staged_systems`, `staged_system_profiles`, and `staged_components` in one pass.
+Safe to re-run — only patches rows that still contain bad characters.
+
+---
+
 ## Step 5 — Review staging data, check for dups
 
 Run in Supabase Studio (local) or via SQL:
@@ -360,6 +374,7 @@ script is built.
 - [ ] Parser hints file created/updated
 - [ ] Parser dry run reviewed — names, profiles, component roles look correct
 - [ ] Parser live insert complete
+- [ ] Mojibake fix run (`scripts/fix_mojibake.py`)
 - [ ] Duplicate check passed (zero duplicate system names, zero stub-only rows)
 - [ ] Web enricher hints file created with `base_url`, `products_listing_url`, slug mappings
 - [ ] Web enricher dry run reviewed — heroes look product-specific
