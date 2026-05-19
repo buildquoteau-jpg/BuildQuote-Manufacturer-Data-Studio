@@ -32,6 +32,20 @@ Export CSV → save to `supabase/snippets/` → update `schema_complete.sql`.
 - **Publishing:** `publish_batches`, `publish_batch_items`
 - **Auth/users:** `data_studio_manufacturers`, `data_studio_user_profiles`, `manufacturer_users`, `workspace_invitations`
 
+## Skills / runbooks
+
+Step-by-step guides for common pipeline tasks live in `docs/skills/`:
+
+| Skill | What it covers |
+|---|---|
+| [`manufacturer-onboarding-pipeline.md`](docs/skills/manufacturer-onboarding-pipeline.md) | Full end-to-end: create manufacturer → Docling → AI parser → dup check → web enricher → verify → backup |
+| [`catalogue-parser-pipeline.md`](docs/skills/catalogue-parser-pipeline.md) | Docling extraction + AI two-pass parser in detail |
+| [`web-enricher-pipeline.md`](docs/skills/web-enricher-pipeline.md) | Fills `hero_image_url`, `website_url`, `source_url` from manufacturer website |
+
+**Start with `manufacturer-onboarding-pipeline.md`** for any new manufacturer.
+
+---
+
 ## Key conventions
 
 - All staged tables have `verification_status` (default `pending_review`), `parser_notes` (jsonb), `extracted_at`
