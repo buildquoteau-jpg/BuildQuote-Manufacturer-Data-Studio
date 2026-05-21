@@ -63,7 +63,9 @@ export default async function AdminManufacturerPreviewPage({ params }: Props) {
               moisture_resistant: sys.moisture_resistant,
               acoustic_rating: sys.acoustic_rating,
               structural_grade: sys.structural_grade,
+              australian_made: sys.australian_made,
               notes: sys.notes,
+              source_url: null,
               profiles: sys.profiles,
               components: sys.components,
               colours: sys.colours,
@@ -86,6 +88,12 @@ export default async function AdminManufacturerPreviewPage({ params }: Props) {
                   systemId={sys.id}
                   initialStatus={safeStatus}
                   initialNotes={sys.reviewer_notes}
+                  initialBalRating={sys.bal_rating}
+                  initialFireRating={sys.fire_rating}
+                  initialAcousticRating={sys.acoustic_rating}
+                  initialMoistureResistant={sys.moisture_resistant ?? false}
+                  initialStructuralGrade={sys.structural_grade}
+                  initialAustralianMade={sys.australian_made ?? false}
                 />
               </div>
             )

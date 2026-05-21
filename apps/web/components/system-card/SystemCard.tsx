@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { MouseEvent, ReactNode } from 'react'
+import type { MouseEvent } from 'react'
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 
@@ -58,116 +58,505 @@ export interface SystemCardData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function fmtDims(p: SystemProfile): string {
+  const parts: string[] = []
+  if (p.length_mm)  parts.push(`${p.length_mm}mm`)
+  if (p.width_mm)   parts.push(`${p.width_mm}mm`)
+  if (p.height_mm && !p.length_mm) parts.push(`${p.height_mm}mm`)
+  if (p.thickness_mm) parts.push(`${p.thickness_mm}mm`)
+  return parts.join(' × ')
+}
+
 function fmtUom(uom: string | null): string {
-  if (!uom) return '—'
+  if (!uom) return ''
   const map: Record<string, string> = {
-    sheet: 'Sheet', roll: 'Roll', ea: 'Each', each: 'Each', lm: 'Lin. m',
-    m2: 'm²', kg: 'kg', box: 'Box', pack: 'Pack', length: 'Length', set: 'Set',
+    sheet: 'SHEET', roll: 'ROLL', ea: 'EACH', each: 'EACH', lm: 'LIN.M',
+    m2: 'M²', kg: 'KG', box: 'BOX', pack: 'PACK', length: 'LENGTH', set: 'SET',
   }
-  return map[uom.toLowerCase()] ?? uom
+  return map[uom.toLowerCase()] ?? uom.toUpperCase()
 }
 
-function fmtMm(v: number | null): string | null {
-  if (v == null) return null
-  return `${parseFloat(v.toFixed(1))}mm`
+function formatGroupKey(key: string): string {
+  return /^\d+(\.\d+)?$/.test(key) ? `${key}mm` : key
 }
 
-function fmtSpec(l: number | null, w: number | null, t: number | null): string {
-  const parts = [l, w, t].map(fmtMm).filter((s): s is string => s !== null)
-  return parts.length ? parts.join(' × ') : '—'
+function extractNums(s: string): number[] {
+  return (s.match(/\d+(?:\.\d+)?/g) || []).map(Number)
 }
 
-function truncate(s: string | null, max = 90): string {
-  if (!s) return '—'
-  const trimmed = s.trim()
-  return trimmed.length > max ? trimmed.slice(0, max).trimEnd() + '…' : trimmed
-}
+// ─── Checkbox ─────────────────────────────────────────────────────────────────
 
-// ─── Shared table ─────────────────────────────────────────────────────────────
-
-const TH_STYLE: React.CSSProperties = {
-  padding: '0.4rem 0.6rem',
-  textAlign: 'left',
-  fontWeight: 600,
-  color: 'var(--ds-text-sub)',
-  fontSize: '0.72rem',
-  borderBottom: '1px solid var(--ds-border)',
-  whiteSpace: 'nowrap',
-  background: 'var(--ds-page-bg)',
-}
-
-const TD_STYLE: React.CSSProperties = {
-  padding: '0.45rem 0.6rem',
-  fontSize: '0.8rem',
-  verticalAlign: 'top',
-}
-
-function LineItemTable({ rows, showDesc = true, showSpecs = true }: {
-  rows: {
-    productName: string
-    shortDesc: string
-    specs: string
-    skuMpn: string
-    uom: string
-  }[]
-  showDesc?: boolean
-  showSpecs?: boolean
-}) {
+function Checkbox({ checked }: { checked: boolean }) {
   return (
-    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 480 }}>
-        <thead>
-          <tr>
-            <th style={TH_STYLE}>Product name</th>
-            {showDesc  && <th style={TH_STYLE}>Short description</th>}
-            {showSpecs && <th style={TH_STYLE}>Specs</th>}
-            <th style={TH_STYLE}>SKU</th>
-            <th style={TH_STYLE}>UOM</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid var(--ds-border-soft)', background: i % 2 ? 'var(--ds-page-bg)' : undefined }}>
-              <td style={{ ...TD_STYLE, color: 'var(--ds-text)', fontWeight: 500 }}>{r.productName}</td>
-              {showDesc  && <td style={{ ...TD_STYLE, color: 'var(--ds-text-muted)', maxWidth: 220 }}>{r.shortDesc}</td>}
-              {showSpecs && <td style={{ ...TD_STYLE, color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>{r.specs}</td>}
-              <td style={{ ...TD_STYLE, color: 'var(--ds-text-faint)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{r.skuMpn}</td>
-              <td style={{ ...TD_STYLE, color: 'var(--ds-text-sub)', whiteSpace: 'nowrap' }}>{r.uom}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <span style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      width: '22px', height: '22px', borderRadius: '6px',
+      background: checked ? '#185D7A' : '#fff',
+      border: `2px solid ${checked ? '#185D7A' : '#d1d5db'}`,
+    }}>
+      {checked && (
+        <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+          <path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      )}
+    </span>
   )
 }
 
-// ─── Section wrapper ──────────────────────────────────────────────────────────
+// ─── Profile grouping ─────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+type ProfileGroupItem = { label: string; profile: SystemProfile; idx: number }
+type ProfileGroup     = { key: string; items: ProfileGroupItem[] }
+
+function groupProfiles(profiles: SystemProfile[]): ProfileGroup[] {
+  if (profiles.length === 0) return []
+
+  const names     = profiles.map(p => p.profile_name.trim())
+  const tokenized = names.map(n => n.split(/\s+/))
+  const maxLen    = Math.max(...tokenized.map(t => t.length))
+
+  // Strategy 1: " — " separator
+  if (names.some(n => n.includes(' — '))) {
+    const map = new Map<string, ProfileGroupItem[]>()
+    for (let i = 0; i < profiles.length; i++) {
+      const sep   = names[i].indexOf(' — ')
+      const key   = sep !== -1 ? names[i].slice(0, sep) : ''
+      const label = sep !== -1 ? names[i].slice(sep + 3) : names[i]
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push({ label, profile: profiles[i], idx: i })
+    }
+    return Array.from(map.entries()).map(([key, items]) => ({ key, items }))
+  }
+
+  function buildMap(fromEnd: boolean, n: number) {
+    const map = new Map<string, ProfileGroupItem[]>()
+    for (let i = 0; i < profiles.length; i++) {
+      const t = tokenized[i]; const len = t.length
+      let key: string, label: string
+      if (fromEnd) {
+        key   = t.slice(Math.max(0, len - n)).join(' ')
+        label = t.slice(0, Math.max(0, len - n)).join(' ').replace(/\s*[x×]\s*$/, '').trim() || names[i]
+      } else {
+        key   = t.slice(0, n).join(' ')
+        label = t.slice(n).join(' ') || names[i]
+      }
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push({ label, profile: profiles[i], idx: i })
+    }
+    return map
+  }
+
+  function findMinN(fromEnd: boolean): number {
+    for (let n = 1; n < maxLen; n++) {
+      const counts = new Map<string, number>()
+      for (const t of tokenized) {
+        const k = fromEnd ? t.slice(Math.max(0, t.length - n)).join(' ') : t.slice(0, n).join(' ')
+        counts.set(k, (counts.get(k) ?? 0) + 1)
+      }
+      if (Array.from(counts.values()).some(c => c > 1)) return n
+    }
+    return 0
+  }
+
+  // Strategy 2: min-N prefix vs suffix — prefer whichever gives fewer groups
+  const prefixN = findMinN(false)
+  const suffixN = findMinN(true)
+  const prefixMap = prefixN > 0 ? buildMap(false, prefixN) : null
+  const suffixMap = suffixN > 0 ? buildMap(true,  suffixN) : null
+
+  let chosen: Map<string, ProfileGroupItem[]> | null = null
+  if (prefixMap && suffixMap) {
+    chosen = suffixMap.size < prefixMap.size ? suffixMap : prefixMap
+  } else {
+    chosen = prefixMap ?? suffixMap
+  }
+
+  if (chosen) return Array.from(chosen.entries()).map(([key, items]) => ({ key, items }))
+
+  // Strategy 3: single flat group
+  return [{ key: '', items: profiles.map((p, i) => ({ label: names[i], profile: p, idx: i })) }]
+}
+
+// ─── Colours section ──────────────────────────────────────────────────────────
+
+function ColoursSection({ colours }: { colours: SystemColour[] }) {
+  if (colours.length === 0) return null
   return (
     <div style={{ marginTop: '1.75rem' }}>
       <div style={{
         fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.1em',
         textTransform: 'uppercase', color: '#334155',
-        marginBottom: '0.85rem', paddingBottom: '0.5rem',
-        borderBottom: '2px solid #e2e8f0',
+        marginBottom: '0.75rem',
       }}>
-        {title}
+        Colours &amp; finishes
       </div>
-      {children}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {colours.map((c, i) => (
+          <div key={i} style={{
+            display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+            padding: '0.3rem 0.7rem', background: 'var(--ds-page-bg)',
+            border: '1px solid var(--ds-border)', borderRadius: 99,
+            fontSize: '0.82rem', color: 'var(--ds-text-sub)',
+          }}>
+            <span>{c.colour_name}</span>
+            {c.sku_suffix && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', fontFamily: 'monospace' }}>
+                {c.sku_suffix}
+              </span>
+            )}
+            {c.is_stocked === false && (
+              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--ds-text-faint)' }}>EOI</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Profile row ──────────────────────────────────────────────────────────────
+
+function ProfileRow({
+  label, profile, idx, selected, onToggle,
+}: {
+  label: string
+  profile: SystemProfile
+  idx: number
+  selected: Set<number>
+  onToggle: (idx: number) => void
+}) {
+  const isSel = selected.has(idx)
+  const dims  = fmtDims(profile)
+  const uom   = fmtUom(profile.uom)
+  const sku   = profile.product_code
+
+  const labelNums     = extractNums(label)
+  const dimsNums      = extractNums(dims)
+  const labelOverlaps = labelNums.length > 0 && labelNums.every((n, i) => dimsNums[i] === n)
+
+  return labelOverlaps ? (
+    <button
+      type="button"
+      onClick={() => onToggle(idx)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '10px', width: '100%', textAlign: 'left',
+        padding: '9px 12px',
+        background: isSel ? '#eef6fa' : '#f9fafb',
+        border: `1.5px solid ${isSel ? '#185D7A' : '#e5e7eb'}`,
+        borderRadius: '10px', cursor: 'pointer', transition: 'all 0.12s',
+      }}
+    >
+      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+        <span style={{ fontSize: '13px', fontWeight: isSel ? 700 : 600, color: isSel ? '#0f2d3d' : '#111827' }}>
+          {dims}
+        </span>
+        {uom && (
+          <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: isSel ? '#185D7A' : '#6b7280' }}>
+            {uom}
+          </span>
+        )}
+        {sku && (
+          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', background: isSel ? '#d4ecf5' : '#f3f4f6', padding: '1px 5px', borderRadius: '4px' }}>
+            {sku}
+          </span>
+        )}
+      </div>
+      <Checkbox checked={isSel} />
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => onToggle(idx)}
+      style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: '10px', width: '100%', textAlign: 'left',
+        padding: '9px 12px',
+        background: isSel ? '#eef6fa' : '#f9fafb',
+        border: `1.5px solid ${isSel ? '#185D7A' : '#e5e7eb'}`,
+        borderRadius: '10px', cursor: 'pointer', transition: 'all 0.12s',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '13px', fontWeight: isSel ? 700 : 600, color: isSel ? '#0f2d3d' : '#111827', lineHeight: 1.3 }}>
+          {label}
+        </div>
+        {(dims || uom || sku) && (
+          <div style={{ marginTop: '3px', fontSize: '12px', color: '#6b7280', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+            {dims && <span>{dims}</span>}
+            {uom && <span style={{ fontWeight: 700, letterSpacing: '0.05em', color: isSel ? '#185D7A' : '#6b7280' }}>{uom}</span>}
+            {sku && <span style={{ fontFamily: 'monospace', background: isSel ? '#d4ecf5' : '#f3f4f6', padding: '1px 4px', borderRadius: '3px' }}>{sku}</span>}
+          </div>
+        )}
+      </div>
+      <Checkbox checked={isSel} />
+    </button>
+  )
+}
+
+// ─── Profile group block ──────────────────────────────────────────────────────
+
+function ProfileGroupBlock({
+  groupKey, systemName, showSystemName, items, defaultOpen, selected, onToggle,
+}: {
+  groupKey: string
+  systemName: string
+  showSystemName: boolean
+  items: ProfileGroupItem[]
+  defaultOpen: boolean
+  selected: Set<number>
+  onToggle: (idx: number) => void
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  if (!groupKey) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {items.map(({ label, profile, idx }) => (
+          <ProfileRow key={idx} label={label} profile={profile} idx={idx} selected={selected} onToggle={onToggle} />
+        ))}
+      </div>
+    )
+  }
+
+  const fmtKey     = formatGroupKey(groupKey)
+  const displayKey = showSystemName ? `${systemName} ${fmtKey}` : fmtKey
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center',
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '10px 0 8px', textAlign: 'left', minHeight: '44px',
+        }}
+      >
+        <span style={{
+          fontSize: '13px', fontWeight: 700, color: '#111827',
+          paddingLeft: '10px', borderLeft: '3px solid #185D7A',
+          marginRight: '6px',
+        }}>
+          {displayKey}
+        </span>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: '#185D7A', flexShrink: 0 }}>
+          {open ? '▲' : `▼ ${items.length}`}
+        </span>
+      </button>
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingBottom: '4px' }}>
+          {items.map(({ label, profile, idx }) => (
+            <ProfileRow key={idx} label={label} profile={profile} idx={idx} selected={selected} onToggle={onToggle} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Profiles section ─────────────────────────────────────────────────────────
+
+function ProfilesSection({
+  profiles, systemName, selected, onToggle,
+}: {
+  profiles: SystemProfile[]
+  systemName: string
+  selected: Set<number>
+  onToggle: (idx: number) => void
+}) {
+  if (profiles.length === 0) return null
+  const groups      = groupProfiles(profiles)
+  const defaultOpen = profiles.length <= 3
+  const multiGroup  = groups.length > 1
+  const useHeaders  = multiGroup || !defaultOpen
+
+  return (
+    <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid #e2e8f0' }}>
+      <div style={{
+        fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.1em',
+        textTransform: 'uppercase', color: '#334155',
+        marginBottom: '0.75rem',
+      }}>
+        Profiles · {profiles.length} variant{profiles.length !== 1 ? 's' : ''}
+      </div>
+      {/* Static system name header for single-group cards so name travels to RFQ */}
+      {!multiGroup && (
+        <div style={{
+          fontSize: '13px', fontWeight: 700, color: '#111827',
+          paddingLeft: '10px', borderLeft: '3px solid #185D7A',
+          marginBottom: '8px',
+        }}>
+          {!useHeaders && groups[0]?.key
+            ? `${systemName} ${formatGroupKey(groups[0].key)}`
+            : systemName}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {!useHeaders ? (
+          groups.flatMap(({ items }) => items).map(({ label, profile, idx }) => (
+            <ProfileRow key={idx} label={label} profile={profile} idx={idx} selected={selected} onToggle={onToggle} />
+          ))
+        ) : (
+          groups.map(({ key, items }) => (
+            <ProfileGroupBlock
+              key={key || '__all__'}
+              groupKey={key}
+              systemName={systemName}
+              showSystemName={multiGroup}
+              items={items}
+              defaultOpen={defaultOpen}
+              selected={selected}
+              onToggle={onToggle}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Components section ───────────────────────────────────────────────────────
+
+function ComponentsSection({
+  components, selected, onToggle,
+}: {
+  components: SystemComponent[]
+  selected: Set<number>
+  onToggle: (idx: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  if (components.length === 0) return null
+
+  return (
+    <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', cursor: 'pointer', textAlign: 'left',
+          background: '#eef6fa', border: '1.5px solid #b8d9e8',
+          borderRadius: '10px', padding: '12px 14px', minHeight: '48px',
+        }}
+      >
+        <span style={{
+          fontSize: '12px', fontWeight: 700, letterSpacing: '0.07em',
+          textTransform: 'uppercase', color: '#185D7A',
+        }}>
+          Accessories &amp; Components · {components.length}
+        </span>
+        <span style={{ fontSize: '12px', fontWeight: 700, color: '#185D7A', flexShrink: 0, marginLeft: '8px' }}>
+          {open ? '▲ Hide' : '▼ Show'}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {components.map((c, i) => {
+            const isSel = selected.has(i)
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onToggle(i)}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                  gap: '10px', width: '100%', textAlign: 'left',
+                  padding: '12px 12px',
+                  background: isSel ? '#eef6fa' : '#f9fafb',
+                  border: `1.5px solid ${isSel ? '#185D7A' : '#e5e7eb'}`,
+                  borderRadius: '10px', cursor: 'pointer', transition: 'all 0.12s',
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: '14px', fontWeight: isSel ? 700 : 600,
+                    color: isSel ? '#0f2d3d' : '#111827', lineHeight: 1.3,
+                  }}>
+                    {c.name}
+                  </div>
+                  <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                    {c.description && (
+                      <span style={{ fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{c.description}</span>
+                    )}
+                    {c.sku && (
+                      <span style={{
+                        fontSize: '11px', fontFamily: 'monospace', color: '#4b5563',
+                        background: isSel ? '#d4ecf5' : '#f3f4f6',
+                        padding: '1px 5px', borderRadius: '4px',
+                      }}>
+                        {c.sku}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Checkbox checked={isSel} />
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Attribute pills ──────────────────────────────────────────────────────────
+
+function AttributePills({ systemName, balRating, fireRating, moistureResistant, acousticRating, structuralGrade, australianMade, notes }: {
+  systemName: string
+  balRating: string | null
+  fireRating: string | null
+  moistureResistant: boolean | null
+  acousticRating: string | null
+  structuralGrade: string | null
+  australianMade: boolean | null
+  notes: string | null
+}) {
+  const badges: { label: string; bg: string; color: string }[] = []
+
+  if (balRating)         badges.push({ label: balRating,                    bg: '#fff7ed', color: '#c2410c' })
+  if (fireRating)        badges.push({ label: `FRL ${fireRating}`,          bg: '#fef2f2', color: '#b91c1c' })
+  if (moistureResistant) badges.push({ label: 'Moisture resistant',         bg: '#f0f9ff', color: '#0369a1' })
+  if (acousticRating)    badges.push({ label: acousticRating,               bg: '#faf5ff', color: '#7e22ce' })
+  if (structuralGrade)   badges.push({ label: structuralGrade,              bg: '#f0fdf4', color: '#15803d' })
+  if (australianMade)    badges.push({ label: 'Australian made',            bg: '#f0fdf4', color: '#166534' })
+  if (notes?.toLowerCase().includes('primed') || notes?.toLowerCase().includes('site paint'))
+    badges.push({ label: 'Pre-primed / site painted',                       bg: '#f8fafc', color: '#475569' })
+
+  if (badges.length === 0) return null
+  return (
+    <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+        {badges.map((b, i) => (
+          <span key={i} style={{
+            display: 'inline-block',
+            padding: '0.2rem 0.6rem',
+            borderRadius: 99,
+            fontSize: '0.72rem',
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            background: b.bg,
+            color: b.color,
+            border: `1px solid ${b.color}33`,
+          }}>
+            {b.label}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
-function HeroArea({ imageUrl, manufacturerName, name, category, subcategory, balRating }: {
+function HeroArea({ imageUrl, manufacturerName, name, category, subcategory }: {
   imageUrl: string | null
   manufacturerName: string
   name: string
   category: string | null
   subcategory: string | null
-  balRating: string | null
 }) {
   return (
     <div className="sc-hero" style={{ borderRadius: '10px 10px 0 0', background: imageUrl ? undefined : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)' }}>
@@ -190,237 +579,19 @@ function HeroArea({ imageUrl, manufacturerName, name, category, subcategory, bal
   )
 }
 
-// ─── System attribute badges ──────────────────────────────────────────────────
-
-function AttributePills({ systemName, balRating, fireRating, moistureResistant, acousticRating, structuralGrade, australianMade, notes }: {
-  systemName: string
-  balRating: string | null
-  fireRating: string | null
-  moistureResistant: boolean | null
-  acousticRating: string | null
-  structuralGrade: string | null
-  australianMade: boolean | null
-  notes: string | null
-}) {
-  const badges: { label: string; bg: string; color: string }[] = []
-
-  if (balRating)         badges.push({ label: balRating,              bg: '#fff7ed', color: '#c2410c' })
-  if (fireRating)        badges.push({ label: `FRL ${fireRating}`,    bg: '#fef2f2', color: '#b91c1c' })
-  if (moistureResistant) badges.push({ label: 'Moisture resistant',   bg: '#f0f9ff', color: '#0369a1' })
-  if (acousticRating)    badges.push({ label: acousticRating,         bg: '#faf5ff', color: '#7e22ce' })
-  if (structuralGrade)   badges.push({ label: structuralGrade,        bg: '#f0fdf4', color: '#15803d' })
-  if (australianMade)    badges.push({ label: 'Australian made',      bg: '#f0fdf4', color: '#166534' })
-  if (notes?.toLowerCase().includes('primed') || notes?.toLowerCase().includes('site paint'))
-    badges.push({ label: 'Pre-primed / site painted',                 bg: '#f8fafc', color: '#475569' })
-
-  if (badges.length === 0) return null
-  return (
-    <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--ds-border-soft)' }}>
-      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ds-text)', marginBottom: '0.6rem' }}>
-        {systemName}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-        {badges.map((b, i) => (
-          <span key={i} style={{
-            display: 'inline-block',
-            padding: '0.2rem 0.6rem',
-            borderRadius: 99,
-            fontSize: '0.72rem',
-            fontWeight: 600,
-            letterSpacing: '0.02em',
-            background: b.bg,
-            color: b.color,
-            border: `1px solid ${b.color}33`,
-          }}>
-            {b.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Profiles ─────────────────────────────────────────────────────────────────
-
-interface ProfileGroupItem { sizeLabel: string; profile: SystemProfile }
-interface ProfileGroup     { key: string; items: ProfileGroupItem[] }
-
-function computeProfileGroups(profiles: SystemProfile[]): ProfileGroup[] {
-  // Strategy 1: " — " separator  e.g. "50 — 2200mm" → key "50", label "2200mm"
-  if (profiles.some(p => p.profile_name.includes(' — '))) {
-    const map = new Map<string, ProfileGroupItem[]>()
-    for (const p of profiles) {
-      const sep = p.profile_name.indexOf(' — ')
-      const key       = sep !== -1 ? p.profile_name.slice(0, sep) : ''
-      const sizeLabel = sep !== -1 ? p.profile_name.slice(sep + 3) : p.profile_name
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push({ sizeLabel, profile: p })
-    }
-    return Array.from(map.entries()).map(([key, items]) => ({ key, items }))
-  }
-
-  // Strategy 2: common word-prefix  e.g. "9mm Square Edge 3000 x 1200"
-  // Find the longest prefix (by word count) where ≥2 profiles share it.
-  const tokenized = profiles.map(p => p.profile_name.trim().split(/\s+/))
-  const maxLen    = Math.max(...tokenized.map(t => t.length))
-  let bestPrefix  = 0
-  for (let n = 1; n < maxLen; n++) {
-    const counts = new Map<string, number>()
-    for (const tokens of tokenized) {
-      const k = tokens.slice(0, n).join(' ')
-      counts.set(k, (counts.get(k) ?? 0) + 1)
-    }
-    if (Array.from(counts.values()).some(c => c > 1)) bestPrefix = n
-  }
-
-  if (bestPrefix > 0) {
-    const map = new Map<string, ProfileGroupItem[]>()
-    for (let i = 0; i < profiles.length; i++) {
-      const tokens    = tokenized[i]
-      const key       = tokens.slice(0, bestPrefix).join(' ')
-      const sizeLabel = tokens.slice(bestPrefix).join(' ') || tokens.join(' ')
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push({ sizeLabel, profile: profiles[i] })
-    }
-    return Array.from(map.entries()).map(([key, items]) => ({ key, items }))
-  }
-
-  // Strategy 3: no grouping — all under one unnamed group  e.g. "3000mm", "4200mm"
-  return [{ key: '', items: profiles.map(p => ({ sizeLabel: p.profile_name, profile: p })) }]
-}
-
-function ProfilesSection({ profiles, systemName }: { profiles: SystemProfile[]; systemName: string }) {
-  if (profiles.length === 0) return null
-
-  const systemLower = systemName.toLowerCase()
-  const groups      = computeProfileGroups(profiles)
-
-  function headerLabel(key: string): string {
-    if (!key) return systemName
-    if (key.toLowerCase().startsWith(systemLower)) return key
-    const suffix = /^\d+(\.\d+)?$/.test(key) ? `${key}mm` : key
-    return `${systemName} ${suffix}`
-  }
-
-  return (
-    <Section title={`Profiles · ${profiles.length} variant${profiles.length !== 1 ? 's' : ''}`}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {groups.map(({ key, items }) => (
-          <div key={key || '__all__'}>
-            <div style={{
-              fontSize: '0.88rem', fontWeight: 700, color: '#0f172a',
-              marginBottom: '0.55rem',
-              paddingLeft: '0.6rem',
-              borderLeft: '3px solid #185D7A',
-            }}>
-              {headerLabel(key)}
-            </div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-              gap: '0.5rem',
-            }}>
-              {items.map(({ sizeLabel, profile: p }, i) => {
-                const sku   = p.product_code && p.product_code !== p.profile_name ? p.product_code : null
-                const specs = fmtSpec(p.length_mm ?? p.height_mm, p.width_mm, p.thickness_mm)
-                return (
-                  <div key={i} style={{
-                    display: 'flex', flexDirection: 'column', gap: '0.15rem',
-                    padding: '0.55rem 0.7rem',
-                    background: '#0f2d3d',
-                    borderRadius: '8px',
-                  }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>{sizeLabel}</span>
-                    {specs !== '—' && <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)' }}>{specs}</span>}
-                    {sku && <span style={{ fontSize: '0.68rem', fontFamily: 'monospace', color: 'rgba(255,255,255,0.45)' }}>{sku}</span>}
-                    <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{fmtUom(p.uom)}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Section>
-  )
-}
-
-// ─── Components / Accessories ─────────────────────────────────────────────────
-
-function ComponentsSection({ components }: { components: SystemComponent[] }) {
-  const [open, setOpen] = useState(false)
-  if (components.length === 0) return null
-
-  return (
-    <div style={{ marginTop: '1.75rem' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: open ? '#f1f5f9' : '#f8fafc',
-          border: '2px solid #e2e8f0',
-          borderRadius: open ? '8px 8px 0 0' : '8px',
-          padding: '0.6rem 0.85rem',
-          cursor: 'pointer',
-        }}
-      >
-        <span style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#334155' }}>
-          {`Accessories & components · ${components.length}`}
-        </span>
-        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#185D7A' }}>{open ? '▲ Hide' : '▼ Show'}</span>
-      </button>
-      {open && (
-        <div style={{ border: '2px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '0 0.85rem' }}>
-          {components.map((c, i) => (
-            <div key={i} style={{
-              padding: '0.65rem 0',
-              borderBottom: '1px solid #f1f5f9',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>{c.name}</span>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'baseline', flexShrink: 0 }}>
-                  {c.sku && <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#64748b' }}>{c.sku}</span>}
-                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{fmtUom(c.uom)}</span>
-                </div>
-              </div>
-              {c.description && (
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.55 }}>{c.description}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Colours ─────────────────────────────────────────────────────────────────
-
-function ColoursSection({ colours }: { colours: SystemColour[] }) {
-  if (colours.length === 0) return null
-  return (
-    <Section title="Colours & finishes">
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-        {colours.map((c, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-            padding: '0.3rem 0.7rem', background: 'var(--ds-page-bg)',
-            border: '1px solid var(--ds-border)', borderRadius: 99,
-            fontSize: '0.82rem', color: 'var(--ds-text-sub)',
-          }}>
-            <span>{c.colour_name}</span>
-            {c.sku_suffix && <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', fontFamily: 'monospace' }}>{c.sku_suffix}</span>}
-            {c.is_stocked === false && <span style={{ fontSize: '0.68rem', color: 'var(--ds-text-faint)' }}>EOI</span>}
-          </div>
-        ))}
-      </div>
-    </Section>
-  )
-}
-
 // ─── Main card ────────────────────────────────────────────────────────────────
 
 export function SystemCard({ data }: { data: SystemCardData }) {
+  const [selectedProfiles,   setSelectedProfiles]   = useState<Set<number>>(new Set())
+  const [selectedComponents, setSelectedComponents] = useState<Set<number>>(new Set())
+
+  function toggleProfile(idx: number) {
+    setSelectedProfiles(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n })
+  }
+  function toggleComponent(idx: number) {
+    setSelectedComponents(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n })
+  }
+
   return (
     <div className="sc-card">
       <HeroArea
@@ -429,7 +600,6 @@ export function SystemCard({ data }: { data: SystemCardData }) {
         name={data.name}
         category={data.category}
         subcategory={data.subcategory}
-        balRating={data.bal_rating}
       />
 
       <div className="sc-body">
@@ -440,8 +610,19 @@ export function SystemCard({ data }: { data: SystemCardData }) {
         )}
 
         <ColoursSection colours={data.colours} />
-        <ProfilesSection profiles={data.profiles} systemName={data.name} />
-        <ComponentsSection components={data.components} />
+
+        <ProfilesSection
+          profiles={data.profiles}
+          systemName={data.name}
+          selected={selectedProfiles}
+          onToggle={toggleProfile}
+        />
+
+        <ComponentsSection
+          components={data.components}
+          selected={selectedComponents}
+          onToggle={toggleComponent}
+        />
 
         <AttributePills
           systemName={data.name}
@@ -455,7 +636,12 @@ export function SystemCard({ data }: { data: SystemCardData }) {
         />
 
         <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <a href="#" className="studio-btn studio-btn-primary" style={{ fontSize: '0.875rem' }} onClick={(e: MouseEvent) => e.preventDefault()}>
+          <a
+            href="#"
+            className="studio-btn studio-btn-primary"
+            style={{ fontSize: '0.875rem' }}
+            onClick={(e: MouseEvent) => e.preventDefault()}
+          >
             Add selected items to a Request for Quotation
           </a>
           {data.source_url ? (
