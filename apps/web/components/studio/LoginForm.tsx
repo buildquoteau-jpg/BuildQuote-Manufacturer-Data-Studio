@@ -1,34 +1,54 @@
 'use client'
 
 import { useState } from 'react'
-import { useFormState, useFormStatus } from 'react-dom'
-import { loginWithPassword } from '@/lib/studio-auth/actions'
-import type { LoginState } from '@/lib/studio-auth/actions'
-
-const initialState: LoginState = { error: null }
-
-function SubmitButton() {
-  const { pending } = useFormStatus()
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      aria-disabled={pending}
-      className="studio-btn studio-btn-primary"
-      style={{ width: '100%', justifyContent: 'center' }}
-    >
-      {pending ? 'Signing in…' : 'Sign in'}
-    </button>
-  )
-}
+import { getBrowserSupabaseClient } from '@/lib/supabase/browser'
 
 export function LoginForm() {
-  const [state, formAction] = useFormState(loginWithPassword, initialState)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setPending(true)
+
+    const supabase = getBrowserSupabaseClient()
+    if (!supabase) {
+      setError('Studio is not configured. Contact BuildQuote.')
+      setPending(false)
+      return
+    }
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    })
+
+    if (authError) {
+      const msg = authError.message.toLowerCase()
+      if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('wrong')) {
+        setError('Incorrect email or password.')
+      } else if (msg.includes('email not confirmed')) {
+        setError('Email not confirmed. Contact BuildQuote to activate your account.')
+      } else if (msg.includes('too many') || msg.includes('rate limit')) {
+        setError('Too many sign-in attempts. Please wait a moment and try again.')
+      } else {
+        setError(`Sign in failed: ${authError.message}`)
+      }
+      setPending(false)
+      return
+    }
+
+    // Success — navigate to dashboard (full page reload so middleware picks up the session)
+    window.location.href = '/dashboard'
+  }
 
   return (
-    <form action={formAction} noValidate>
-      {state?.error && (
+    <form onSubmit={handleSubmit} noValidate>
+      {error && (
         <div
           role="alert"
           style={{
@@ -41,7 +61,7 @@ export function LoginForm() {
             marginBottom: '1rem',
           }}
         >
-          {state.error}
+          {error}
         </div>
       )}
 
@@ -60,11 +80,12 @@ export function LoginForm() {
         </label>
         <input
           id="login-email"
-          name="email"
           type="email"
           autoComplete="email"
           required
           placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           style={{
             width: '100%',
             padding: '0.55rem 0.75rem',
@@ -94,11 +115,12 @@ export function LoginForm() {
         <div style={{ position: 'relative' }}>
           <input
             id="login-password"
-            name="password"
             type={showPassword ? 'text' : 'password'}
             autoComplete="current-password"
             required
             placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             style={{
               width: '100%',
               padding: '0.55rem 2.5rem 0.55rem 0.75rem',
@@ -124,8 +146,7 @@ export function LoginForm() {
               cursor: 'pointer',
               padding: 0,
               color: 'var(--ds-text-muted)',
-              lineHeight: 1,
-              fontSize: '1rem',
+              fontSize: '0.8rem',
             }}
           >
             {showPassword ? 'Hide' : 'Show'}
@@ -133,7 +154,14 @@ export function LoginForm() {
         </div>
       </div>
 
-      <SubmitButton />
+      <button
+        type="submit"
+        disabled={pending}
+        className="studio-btn studio-btn-primary"
+        style={{ width: '100%', justifyContent: 'center' }}
+      >
+        {pending ? 'Signing in…' : 'Sign in'}
+      </button>
     </form>
   )
 }
