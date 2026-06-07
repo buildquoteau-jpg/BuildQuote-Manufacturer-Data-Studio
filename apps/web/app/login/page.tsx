@@ -26,7 +26,7 @@ export default async function LoginPage() {
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h1 style={{ fontSize: '1.4rem', marginBottom: '0.25rem' }}>BuildQuote Data Studio</h1>
           <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.9rem', margin: 0 }}>
-            Private manufacturer and BuildQuote admin workspace
+            Private Manufacturer Administration Portal
           </p>
         </div>
 

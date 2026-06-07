@@ -128,7 +128,7 @@ export function LoginForm() {
               fontSize: '1rem',
             }}
           >
-            {showPassword ? '🙈' : '👁️'}
+            {showPassword ? 'Hide' : 'Show'}
           </button>
         </div>
       </div>
