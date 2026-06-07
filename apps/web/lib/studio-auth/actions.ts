@@ -78,9 +78,10 @@ export async function loginWithPassword(
     return { error: 'Sign in failed. Please try again or contact BuildQuote.' }
   }
 
-  // Sign-in succeeded — resolve role and redirect to the appropriate area.
-  const session = await getStudioSession()
-  redirect(resolvePostLoginPath(session))
+  // Sign-in succeeded — redirect to dashboard.
+  // Role-based sub-redirect happens there on the next request,
+  // once the middleware has forwarded the session cookie.
+  redirect('/dashboard')
 }
 
 // ============================================================
