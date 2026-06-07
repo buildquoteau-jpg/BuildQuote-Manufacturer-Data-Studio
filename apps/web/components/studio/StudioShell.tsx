@@ -6,8 +6,9 @@ export type StudioRole = 'admin' | 'reviewer' | 'manufacturer' | 'dashboard'
 type NavItem = { label: string; href: string }
 
 const ADMIN_NAV: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard' },
+  { label: 'Home', href: '/dashboard' },
   { label: 'Manufacturers', href: '/admin/manufacturers' },
+  { label: 'System Card Preview', href: '/system-card-preview' },
 ]
 
 const REVIEWER_NAV: NavItem[] = [
