@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { getBrowserSupabaseClient } from '@/lib/supabase/browser'
+import { createBrowserClient } from '@supabase/ssr'
 
 export function LoginForm() {
   const [email, setEmail] = useState('')
@@ -15,12 +15,14 @@ export function LoginForm() {
     setError(null)
     setPending(true)
 
-    const supabase = getBrowserSupabaseClient()
-    if (!supabase) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !anonKey) {
       setError('Studio is not configured. Contact BuildQuote.')
       setPending(false)
       return
     }
+    const supabase = createBrowserClient(url, anonKey)
 
     const { error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
