@@ -162,6 +162,8 @@ const JDS_REGALFRAME: SystemCardData = {
   moisture_resistant: null,
   acoustic_rating: null,
   structural_grade: null,
+  australian_made: null,
+  source_url: null,
   notes: null,
 
   profiles: [
