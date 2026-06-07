@@ -1,13 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { useFormState, useFormStatus } from 'react-dom'
 import { loginWithPassword } from '@/lib/studio-auth/actions'
 import type { LoginState } from '@/lib/studio-auth/actions'
 
 const initialState: LoginState = { error: null }
 
-// SubmitButton reads pending state from the nearest form via useFormStatus.
-// Must be a separate component — useFormStatus only works inside a <form>.
 function SubmitButton() {
   const { pending } = useFormStatus()
   return (
@@ -23,13 +22,9 @@ function SubmitButton() {
   )
 }
 
-/**
- * Login form — client component so useFormState can display server action errors
- * without a full page redirect. The actual Supabase auth call stays in the server
- * action (loginWithPassword) — no Supabase credentials are handled client-side.
- */
 export function LoginForm() {
   const [state, formAction] = useFormState(loginWithPassword, initialState)
+  const [showPassword, setShowPassword] = useState(false)
 
   return (
     <form action={formAction} noValidate>
@@ -78,6 +73,7 @@ export function LoginForm() {
             fontSize: '0.9rem',
             background: 'var(--ds-page-bg)',
             color: 'var(--ds-text)',
+            boxSizing: 'border-box',
           }}
         />
       </div>
@@ -95,23 +91,46 @@ export function LoginForm() {
         >
           Password
         </label>
-        <input
-          id="login-password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          placeholder="••••••••"
-          style={{
-            width: '100%',
-            padding: '0.55rem 0.75rem',
-            border: '1px solid var(--ds-border)',
-            borderRadius: 6,
-            fontSize: '0.9rem',
-            background: 'var(--ds-page-bg)',
-            color: 'var(--ds-text)',
-          }}
-        />
+        <div style={{ position: 'relative' }}>
+          <input
+            id="login-password"
+            name="password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            required
+            placeholder="••••••••"
+            style={{
+              width: '100%',
+              padding: '0.55rem 2.5rem 0.55rem 0.75rem',
+              border: '1px solid var(--ds-border)',
+              borderRadius: 6,
+              fontSize: '0.9rem',
+              background: 'var(--ds-page-bg)',
+              color: 'var(--ds-text)',
+              boxSizing: 'border-box',
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            style={{
+              position: 'absolute',
+              right: '0.6rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              color: 'var(--ds-text-muted)',
+              lineHeight: 1,
+              fontSize: '1rem',
+            }}
+          >
+            {showPassword ? '🙈' : '👁️'}
+          </button>
+        </div>
       </div>
 
       <SubmitButton />
