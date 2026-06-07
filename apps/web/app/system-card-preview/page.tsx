@@ -22,6 +22,8 @@ const AXON_CLADDING: SystemCardData = {
   moisture_resistant: null,
   acoustic_rating: null,
   structural_grade: null,
+  australian_made: null,
+  source_url: null,
   notes: 'Pre-primed/site-painted — no stocked colours.',
 
   profiles: [
