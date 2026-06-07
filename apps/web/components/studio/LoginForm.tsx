@@ -24,12 +24,10 @@ export function LoginForm() {
     }
     const supabase = createBrowserClient(url, anonKey)
 
-    console.log('[login] attempting sign in for', email.trim().toLowerCase())
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
     })
-    console.log('[login] result:', { user: authData?.user?.id, error: authError?.message })
 
     if (authError) {
       const msg = authError.message.toLowerCase()
@@ -47,7 +45,6 @@ export function LoginForm() {
     }
 
     // Success — navigate to dashboard (full page reload so middleware picks up the session)
-    console.log('[login] success, navigating to /dashboard')
     window.location.href = '/dashboard'
   }
 

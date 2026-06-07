@@ -74,8 +74,7 @@ export async function loginWithPassword(
     if (msg.includes('too many requests') || msg.includes('rate limit')) {
       return { error: 'Too many sign-in attempts. Please wait a moment and try again.' }
     }
-    // Generic fallback — include raw message temporarily for debugging
-    return { error: `Sign in failed: ${error.message}` }
+    return { error: 'Sign in failed. Please try again or contact BuildQuote.' }
   }
 
   // Sign-in succeeded — redirect to dashboard.
