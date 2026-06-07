@@ -30,7 +30,10 @@ export async function middleware(request: NextRequest) {
   )
 
   // IMPORTANT: do not add logic between createServerClient and supabase.auth.getUser()
+  const allCookies = request.cookies.getAll()
+  console.log('[middleware]', request.nextUrl.pathname, 'cookies:', allCookies.map(c => c.name))
   const { data: { user } } = await supabase.auth.getUser()
+  console.log('[middleware] user:', user?.id ?? 'null')
 
   if (
     !user &&
