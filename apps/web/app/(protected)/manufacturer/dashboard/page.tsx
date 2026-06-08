@@ -67,7 +67,6 @@ function VerificationBanner({ system }: { system: PortalSystem }) {
             fontWeight: 600,
           }}
         >
-          <span>⚠</span>
           <span>
             {system.verificationStatus === 'rejected' ? 'Rejected — please contact BuildQuote' : 'Needs source check — action required'}
           </span>
@@ -242,11 +241,11 @@ const DOC_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   failed:     { bg: '#fee2e2', color: '#991b1b' },
 }
 
-const DOC_TYPE_ICON: Record<string, string> = {
-  catalogue:  '📘',
-  price_list: '💰',
-  technical:  '📐',
-  brochure:   '📄',
+const DOC_TYPE_LABEL: Record<string, string> = {
+  catalogue:  'CAT',
+  price_list: 'PL',
+  technical:  'TECH',
+  brochure:   'DOC',
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -258,7 +257,7 @@ function formatFileSize(bytes: number | null): string {
 
 function CatalogueCard({ doc }: { doc: PortalDocument }) {
   const statusColors = DOC_STATUS_COLORS[doc.status] ?? { bg: '#f1f5f9', color: '#475569' }
-  const docIcon = DOC_TYPE_ICON[doc.documentType ?? ''] ?? '📄'
+  const docTypeLabel = DOC_TYPE_LABEL[doc.documentType ?? ''] ?? 'DOC'
   const fileSize = formatFileSize(doc.fileSizeBytes)
 
   return (
@@ -281,8 +280,18 @@ function CatalogueCard({ doc }: { doc: PortalDocument }) {
           position: 'relative',
         }}
       >
-        <span style={{ fontSize: '2.5rem', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }}>
-          {docIcon}
+        <span
+          style={{
+            fontSize: '0.72rem',
+            fontWeight: 800,
+            letterSpacing: '0.06em',
+            color: 'rgba(255,255,255,0.9)',
+            background: 'rgba(255,255,255,0.15)',
+            borderRadius: 6,
+            padding: '0.3rem 0.6rem',
+          }}
+        >
+          {docTypeLabel}
         </span>
         {/* Status badge */}
         <div
@@ -473,7 +482,6 @@ export default async function ManufacturerPortalPage() {
               color: '#94a3b8',
             }}
           >
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📂</div>
             <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>No catalogues uploaded yet</div>
             <div style={{ fontSize: '0.83rem' }}>Contact BuildQuote to upload your product catalogues.</div>
           </div>
@@ -551,7 +559,6 @@ export default async function ManufacturerPortalPage() {
               color: '#94a3b8',
             }}
           >
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🏗</div>
             <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>No systems extracted yet</div>
             <div style={{ fontSize: '0.83rem' }}>Systems appear here once BuildQuote has processed your catalogues.</div>
           </div>
@@ -581,18 +588,17 @@ export default async function ManufacturerPortalPage() {
         }}
       >
         {[
-          { href: '/manufacturer/documents', icon: '📄', label: 'All documents' },
-          { href: '/manufacturer/review',    icon: '✅', label: 'Review queue' },
-          { href: '/manufacturer/preview',   icon: '👁',  label: 'Preview' },
-          { href: '/manufacturer/help',      icon: '❓', label: 'Help & Support' },
-        ].map((item) => (
+          { href: '/manufacturer/documents', label: 'All documents' },
+          { href: '/manufacturer/review',    label: 'Review queue' },
+          { href: '/manufacturer/preview',   label: 'Preview' },
+          { href: '/manufacturer/help',      label: 'Help & Support' },
+        ].map((item: { href: string; label: string }) => (
           <a
             key={item.href}
             href={item.href}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '0.4rem',
               padding: '0.5rem 0.9rem',
               background: '#fff',
               border: '1.5px solid #e2e8f0',
@@ -604,7 +610,6 @@ export default async function ManufacturerPortalPage() {
               transition: 'border-color 0.15s, color 0.15s',
             }}
           >
-            <span>{item.icon}</span>
             {item.label}
           </a>
         ))}

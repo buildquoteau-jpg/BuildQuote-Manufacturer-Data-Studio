@@ -118,7 +118,6 @@ export function LoginForm() {
             gap: '0.5rem',
           }}
         >
-          <span style={{ flexShrink: 0, marginTop: '0.05rem' }}>⚠</span>
           <span>{error}</span>
         </div>
       )}
