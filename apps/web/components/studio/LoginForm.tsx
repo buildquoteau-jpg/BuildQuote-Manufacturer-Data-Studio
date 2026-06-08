@@ -3,10 +3,31 @@
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 
+function EyeIcon({ open }: { open: boolean }) {
+  if (open) {
+    // Eye with line through (hide)
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+        <line x1="1" y1="1" x2="23" y2="23" />
+      </svg>
+    )
+  }
+  return (
+    // Eye open (show)
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
 export function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
@@ -38,14 +59,45 @@ export function LoginForm() {
       } else if (msg.includes('too many') || msg.includes('rate limit')) {
         setError('Too many sign-in attempts. Please wait a moment and try again.')
       } else {
-        setError(`Sign in failed: ${authError.message}`)
+        setError('Sign in failed. Please try again or contact BuildQuote.')
       }
       setPending(false)
       return
     }
 
-    // Success — navigate to dashboard (full page reload so middleware picks up the session)
+    // If remember me is off, mark the session so it clears on browser close.
+    // Supabase SSR uses cookie-based sessions; we set a flag the middleware
+    // can read in a future enhancement. For now the session behaves normally.
+    if (!rememberMe) {
+      sessionStorage.setItem('bq_session_only', '1')
+    } else {
+      sessionStorage.removeItem('bq_session_only')
+    }
+
+    // Success — full page reload so middleware picks up the new session cookie
     window.location.href = '/dashboard'
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.6rem 0.85rem',
+    border: '1.5px solid var(--ds-border)',
+    borderRadius: 8,
+    fontSize: '0.92rem',
+    background: '#fff',
+    color: 'var(--ds-text)',
+    boxSizing: 'border-box',
+    outline: 'none',
+    transition: 'border-color 0.15s',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '0.83rem',
+    fontWeight: 600,
+    marginBottom: '0.4rem',
+    color: 'var(--ds-text-sub)',
+    letterSpacing: '0.01em',
   }
 
   return (
@@ -56,64 +108,39 @@ export function LoginForm() {
           style={{
             background: '#fef2f2',
             border: '1px solid #fecaca',
-            borderRadius: 6,
-            padding: '0.6rem 0.9rem',
+            borderRadius: 8,
+            padding: '0.7rem 1rem',
             fontSize: '0.875rem',
             color: '#dc2626',
-            marginBottom: '1rem',
+            marginBottom: '1.1rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
           }}
         >
-          {error}
+          <span style={{ flexShrink: 0, marginTop: '0.05rem' }}>⚠</span>
+          <span>{error}</span>
         </div>
       )}
 
+      {/* Email */}
       <div style={{ marginBottom: '1rem' }}>
-        <label
-          htmlFor="login-email"
-          style={{
-            display: 'block',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            marginBottom: '0.35rem',
-            color: 'var(--ds-text-sub)',
-          }}
-        >
-          Email
-        </label>
+        <label htmlFor="login-email" style={labelStyle}>Email address</label>
         <input
           id="login-email"
           type="email"
           autoComplete="email"
           required
-          placeholder="you@example.com"
+          placeholder="you@company.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '0.55rem 0.75rem',
-            border: '1px solid var(--ds-border)',
-            borderRadius: 6,
-            fontSize: '0.9rem',
-            background: 'var(--ds-page-bg)',
-            color: 'var(--ds-text)',
-            boxSizing: 'border-box',
-          }}
+          style={inputStyle}
         />
       </div>
 
-      <div style={{ marginBottom: '1.5rem' }}>
-        <label
-          htmlFor="login-password"
-          style={{
-            display: 'block',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            marginBottom: '0.35rem',
-            color: 'var(--ds-text-sub)',
-          }}
-        >
-          Password
-        </label>
+      {/* Password */}
+      <div style={{ marginBottom: '1rem' }}>
+        <label htmlFor="login-password" style={labelStyle}>Password</label>
         <div style={{ position: 'relative' }}>
           <input
             id="login-password"
@@ -123,16 +150,7 @@ export function LoginForm() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.55rem 2.5rem 0.55rem 0.75rem',
-              border: '1px solid var(--ds-border)',
-              borderRadius: 6,
-              fontSize: '0.9rem',
-              background: 'var(--ds-page-bg)',
-              color: 'var(--ds-text)',
-              boxSizing: 'border-box',
-            }}
+            style={{ ...inputStyle, paddingRight: '2.75rem' }}
           />
           <button
             type="button"
@@ -140,27 +158,57 @@ export function LoginForm() {
             aria-label={showPassword ? 'Hide password' : 'Show password'}
             style={{
               position: 'absolute',
-              right: '0.6rem',
+              right: '0.7rem',
               top: '50%',
               transform: 'translateY(-50%)',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: 0,
-              color: 'var(--ds-text-muted)',
-              fontSize: '0.8rem',
+              padding: '0.2rem',
+              color: 'var(--ds-text-faint)',
+              display: 'flex',
+              alignItems: 'center',
+              lineHeight: 1,
             }}
           >
-            {showPassword ? 'Hide' : 'Show'}
+            <EyeIcon open={showPassword} />
           </button>
         </div>
+      </div>
+
+      {/* Remember me */}
+      <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <input
+          id="remember-me"
+          type="checkbox"
+          checked={rememberMe}
+          onChange={(e) => setRememberMe(e.target.checked)}
+          style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--ds-navy)' }}
+        />
+        <label
+          htmlFor="remember-me"
+          style={{ fontSize: '0.83rem', color: 'var(--ds-text-muted)', cursor: 'pointer', userSelect: 'none' }}
+        >
+          Remember me
+        </label>
       </div>
 
       <button
         type="submit"
         disabled={pending}
-        className="studio-btn studio-btn-primary"
-        style={{ width: '100%', justifyContent: 'center' }}
+        style={{
+          width: '100%',
+          padding: '0.7rem 1rem',
+          background: pending ? '#94a3b8' : 'var(--ds-navy)',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 8,
+          fontSize: '0.95rem',
+          fontWeight: 600,
+          cursor: pending ? 'not-allowed' : 'pointer',
+          letterSpacing: '0.01em',
+          transition: 'background 0.15s',
+        }}
       >
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
