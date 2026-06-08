@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
     "extract:local-pdf": "node scripts/extract-local-pdf.mjs",
     "parser:bundle": "node scripts/create-parser-input-bundle.mjs",
     "parser:ai-local": "tsx scripts/parser-ai-local.ts",
@@ -35,6 +38,7 @@
     "openai": "^6.37.0",
     "pdf-parse": "^2.4.5",
     "tsx": "^4.19.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }
