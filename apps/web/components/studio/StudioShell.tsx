@@ -9,7 +9,6 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Home', href: '/dashboard' },
   { label: 'Manufacturers', href: '/admin/manufacturers' },
   { label: 'Showroom', href: '/studio/showroom' },
-  { label: 'System Card Preview', href: '/system-card-preview' },
 ]
 
 const REVIEWER_NAV: NavItem[] = [
