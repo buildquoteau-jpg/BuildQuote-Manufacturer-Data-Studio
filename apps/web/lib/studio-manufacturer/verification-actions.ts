@@ -316,6 +316,46 @@ export async function updateColour(
   return { ok: true }
 }
 
+// ─── getManufacturerComponents ────────────────────────────────────────────────
+// Returns all staged_components for a manufacturer (for de-dup search).
+
+export async function getManufacturerComponents(
+  manufacturerId: string,
+): Promise<{ ok: true; components: { id: string; name: string; sku: string | null; description: string | null }[] } | { ok: false; error: string }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data, error } = await supabase
+    .from('staged_components')
+    .select('id, name, sku, description')
+    .eq('manufacturer_id', manufacturerId)
+    .order('name')
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, components: (data ?? []) as { id: string; name: string; sku: string | null; description: string | null }[] }
+}
+
+// ─── linkExistingComponent ────────────────────────────────────────────────────
+// Links an existing staged_component to a system (no new component created).
+
+export async function linkExistingComponent(
+  systemId: string,
+  componentId: string,
+  manufacturerId: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_system_components')
+    .insert({ staged_system_id: systemId, staged_component_id: componentId })
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 // ─── addMissingComponent ──────────────────────────────────────────────────────
 
 export async function addMissingComponent(

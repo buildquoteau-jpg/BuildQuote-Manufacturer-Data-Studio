@@ -17,6 +17,8 @@ import {
   updateColour,
   addMissingComponent,
   updateComponent,
+  getManufacturerComponents,
+  linkExistingComponent,
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
 
@@ -945,38 +947,76 @@ function ComponentItem({
   )
 }
 
-// ─── Add component form ───────────────────────────────────────────────────────
+// ─── Add component form (search-first, create as fallback) ───────────────────
+
+type ExistingComp = { id: string; name: string; sku: string | null; description: string | null }
 
 function AddComponentForm({
-  systemId, manufacturerId, onAdded, onCancel,
+  systemId, manufacturerId, alreadyLinkedIds, onAdded, onCancel,
 }: {
   systemId: string
   manufacturerId: string
+  alreadyLinkedIds: Set<string>
   onAdded: (component: VerificationSystemComponent) => void
   onCancel: () => void
 }) {
-  const [name,    setName]  = useState('')
-  const [sku,     setSku]   = useState('')
-  const [desc,    setDesc]  = useState('')
-  const [pending, startTransition] = useTransition()
-  const [err,     setErr]   = useState<string | null>(null)
+  const [mode,       setMode]       = useState<'search' | 'create'>('search')
+  const [query,      setQuery]      = useState('')
+  const [existing,   setExisting]   = useState<ExistingComp[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [selected,   setSelected]   = useState<ExistingComp | null>(null)
+  const [pending,    startTransition] = useTransition()
+  const [err,        setErr]        = useState<string | null>(null)
 
-  function handleAdd() {
+  // New-component fields
+  const [name, setName] = useState('')
+  const [sku,  setSku]  = useState('')
+  const [desc, setDesc] = useState('')
+
+  // Load existing components on mount
+  useState(() => {
+    getManufacturerComponents(manufacturerId).then(res => {
+      if (res.ok) setExisting(res.components)
+      setLoading(false)
+    })
+  })
+
+  const filtered = existing.filter(c => {
+    if (alreadyLinkedIds.has(c.id)) return false
+    if (!query.trim()) return true
+    const q = query.toLowerCase()
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.sku ?? '').toLowerCase().includes(q) ||
+      (c.description ?? '').toLowerCase().includes(q)
+    )
+  })
+
+  function handleLink() {
+    if (!selected) return
+    setErr(null)
+    startTransition(async () => {
+      const res = await linkExistingComponent(systemId, selected.id, manufacturerId)
+      if (!res.ok) { setErr(res.error); return }
+      onAdded({
+        id: selected.id, name: selected.name, sku: selected.sku,
+        description: selected.description, category: null, uom: null,
+        supplier_pack_qty: null, supplier_pack_uom: null, sort_order: null,
+      })
+    })
+  }
+
+  function handleCreate() {
     if (!name.trim()) return
     setErr(null)
     startTransition(async () => {
       const res = await addMissingComponent(systemId, manufacturerId, {
-        name: name.trim(),
-        sku: sku.trim() || undefined,
-        description: desc.trim() || undefined,
+        name: name.trim(), sku: sku.trim() || undefined, description: desc.trim() || undefined,
       })
       if (!res.ok) { setErr(res.error); return }
       onAdded({
-        id: res.id,
-        name: name.trim(),
-        sku: sku.trim() || null,
-        description: desc.trim() || null,
-        category: null, uom: null,
+        id: res.id, name: name.trim(), sku: sku.trim() || null,
+        description: desc.trim() || null, category: null, uom: null,
         supplier_pack_qty: null, supplier_pack_uom: null, sort_order: null,
       })
     })
@@ -984,38 +1024,104 @@ function AddComponentForm({
 
   return (
     <div style={{ padding: '10px', background: '#fffbeb', border: '1.5px solid #d97706', borderRadius: '8px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 700, color: '#92400e', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        Add missing component / accessory
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Add component / accessory
+        </div>
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button type="button" onClick={() => setMode('search')}
+            style={{ padding: '3px 10px', borderRadius: '5px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: mode === 'search' ? '#d97706' : '#fff', color: mode === 'search' ? '#fff' : '#6b7280', border: mode === 'search' ? 'none' : '1px solid #d1d5db' }}>
+            Search existing
+          </button>
+          <button type="button" onClick={() => setMode('create')}
+            style={{ padding: '3px 10px', borderRadius: '5px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: mode === 'create' ? '#d97706' : '#fff', color: mode === 'create' ? '#fff' : '#6b7280', border: mode === 'create' ? 'none' : '1px solid #d1d5db' }}>
+            Create new
+          </button>
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '6px' }}>
-        <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
-          Name *
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Snap-LOC Clip 137mm"
-            style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
-            autoFocus />
-        </label>
-        <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
-          SKU / MFR part number
-          <input value={sku} onChange={e => setSku(e.target.value)} placeholder="e.g. KSL137N"
-            style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace' }} />
-        </label>
-        <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
-          Description
-          <input value={desc} onChange={e => setDesc(e.target.value)}
-            style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
-        </label>
-      </div>
-      {err && <div style={{ fontSize: '11px', color: '#dc2626', marginBottom: '6px' }}>{err}</div>}
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <button type="button" onClick={handleAdd} disabled={pending || !name.trim()}
-          style={{ padding: '5px 14px', borderRadius: '6px', background: '#d97706', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !name.trim() ? 0.5 : 1 }}>
-          {pending ? 'Adding…' : 'Add component'}
-        </button>
-        <button type="button" onClick={onCancel}
-          style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
-          Cancel
-        </button>
-      </div>
+
+      {mode === 'search' ? (
+        <>
+          <input
+            value={query} onChange={e => { setQuery(e.target.value); setSelected(null) }}
+            placeholder="Search by name or SKU…"
+            autoFocus
+            style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', border: '1.5px solid #d97706', borderRadius: '6px', fontSize: '13px', fontFamily: 'inherit', marginBottom: '8px', outline: 'none' }}
+          />
+          {loading ? (
+            <div style={{ fontSize: '12px', color: '#9ca3af', padding: '6px 0' }}>Loading components…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#9ca3af', padding: '6px 0' }}>
+              {query ? 'No match — ' : 'All components already linked — '}
+              <button type="button" onClick={() => setMode('create')}
+                style={{ background: 'none', border: 'none', color: '#d97706', fontWeight: 700, cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+                create a new one instead
+              </button>
+            </div>
+          ) : (
+            <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+              {filtered.map(c => (
+                <button key={c.id} type="button" onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                  style={{
+                    textAlign: 'left', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer',
+                    border: `1.5px solid ${selected?.id === c.id ? '#d97706' : '#e5e7eb'}`,
+                    background: selected?.id === c.id ? '#fef3c7' : '#fff',
+                    transition: 'all 0.1s',
+                  }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{c.name}</div>
+                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '1px' }}>
+                    {[c.sku, c.description].filter(Boolean).join(' · ')}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {err && <div style={{ fontSize: '11px', color: '#dc2626', marginBottom: '6px' }}>{err}</div>}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button type="button" onClick={handleLink} disabled={pending || !selected}
+              style={{ padding: '5px 14px', borderRadius: '6px', background: '#d97706', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !selected ? 0.5 : 1 }}>
+              {pending ? 'Linking…' : 'Link to this system'}
+            </button>
+            <button type="button" onClick={onCancel}
+              style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+            <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
+              Name *
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Snap-LOC Clip 137mm"
+                style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
+                autoFocus />
+            </label>
+            <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
+              SKU / MFR part number
+              <input value={sku} onChange={e => setSku(e.target.value)} placeholder="e.g. KSL137N"
+                style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace' }} />
+            </label>
+            <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
+              Description
+              <input value={desc} onChange={e => setDesc(e.target.value)}
+                style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+            </label>
+          </div>
+          {err && <div style={{ fontSize: '11px', color: '#dc2626', marginBottom: '6px' }}>{err}</div>}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button type="button" onClick={handleCreate} disabled={pending || !name.trim()}
+              style={{ padding: '5px 14px', borderRadius: '6px', background: '#d97706', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !name.trim() ? 0.5 : 1 }}>
+              {pending ? 'Creating…' : 'Create & link'}
+            </button>
+            <button type="button" onClick={onCancel}
+              style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -1406,7 +1512,11 @@ function ExpandedCardView({
                 <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>No components recorded — add one using the button above.</div>
               )}
               {showAddComponent && (
-                <AddComponentForm systemId={system.id} manufacturerId={manufacturerId} onAdded={addComponentLocal} onCancel={() => setShowAddComponent(false)} />
+                <AddComponentForm
+                  systemId={system.id} manufacturerId={manufacturerId}
+                  alreadyLinkedIds={new Set(system.components.map(c => c.id))}
+                  onAdded={addComponentLocal} onCancel={() => setShowAddComponent(false)}
+                />
               )}
             </FieldSection>
 
