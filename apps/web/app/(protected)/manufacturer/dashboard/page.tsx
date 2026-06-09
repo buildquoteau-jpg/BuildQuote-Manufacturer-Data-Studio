@@ -403,7 +403,7 @@ export default async function ManufacturerPortalPage() {
   ).length
 
   return (
-    <StudioShell role="manufacturer" subtitle={manufacturer.name}>
+    <StudioShell role="manufacturer" workspaceName={manufacturer.name}>
       {/* ── Welcome hero ── */}
       <div
         style={{

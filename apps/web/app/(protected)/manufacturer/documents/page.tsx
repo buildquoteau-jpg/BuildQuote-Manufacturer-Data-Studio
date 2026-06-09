@@ -2,6 +2,7 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import {
   resolveWorkspaceContext,
   getManufacturerDocuments,
+  getManufacturerInfo,
 } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 import type { ManufacturerDocument } from '@/lib/studio-manufacturer/workspace'
@@ -64,11 +65,15 @@ export default async function ManufacturerDocumentsPage() {
     )
   }
 
-  const result = await getManufacturerDocuments(ctx.manufacturerId)
+  const [result, mfrResult] = await Promise.all([
+    getManufacturerDocuments(ctx.manufacturerId),
+    getManufacturerInfo(ctx.manufacturerId),
+  ])
   const documents: ManufacturerDocument[] = result.ok ? result.documents : []
+  const workspaceName = mfrResult.ok ? mfrResult.manufacturer.name : undefined
 
   return (
-    <StudioShell role="manufacturer" subtitle="Documents">
+    <StudioShell role="manufacturer" workspaceName={workspaceName} subtitle="Documents">
       <h1 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Documents</h1>
 
       {/* Upload zone */}

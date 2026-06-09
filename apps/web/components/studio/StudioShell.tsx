@@ -47,6 +47,8 @@ type Props = {
   role: StudioRole
   /** Short context string shown faintly in the header, e.g. "All manufacturers". */
   subtitle?: string
+  /** Workspace name shown in the header when in a manufacturer context. */
+  workspaceName?: string
   /**
    * A page-specific notice to show at the top of main content.
    * Pass null to suppress any notice (default: no notice).
@@ -55,7 +57,7 @@ type Props = {
   children: ReactNode
 }
 
-export function StudioShell({ role, subtitle, notice, children }: Props) {
+export function StudioShell({ role, subtitle, workspaceName, notice, children }: Props) {
   const nav = NAV_BY_ROLE[role]
   const badge = BADGE_BY_ROLE[role]
   // Default: no notice. Pages opt in by passing a string.
@@ -66,7 +68,25 @@ export function StudioShell({ role, subtitle, notice, children }: Props) {
       <header className="studio-header">
         <a href="/dashboard">BuildQuote Data Studio</a>
         <span className={badge.className}>{badge.label}</span>
-        {subtitle && (
+        {workspaceName && (
+          <span
+            style={{
+              marginLeft: '0.75rem',
+              fontSize: '0.88rem',
+              fontWeight: 600,
+              color: 'var(--ds-header-text, #fff)',
+              opacity: 0.9,
+            }}
+          >
+            {workspaceName}
+            {subtitle && (
+              <span style={{ fontWeight: 400, opacity: 0.65, marginLeft: '0.4rem' }}>
+                — {subtitle}
+              </span>
+            )}
+          </span>
+        )}
+        {!workspaceName && subtitle && (
           <span style={{ marginLeft: 'auto', fontSize: '0.85rem', opacity: 0.75 }}>
             {subtitle}
           </span>
