@@ -93,6 +93,34 @@ Each chunk is marked with `<!-- chunk N: pages X-Y -->`.
 
 ---
 
+## Step 2b — Merge multiple Docling outputs (if manufacturer has multiple source docs)
+
+If the manufacturer has more than one relevant PDF (e.g. main catalogue + accessories/fixings sheet), extract each separately with Docling then merge before parsing. **Do not feed a naive concatenation as a single run** — the parser will process each source as a separate chunk and produce duplicate systems and colours. Instead, merge the raw `.md` files and let the dedup logic handle systems, while accessories from supplementary docs are captured in Stage 2.
+
+```powershell
+# After extracting all docs, merge their output.md files:
+$primary  = Get-Content ".local/docling-output/<primary-stem>/output.md" -Raw
+$secondary = Get-Content ".local/docling-output/<accessory-stem>/output.md" -Raw
+
+$merged = @"
+<!-- SOURCE: <primary label> -->
+$primary
+
+<!-- SOURCE: <accessory label> -->
+$secondary
+"@
+
+$merged | Set-Content ".local/docling-output/<slug>_merged.md" -Encoding UTF8
+```
+
+Use `.local/docling-output/<slug>_merged.md` as the `--input` to the parser.
+
+**When to merge vs run separately:**
+- Merge when the secondary doc has accessories/fixings for the same systems (so Stage 2 sees the full component list)
+- Run separately when the secondary doc is a completely different product line (to avoid system dedup collisions)
+
+---
+
 ## Step 3 — Review chunks, write parser hints
 
 Open `.local/docling-output/.../output.md` and skim each chunk. Look for:
@@ -358,11 +386,27 @@ Output file: `.local/<manufacturer-slug>_backup_YYYYMMDD.json`
 
 > **Do not promote until the backup JSON exists and Step 8 checks pass.**
 
-Promotion copies confirmed staging rows into the live production tables
-(`systems`, `system_profiles`, `system_colours`, `components`, `system_components`).
+Promotion copies all staging rows to the **Data Studio Production** Supabase project
+(`ovndokzwkxpfjfobewaq`). This is NOT the RFQ/BuildQuote production database.
 
-Promotion runbook: TBD — will be documented in a separate skill once the promotion
-script is built.
+**Always dry-run first:**
+```powershell
+python scripts/promote_to_data_studio_production.py `
+  --manufacturer-id "<uuid>" `
+  --dry-run
+```
+
+**Live promotion:**
+```powershell
+python scripts/promote_to_data_studio_production.py `
+  --manufacturer-id "<uuid>"
+```
+
+The script:
+- Copies `data_studio_manufacturers`, `staged_systems`, `staged_system_profiles`, `staged_system_colours`, `staged_components`, `staged_system_components`
+- Preserves all UUIDs (same IDs on local and production)
+- Uses `resolution=ignore-duplicates` — safe to re-run if rows already exist
+- Reads `PRODUCTION_SUPABASE_URL` and `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` from `.env.local`
 
 ---
 
