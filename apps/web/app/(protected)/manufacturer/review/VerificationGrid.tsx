@@ -1129,14 +1129,25 @@ function AddComponentForm({
 // ─── Add button ───────────────────────────────────────────────────────────────
 
 function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false)
   return (
     <button type="button" onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
-        background: 'none', border: '1px dashed #d1d5db', borderRadius: '6px',
-        padding: '3px 10px', fontSize: '11px', color: '#6b7280', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', gap: '4px',
+        background: hovered ? '#185D7A' : '#eef6fa',
+        border: '1.5px solid #185D7A',
+        borderRadius: '6px',
+        padding: '4px 12px',
+        fontSize: '11px',
+        fontWeight: 700,
+        color: hovered ? '#fff' : '#185D7A',
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: '5px',
+        transition: 'background 0.15s, color 0.15s',
+        flexShrink: 0,
       }}>
-      + {label}
+      <span style={{ fontSize: '14px', lineHeight: 1, marginTop: '-1px' }}>+</span> {label}
     </button>
   )
 }
