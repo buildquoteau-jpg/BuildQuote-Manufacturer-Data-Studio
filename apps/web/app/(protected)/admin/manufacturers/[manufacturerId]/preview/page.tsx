@@ -66,6 +66,7 @@ export default async function AdminManufacturerPreviewPage({ params }: Props) {
               australian_made: sys.australian_made,
               notes: sys.notes,
               source_url: null,
+              install_guide_url: null,
               profiles: sys.profiles,
               components: sys.components,
               colours: sys.colours,

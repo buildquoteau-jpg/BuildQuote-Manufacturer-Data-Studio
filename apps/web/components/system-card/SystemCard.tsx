@@ -51,6 +51,7 @@ export interface SystemCardData {
   australian_made: boolean | null
   notes: string | null
   source_url: string | null
+  install_guide_url: string | null
   profiles: SystemProfile[]
   components: SystemComponent[]
   colours: SystemColour[]
@@ -661,6 +662,17 @@ export function SystemCard({ data }: { data: SystemCardData }) {
             >
               View {data.name} at {data.manufacturer_name}
             </span>
+          )}
+          {data.install_guide_url && (
+            <a
+              href={data.install_guide_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="studio-btn studio-btn-ghost"
+              style={{ fontSize: '0.875rem' }}
+            >
+              Installation guide
+            </a>
           )}
         </div>
       </div>

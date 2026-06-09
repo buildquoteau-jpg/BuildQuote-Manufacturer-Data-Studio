@@ -242,10 +242,11 @@ function FieldRow({
 
   function handleSaveEdit() {
     if (!editValue.trim()) return
-    setErrorMsg(null); setActiveAction('edit')
+    setErrorMsg(null)
     startTransition(async () => {
       const res = await upsertFieldVerification(systemId, manufacturerId, fieldName, currentValue, editValue.trim(), 'edited', null)
       if (!res.ok) { setErrorMsg(res.error); return }
+      setActiveAction(null)
       onStateChange(fieldName, { status: 'edited', verifiedValue: editValue.trim(), notes: null })
     })
   }
@@ -1308,6 +1309,9 @@ function ExpandedCardView({
       : system.australian_made,
     notes:              notes || system.notes,
     source_url:         system.source_url,
+    install_guide_url:  fieldStates['install_guide_url']?.status === 'edited'
+      ? fieldStates['install_guide_url'].verifiedValue
+      : system.install_guide_url,
     profiles: system.profiles.map(p => ({
       product_code: p.product_code, profile_name: p.profile_name,
       dimensions: p.dimensions, length_mm: p.length_mm,
