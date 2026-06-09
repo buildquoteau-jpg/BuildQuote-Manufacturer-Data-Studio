@@ -284,7 +284,7 @@ function FieldRow({
       </div>
       {activeAction === 'edit' && (
         <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
-          <input type={isUrl ? 'url' : 'text'} value={editValue} onChange={e => setEditValue(e.target.value)}
+          <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)}
             placeholder={isUrl ? 'Paste URL here…' : `Enter correct ${label.toLowerCase()}…`}
             style={{ flex: 1, padding: '6px 8px', border: '1.5px solid #185D7A', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: 'inherit' }}
             autoFocus />
