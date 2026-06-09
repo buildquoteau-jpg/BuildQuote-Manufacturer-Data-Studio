@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 function makeR2Client(): S3Client {
@@ -49,6 +49,29 @@ export async function createPresignedUploadUrl(opts: {
       expiresIn: opts.expiresInSeconds ?? 300,
     })
     return { ok: true, uploadUrl, storageKey: opts.storageKey }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export type PresignedDownloadResult =
+  | { ok: true; downloadUrl: string }
+  | { ok: false; error: string }
+
+export async function createPresignedDownloadUrl(opts: {
+  storageKey: string
+  expiresInSeconds?: number
+}): Promise<PresignedDownloadResult> {
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET_NAME
+  if (!bucket) return { ok: false, error: 'CLOUDFLARE_R2_BUCKET_NAME not configured.' }
+
+  try {
+    const client = makeR2Client()
+    const command = new GetObjectCommand({ Bucket: bucket, Key: opts.storageKey })
+    const downloadUrl = await getSignedUrl(client, command, {
+      expiresIn: opts.expiresInSeconds ?? 900,
+    })
+    return { ok: true, downloadUrl }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

@@ -6,6 +6,7 @@ import {
 import { StudioShell } from '@/components/studio/StudioShell'
 import type { ManufacturerDocument } from '@/lib/studio-manufacturer/workspace'
 import { DocumentsClient } from './DocumentsClient'
+import { OpenDocumentButton } from '@/components/studio/OpenDocumentButton'
 
 function formatFileSize(bytes: number | null): string {
   if (!bytes) return ''
@@ -140,7 +141,10 @@ export default async function ManufacturerDocumentsPage() {
                     {formatDate(doc.uploadedAt)}
                   </div>
                 </div>
-                <span className={docBadgeClass(doc.status)}>{doc.status}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <OpenDocumentButton documentId={doc.id} manufacturerId={ctx.manufacturerId} variant="link" />
+                  <span className={docBadgeClass(doc.status)}>{doc.status}</span>
+                </div>
               </div>
             ))}
           </div>

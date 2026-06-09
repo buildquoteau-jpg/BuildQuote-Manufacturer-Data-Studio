@@ -6,6 +6,7 @@ import {
   type PortalDocument,
 } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
+import { OpenDocumentButton } from '@/components/studio/OpenDocumentButton'
 
 // ============================================================
 // Verification progress stages
@@ -255,7 +256,7 @@ function formatFileSize(bytes: number | null): string {
   return `${bytes} B`
 }
 
-function CatalogueCard({ doc }: { doc: PortalDocument }) {
+function CatalogueCard({ doc, manufacturerId }: { doc: PortalDocument; manufacturerId: string }) {
   const statusColors = DOC_STATUS_COLORS[doc.status] ?? { bg: '#f1f5f9', color: '#475569' }
   const docTypeLabel = DOC_TYPE_LABEL[doc.documentType ?? ''] ?? 'DOC'
   const fileSize = formatFileSize(doc.fileSizeBytes)
@@ -326,23 +327,26 @@ function CatalogueCard({ doc }: { doc: PortalDocument }) {
           {doc.documentName}
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem 0.75rem', marginTop: '0.4rem' }}>
-          {doc.documentType && (
-            <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'capitalize' }}>
-              {doc.documentType.replace(/_/g, ' ')}
-            </span>
-          )}
-          {doc.documentDate && (
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-              {doc.documentDate}
-            </span>
-          )}
-          {fileSize && (
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-              {fileSize}
-            </span>
-          )}
-        </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem 0.75rem', marginTop: '0.4rem' }}>
+            {doc.documentType && (
+              <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'capitalize' }}>
+                {doc.documentType.replace(/_/g, ' ')}
+              </span>
+            )}
+            {doc.documentDate && (
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                {doc.documentDate}
+              </span>
+            )}
+            {fileSize && (
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                {fileSize}
+              </span>
+            )}
+          </div>
+          <div style={{ marginTop: '0.6rem' }}>
+            <OpenDocumentButton documentId={doc.id} manufacturerId={manufacturerId} variant="button" />
+          </div>
       </div>
     </div>
   )
@@ -494,7 +498,7 @@ export default async function ManufacturerPortalPage() {
             }}
           >
             {documents.map((doc) => (
-              <CatalogueCard key={doc.id} doc={doc} />
+              <CatalogueCard key={doc.id} doc={doc} manufacturerId={ctx.manufacturerId} />
             ))}
           </div>
         )}

@@ -2,7 +2,7 @@
 
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
-import { createPresignedUploadUrl } from '@/lib/r2'
+import { createPresignedUploadUrl, createPresignedDownloadUrl } from '@/lib/r2'
 import { randomUUID } from 'crypto'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
@@ -138,4 +138,46 @@ export async function recordDocumentUpload(
   }
 
   return { ok: true, documentId: (data as { id: string }).id }
+}
+
+// ─── getDocumentDownloadUrl ───────────────────────────────────────────────────
+// Looks up the storage_key for a document, verifies workspace access, then
+// returns a 15-minute presigned GET URL.
+
+export type GetDownloadUrlResult =
+  | { ok: true; downloadUrl: string }
+  | { ok: false; error: string }
+
+export async function getDocumentDownloadUrl(
+  documentId: string,
+  manufacturerId: string,
+): Promise<GetDownloadUrlResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  let supabase: ReturnType<typeof createStudioServerClient>
+  try {
+    supabase = createStudioServerClient()
+  } catch {
+    return { ok: false, error: 'Supabase client not configured.' }
+  }
+
+  const { data, error } = await supabase
+    .from('source_documents')
+    .select('storage_key, manufacturer_id')
+    .eq('id', documentId)
+    .eq('manufacturer_id', manufacturerId)
+    .single()
+
+  if (error || !data) {
+    return { ok: false, error: 'Document not found.' }
+  }
+
+  const row = data as { storage_key: string | null; manufacturer_id: string }
+
+  if (!row.storage_key) {
+    return { ok: false, error: 'No file stored for this document.' }
+  }
+
+  return createPresignedDownloadUrl({ storageKey: row.storage_key })
 }
