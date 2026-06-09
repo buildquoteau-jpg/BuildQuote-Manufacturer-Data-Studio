@@ -224,6 +224,32 @@ export function ShowroomClient({
 
   return (
     <>
+      {/* ── Studio notice bar ─────────────────────────────────────────── */}
+      <div style={{ background: '#0f4461', borderBottom: '1px solid rgba(255,255,255,0.12)', padding: '10px 20px' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <a
+            href="/manufacturer/dashboard"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '6px 14px', borderRadius: '8px',
+              background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)',
+              color: '#fff', fontSize: '13px', fontWeight: 600,
+              textDecoration: 'none', flexShrink: 0,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.2)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.12)' }}
+          >
+            ← Back to workspace
+          </a>
+          <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
+            <strong style={{ color: 'rgba(255,255,255,0.9)' }}>Studio Showroom</strong> is a private preview — not visible to the public.
+            It shows how your brand will appear on BuildQuote once your systems go live.
+            Go back to your workspace to edit any cards that need improvements before they're published.
+          </p>
+        </div>
+      </div>
+
       {/* ── Hero / Search ──────────────────────────────────────────────── */}
       <div style={{ background: 'linear-gradient(140deg, #185D7A 0%, #0f4461 100%)', padding: '52px 20px 44px' }}>
         <div style={{ maxWidth: '680px', margin: '0 auto', textAlign: 'center' }}>
