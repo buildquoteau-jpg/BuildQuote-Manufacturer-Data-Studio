@@ -17,6 +17,7 @@ const REVIEWER_NAV: NavItem[] = [
 
 const MFR_NAV: NavItem[] = [
   { label: 'Dashboard',       href: '/manufacturer/dashboard' },
+  { label: 'Brand profile',   href: '/manufacturer/profile' },
   { label: 'Documents',       href: '/manufacturer/documents' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
   { label: 'Showroom',        href: '/studio/showroom' },

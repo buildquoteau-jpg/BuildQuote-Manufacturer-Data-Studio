@@ -119,6 +119,12 @@ export default async function ManufacturerDashboardPage() {
 
       <div className="studio-card-grid">
         <StudioCard
+          icon="🏷"
+          title="Brand profile"
+          description="Set your logo, hero image, description and contact details."
+          href="/manufacturer/profile"
+        />
+        <StudioCard
           icon="📄"
           title="Documents"
           description="View source documents for this workspace."
@@ -126,15 +132,15 @@ export default async function ManufacturerDashboardPage() {
         />
         <StudioCard
           icon="✅"
-          title="Review queue"
-          description="Read-only snapshot of extracted records awaiting human verification."
+          title="Verify systems"
+          description="Review and approve each product system card before publishing."
           href="/manufacturer/review"
         />
         <StudioCard
           icon="👁"
-          title="Preview"
-          description="Private Studio preview of your manufacturer page and systems."
-          href="/manufacturer/preview"
+          title="Showroom"
+          description="Preview how your brand will appear on the public BuildQuote product directory."
+          href="/studio/showroom"
         />
         <StudioCard
           icon="❓"

@@ -1,0 +1,438 @@
+'use client'
+
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { getBrowserSupabaseClient } from '@/lib/supabase/browser'
+import type { ShowroomManufacturer } from './page'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type StagedSystemResult = {
+  id: string
+  name: string
+  product_code: string | null
+  category: string | null
+  subcategory: string | null
+  description: string | null
+  hero_image_url: string | null
+  australian_made: boolean | null
+  notes: string | null
+  manufacturer_id: string
+  staged_system_profiles: { id: string }[]
+  data_studio_manufacturers: {
+    id: string
+    name: string
+    slug: string
+    logo_url: string | null
+  } | null
+}
+
+// ── Category colours (matches mfp.buildquote.com.au) ─────────────────────────
+
+const CATEGORY_COLOURS: Record<string, { bg: string; color: string }> = {
+  'Cladding':                      { bg: '#dbeafe', color: '#1e40af' },
+  'Flooring':                      { bg: '#d1fae5', color: '#065f46' },
+  'Decking':                       { bg: '#d1fae5', color: '#065f46' },
+  'Waterproofing':                 { bg: '#e0f2fe', color: '#0369a1' },
+  'Interior Linings':              { bg: '#ede9fe', color: '#5b21b6' },
+  'Soffit & Eaves':                { bg: '#fce7f3', color: '#9d174d' },
+  'Pergolas & Outdoor Structures': { bg: '#fef3c7', color: '#92400e' },
+  'Roofing':                       { bg: '#fee2e2', color: '#991b1b' },
+  'Wall System':                   { bg: '#f3f4f6', color: '#374151' },
+  'Weatherboard':                  { bg: '#fff7ed', color: '#9a3412' },
+}
+
+// ── Fuzzy search ──────────────────────────────────────────────────────────────
+
+function fuzzySearch(items: StagedSystemResult[], query: string): StagedSystemResult[] {
+  const q = query.trim()
+  if (q.length < 2) return []
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean)
+  return items.filter((item) => {
+    const mfr = item.data_studio_manufacturers
+    const hay = [
+      item.name,
+      item.product_code ?? '',
+      item.category ?? '',
+      item.subcategory ?? '',
+      item.description ?? '',
+      item.notes ?? '',
+      mfr?.name ?? '',
+    ].join(' ').toLowerCase()
+    return terms.every((t) => hay.includes(t))
+  })
+}
+
+// ── SystemCardTile (inline, data-studio flavour) ──────────────────────────────
+
+function SystemCardTile({
+  system,
+  onClick,
+}: {
+  system: StagedSystemResult
+  onClick: () => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const category = system.category ?? 'Unknown'
+  const catStyle = CATEGORY_COLOURS[category] ?? { bg: '#f3f4f6', color: '#374151' }
+  const profileCount = system.staged_system_profiles.length
+  const mfr = system.data_studio_manufacturers
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', textAlign: 'left', width: '100%',
+        background: '#ffffff',
+        border: hovered ? '1.5px solid #185D7A' : '1px solid #d1d5db',
+        borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
+        boxShadow: hovered ? '0 8px 28px rgba(24,93,122,0.18)' : '0 2px 10px rgba(0,0,0,0.07)',
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+      }}
+    >
+      {/* Hero image */}
+      <div style={{
+        height: '180px', flexShrink: 0, position: 'relative',
+        background: system.hero_image_url
+          ? `url(${system.hero_image_url}) center/cover`
+          : 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {!system.hero_image_url && (
+          <span style={{ fontSize: '14px', fontWeight: 800, color: '#94a3b8', fontFamily: 'monospace' }}>
+            {system.product_code ?? system.name}
+          </span>
+        )}
+        {/* Category pill */}
+        <span style={{
+          position: 'absolute', top: '10px', left: '10px',
+          fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+          background: catStyle.bg, color: catStyle.color,
+          padding: '3px 9px', borderRadius: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+        }}>
+          {category}
+        </span>
+      </div>
+
+      {/* Content strip */}
+      <div style={{ padding: '14px 16px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {/* Manufacturer name */}
+        {mfr && (
+          mfr.logo_url
+            ? <img src={mfr.logo_url} alt={mfr.name} style={{ height: '14px', objectFit: 'contain', maxWidth: '70px' }} />
+            : <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{mfr.name}</span>
+        )}
+        <h3 style={{
+          margin: 0, fontSize: '15px', fontWeight: 800, color: '#0f172a', lineHeight: 1.3,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+        }}>
+          {system.name}
+        </h3>
+        {system.description && (
+          <p style={{
+            margin: 0, fontSize: '13px', color: '#6b7280', lineHeight: 1.5,
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+          }}>
+            {system.description}
+          </p>
+        )}
+        {system.australian_made && (
+          <span style={{
+            alignSelf: 'flex-start',
+            fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em',
+            color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0',
+            padding: '2px 8px', borderRadius: '20px',
+          }}>
+            AU Australian Made
+          </span>
+        )}
+        {/* Footer row */}
+        <div style={{ marginTop: 'auto', paddingTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+            {profileCount > 0 ? `${profileCount} profile${profileCount !== 1 ? 's' : ''}` : ''}
+          </span>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#185D7A', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            View details
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M4.5 2.5L8 6L4.5 9.5" stroke="#185D7A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ── Example search chips ──────────────────────────────────────────────────────
+
+const EXAMPLES = [
+  '820 internal door', 'fibre cement cladding', 'composite decking', 'external corner trim',
+]
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export function ShowroomClient({
+  manufacturers,
+}: {
+  manufacturers: ShowroomManufacturer[]
+}) {
+  const [query, setQuery]                   = useState('')
+  const [mfrFilter, setMfrFilter]           = useState('')
+  const [allSystems, setAllSystems]         = useState<StagedSystemResult[]>([])
+  const [systemsLoading, setSystemsLoading] = useState(false)
+  const [systemsLoaded, setSystemsLoaded]   = useState(false)
+
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Load all staged systems on first search keystroke
+  const loadSystems = useCallback(async () => {
+    if (systemsLoaded || systemsLoading) return
+    setSystemsLoading(true)
+    const supabase = getBrowserSupabaseClient()
+    if (!supabase) { setSystemsLoading(false); return }
+
+    const { data } = await supabase
+      .from('staged_systems')
+      .select(`
+        id, name, product_code, category, subcategory, description,
+        hero_image_url, australian_made, notes, manufacturer_id,
+        staged_system_profiles ( id ),
+        data_studio_manufacturers ( id, name, slug, logo_url )
+      `)
+      .order('name')
+
+    setAllSystems((data as unknown as StagedSystemResult[]) ?? [])
+    setSystemsLoaded(true)
+    setSystemsLoading(false)
+  }, [systemsLoaded, systemsLoading])
+
+  useEffect(() => {
+    if (query.length >= 2) loadSystems()
+  }, [query, loadSystems])
+
+  const results = useMemo(() => fuzzySearch(allSystems, query), [allSystems, query])
+
+  const filteredManufacturers = useMemo(() =>
+    manufacturers.filter(m =>
+      !mfrFilter.trim() || m.name.toLowerCase().includes(mfrFilter.trim().toLowerCase())
+    ),
+    [manufacturers, mfrFilter]
+  )
+
+  return (
+    <>
+      {/* ── Hero / Search ──────────────────────────────────────────────── */}
+      <div style={{ background: 'linear-gradient(140deg, #185D7A 0%, #0f4461 100%)', padding: '52px 20px 44px' }}>
+        <div style={{ maxWidth: '680px', margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ marginBottom: '28px' }}>
+            <h1 style={{ margin: '0 0 12px', fontSize: '34px', fontWeight: 800, color: '#ffffff', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
+              Find Building Products &amp; Suppliers
+            </h1>
+            <p style={{ margin: 0, fontSize: '16px', color: 'rgba(255,255,255,0.72)', lineHeight: 1.6 }}>
+              Browse manufacturer product systems and find local WA suppliers — in seconds.
+            </p>
+          </div>
+
+          {/* Search bar */}
+          <div style={{ position: 'relative', marginBottom: '16px' }}>
+            <div style={{ position: 'absolute', left: '18px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+              <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="#94a3b8" strokeWidth="2"/>
+                <path d="M13 13l3 3" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search products, systems, manufacturers…"
+              style={{
+                width: '100%', boxSizing: 'border-box', border: '0', borderRadius: '16px',
+                padding: '18px 52px', fontSize: '16px', color: '#0f172a', background: '#ffffff',
+                outline: 'none', boxShadow: '0 6px 32px rgba(0,0,0,0.22)', fontWeight: 500,
+              }}
+            />
+            {query && (
+              <button
+                onClick={() => { setQuery(''); inputRef.current?.focus() }}
+                style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#9ca3af', lineHeight: 1, padding: '4px' }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* Example chips */}
+          {!query && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.55)', flexShrink: 0 }}>Try:</span>
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  onClick={() => { setQuery(ex); loadSystems() }}
+                  style={{ fontSize: '13px', padding: '6px 14px', background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.28)', borderRadius: '99px', color: 'rgba(255,255,255,0.9)', cursor: 'pointer', fontWeight: 500 }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.24)' }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.14)' }}
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Content area ──────────────────────────────────────────────── */}
+      <div style={{ background: '#f8fafc', minHeight: '60vh' }}>
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 20px 112px' }}>
+
+          {systemsLoading && (
+            <p style={{ fontSize: '14px', color: '#9ca3af', paddingTop: '32px' }}>Loading products…</p>
+          )}
+
+          {/* Search results */}
+          {query.length >= 2 && !systemsLoading && systemsLoaded && (
+            <div style={{ marginBottom: '56px', paddingTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>Product matches</h2>
+                {results.length > 0 && (
+                  <span style={{ fontSize: '13px', color: '#9ca3af' }}>
+                    {results.length} result{results.length !== 1 ? 's' : ''}{' '}
+                    across {new Set(results.map((r) => r.manufacturer_id)).size} manufacturer{new Set(results.map((r) => r.manufacturer_id)).size !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              {results.length > 0 ? (
+                <>
+                  <style>{`
+                    .showroom-results-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+                    @media (min-width: 680px) { .showroom-results-grid { grid-template-columns: repeat(2, 1fr); } }
+                    @media (min-width: 1060px) { .showroom-results-grid { grid-template-columns: repeat(3, 1fr); } }
+                  `}</style>
+                  <div className="showroom-results-grid">
+                    {results.map((system) => {
+                      const mfr = system.data_studio_manufacturers
+                      const href = mfr?.id ? `/studio/showroom/${mfr.id}` : null
+                      return (
+                        <SystemCardTile
+                          key={system.id}
+                          system={system}
+                          onClick={() => { if (href) window.location.href = href }}
+                        />
+                      )
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '40px 24px', textAlign: 'center', border: '1px solid #e5e7eb', borderRadius: '14px', background: '#ffffff' }}>
+                  <p style={{ margin: '0 0 6px', fontWeight: 600, color: '#374151' }}>No matches for &ldquo;{query}&rdquo;</p>
+                  <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#6b7280' }}>Try different keywords — e.g. shorten your search, use a category name, or a product code.</p>
+                  <button
+                    onClick={() => { setQuery(''); inputRef.current?.focus() }}
+                    style={{ fontSize: '13px', fontWeight: 600, color: '#185D7A', background: 'none', border: '1.5px solid #185D7A', borderRadius: '8px', padding: '8px 18px', cursor: 'pointer' }}
+                  >
+                    Clear search and browse by manufacturer ↓
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px', paddingTop: query.length >= 2 ? '0' : '36px' }}>
+            <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+              {query.length >= 2 ? 'or browse by manufacturer' : 'Browse by manufacturer'}
+            </span>
+            <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+          </div>
+
+          {/* Manufacturer filter */}
+          {manufacturers.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ position: 'relative', maxWidth: '320px' }}>
+                <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                  <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+                    <circle cx="8" cy="8" r="6" stroke="#94a3b8" strokeWidth="2"/>
+                    <path d="M13 13l3 3" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={mfrFilter}
+                  onChange={(e) => setMfrFilter(e.target.value)}
+                  placeholder="Filter manufacturers by name…"
+                  style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '10px 36px 10px 34px', fontSize: '14px', color: '#0f172a', background: '#ffffff', outline: 'none' }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = '#185D7A' }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+                />
+                {mfrFilter && (
+                  <button
+                    onClick={() => setMfrFilter('')}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#9ca3af', lineHeight: 1, padding: '2px' }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Manufacturer grid */}
+          {manufacturers.length === 0 ? (
+            <p style={{ color: '#6b7280', fontSize: '15px' }}>No manufacturers listed yet.</p>
+          ) : filteredManufacturers.length === 0 && mfrFilter.trim() ? (
+            <div style={{ padding: '32px 24px', textAlign: 'center', border: '1px solid #e5e7eb', borderRadius: '14px', background: '#ffffff' }}>
+              <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#374151' }}>No manufacturers match &ldquo;{mfrFilter}&rdquo;</p>
+              <p style={{ margin: 0, fontSize: '13px', color: '#9ca3af' }}>Try a shorter or different name.</p>
+            </div>
+          ) : (
+            <>
+              <style>{`
+                .showroom-mfr-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+                @media (min-width: 640px) { .showroom-mfr-grid { grid-template-columns: repeat(3, 1fr); } }
+                @media (min-width: 900px) { .showroom-mfr-grid { grid-template-columns: repeat(4, 1fr); } }
+                .showroom-mfr-card { background: #ffffff; border: 1.5px solid #e5e7eb; border-radius: 14px; overflow: hidden; text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: box-shadow 0.15s, border-color 0.15s; }
+                .showroom-mfr-card:hover { box-shadow: 0 6px 24px rgba(24,93,122,0.13); border-color: #185D7A; text-decoration: none; }
+                .showroom-mfr-card:hover * { text-decoration: none; }
+              `}</style>
+              <div className="showroom-mfr-grid">
+                {filteredManufacturers.map((m) => (
+                  <a key={m.id} href={`/studio/showroom/${m.id}`} className="showroom-mfr-card">
+                    <div style={{
+                      height: '110px', flexShrink: 0,
+                      background: m.hero_image_url ? `url(${m.hero_image_url}) center/cover` : '#f0f4f8',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {!m.hero_image_url && (
+                        m.logo_url
+                          ? <img src={m.logo_url} alt={m.name} style={{ maxWidth: '75%', maxHeight: '65%', objectFit: 'contain' }} />
+                          : <span style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.02em', textAlign: 'center', padding: '0 12px' }}>{m.name}</span>
+                      )}
+                    </div>
+                    <div style={{ padding: '12px 14px 14px', flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', lineHeight: 1.3, marginBottom: '4px' }}>{m.name}</div>
+                      {m.description && (
+                        <div style={{ fontSize: '12px', color: '#6b7280', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
+                          {m.description}
+                        </div>
+                      )}
+                      <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 600, color: '#185D7A' }}>
+                        {m.system_count} product{m.system_count !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
