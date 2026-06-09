@@ -194,6 +194,188 @@ export async function setSystemInReview(
   return { ok: true }
 }
 
+// ─── saveSystemNotes ──────────────────────────────────────────────────────────
+// Saves free-text manufacturer notes to staged_systems.notes.
+
+export async function saveSystemNotes(
+  systemId: string,
+  manufacturerId: string,
+  notes: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ notes: notes.trim() || null, updated_at: new Date().toISOString() })
+    .eq('id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ─── addMissingProfile ────────────────────────────────────────────────────────
+
+export async function addMissingProfile(
+  systemId: string,
+  manufacturerId: string,
+  data: { profile_name: string; product_code?: string; length_mm?: number | null; width_mm?: number | null; thickness_mm?: number | null; uom?: string },
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data: row, error } = await supabase
+    .from('staged_system_profiles')
+    .insert({
+      staged_system_id: systemId,
+      profile_name: data.profile_name.trim(),
+      product_code: data.product_code?.trim() || null,
+      length_mm: data.length_mm ?? null,
+      width_mm: data.width_mm ?? null,
+      thickness_mm: data.thickness_mm ?? null,
+      uom: data.uom?.trim() || null,
+      verification_status: 'pending_review',
+    })
+    .select('id')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, id: (row as any).id }
+}
+
+// ─── updateProfile ────────────────────────────────────────────────────────────
+
+export async function updateProfile(
+  profileId: string,
+  systemId: string,
+  manufacturerId: string,
+  data: { profile_name?: string; product_code?: string | null; length_mm?: number | null; width_mm?: number | null; thickness_mm?: number | null; uom?: string | null },
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_system_profiles')
+    .update({ ...data, updated_at: new Date().toISOString() } as any)
+    .eq('id', profileId)
+    .eq('staged_system_id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ─── addMissingColour ─────────────────────────────────────────────────────────
+
+export async function addMissingColour(
+  systemId: string,
+  manufacturerId: string,
+  data: { colour_name: string; sku_suffix?: string },
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data: row, error } = await supabase
+    .from('staged_system_colours')
+    .insert({
+      staged_system_id: systemId,
+      colour_name: data.colour_name.trim(),
+      sku_suffix: data.sku_suffix?.trim() || null,
+      is_stocked: true,
+      verification_status: 'pending_review',
+    })
+    .select('id')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, id: (row as any).id }
+}
+
+// ─── updateColour ─────────────────────────────────────────────────────────────
+
+export async function updateColour(
+  colourId: string,
+  systemId: string,
+  manufacturerId: string,
+  data: { colour_name?: string; sku_suffix?: string | null },
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_system_colours')
+    .update(data as any)
+    .eq('id', colourId)
+    .eq('staged_system_id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ─── addMissingComponent ──────────────────────────────────────────────────────
+
+export async function addMissingComponent(
+  systemId: string,
+  manufacturerId: string,
+  data: { name: string; sku?: string; description?: string },
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+
+  // Insert the component
+  const { data: comp, error: compError } = await supabase
+    .from('staged_components')
+    .insert({
+      manufacturer_id: manufacturerId,
+      name: data.name.trim(),
+      sku: data.sku?.trim() || null,
+      description: data.description?.trim() || null,
+      verification_status: 'pending_review',
+    })
+    .select('id')
+    .single()
+
+  if (compError) return { ok: false, error: compError.message }
+
+  // Link to system
+  const { error: linkError } = await supabase
+    .from('staged_system_components')
+    .insert({
+      staged_system_id: systemId,
+      staged_component_id: (comp as any).id,
+    })
+
+  if (linkError) return { ok: false, error: linkError.message }
+  return { ok: true, id: (comp as any).id }
+}
+
+// ─── updateComponent ──────────────────────────────────────────────────────────
+
+export async function updateComponent(
+  componentId: string,
+  manufacturerId: string,
+  data: { name?: string; sku?: string | null; description?: string | null },
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_components')
+    .update({ ...data, updated_at: new Date().toISOString() } as any)
+    .eq('id', componentId)
+    .eq('manufacturer_id', manufacturerId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 // ─── reopenSystem ─────────────────────────────────────────────────────────────
 // Reopens a verified system for re-checking.
 

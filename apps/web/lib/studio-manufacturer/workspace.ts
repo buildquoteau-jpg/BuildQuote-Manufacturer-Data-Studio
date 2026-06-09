@@ -501,6 +501,7 @@ export type VerificationSystemProfile = {
 }
 
 export type VerificationSystemComponent = {
+  id: string
   sku: string | null
   name: string
   description: string | null
@@ -512,6 +513,7 @@ export type VerificationSystemComponent = {
 }
 
 export type VerificationSystemColour = {
+  id: string
   colour_name: string
   sku_suffix: string | null
   is_stocked: boolean | null
@@ -624,13 +626,13 @@ export async function getManufacturerVerificationData(
       .order('sort_order'),
     c.supabase
       .from('staged_system_colours')
-      .select('staged_system_id, colour_name, sku_suffix, is_stocked')
+      .select('id, staged_system_id, colour_name, sku_suffix, is_stocked')
       .in('staged_system_id', systemIds)
       .order('sort_order'),
     c.supabase
       .from('staged_system_components')
       .select(
-        'staged_system_id, staged_components(sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order)',
+        'staged_system_id, staged_components(id, sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order)',
       )
       .in('staged_system_id', systemIds),
   ])
