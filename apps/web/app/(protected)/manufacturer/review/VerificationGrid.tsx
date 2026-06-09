@@ -1295,19 +1295,13 @@ function ExpandedCardView({
     subcategory:        system.subcategory,
     description:        system.description,
     hero_image_url:     system.hero_image_url,
-    bal_rating:         fieldStates['bal_rating']?.status === 'edited' ? fieldStates['bal_rating'].verifiedValue : system.bal_rating,
+    bal_rating:         system.bal_rating,
     fire_rating:        system.fire_rating,
-    moisture_resistant: fieldStates['moisture_resistant']?.status === 'edited'
-      ? fieldStates['moisture_resistant'].verifiedValue === 'true'
-      : system.moisture_resistant,
-    acoustic_rating:    fieldStates['acoustic_rating']?.status === 'edited'
-      ? (fieldStates['acoustic_rating'].verifiedValue === 'true' ? 'true' : null)
-      : system.acoustic_rating,
+    moisture_resistant: system.moisture_resistant,
+    acoustic_rating:    system.acoustic_rating,
     structural_grade:   system.structural_grade,
-    australian_made:    fieldStates['australian_made']?.status === 'edited'
-      ? fieldStates['australian_made'].verifiedValue === 'true'
-      : system.australian_made,
-    notes:              notes || system.notes,
+    australian_made:    system.australian_made,
+    notes:              system.notes,
     source_url:         system.source_url,
     install_guide_url:  system.install_guide_url,
     profiles: system.profiles.map(p => ({
