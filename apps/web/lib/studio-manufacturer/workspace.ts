@@ -60,6 +60,7 @@ export type ManufacturerInfo = {
   status: string
   description: string | null
   websiteUrl: string | null
+  heroImageUrl: string | null
 }
 
 export type ManufacturerDocument = {
@@ -199,7 +200,7 @@ export async function getManufacturerInfo(
 
   const { data, error } = await c.supabase
     .from('data_studio_manufacturers')
-    .select('id, name, slug, status, description, website_url')
+    .select('id, name, slug, status, description, website_url, hero_image_url')
     .eq('id', manufacturerId)
     .single()
 
@@ -209,7 +210,7 @@ export async function getManufacturerInfo(
 
   const m = data as {
     id: string; name: string; slug: string; status: string
-    description: string | null; website_url: string | null
+    description: string | null; website_url: string | null; hero_image_url: string | null
   }
 
   return {
@@ -221,6 +222,7 @@ export async function getManufacturerInfo(
       status: m.status,
       description: m.description,
       websiteUrl: m.website_url,
+      heroImageUrl: m.hero_image_url,
     },
   }
 }
@@ -474,6 +476,7 @@ export async function getManufacturerPreviewData(
       status: m.status,
       description: m.description,
       websiteUrl: m.website_url,
+      heroImageUrl: null,
     },
     systems: systemsWithColours,
   }
@@ -608,7 +611,7 @@ export async function getManufacturerVerificationData(
       ok: true,
       manufacturer: {
         id: m.id, name: m.name, slug: m.slug, status: m.status,
-        description: m.description, websiteUrl: m.website_url,
+        description: m.description, websiteUrl: m.website_url, heroImageUrl: null,
       },
       systems: [],
     }
@@ -679,7 +682,7 @@ export async function getManufacturerVerificationData(
     ok: true,
     manufacturer: {
       id: m.id, name: m.name, slug: m.slug, status: m.status,
-      description: m.description, websiteUrl: m.website_url,
+      description: m.description, websiteUrl: m.website_url, heroImageUrl: null,
     },
     systems,
   }
@@ -764,6 +767,7 @@ export async function getPortalData(
       manufacturer: {
         id: m.id, name: m.name, slug: m.slug, status: m.status,
         description: m.description, websiteUrl: m.website_url,
+        heroImageUrl: m.hero_image_url,
       },
       documents,
       systems,

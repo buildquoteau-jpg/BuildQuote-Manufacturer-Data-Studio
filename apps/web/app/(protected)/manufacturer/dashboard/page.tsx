@@ -412,8 +412,24 @@ export default async function ManufacturerPortalPage() {
           padding: '1.75rem 2rem',
           marginBottom: '2rem',
           color: '#fff',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
+        {manufacturer.heroImageUrl && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url(${manufacturer.heroImageUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              opacity: 0.12,
+              borderRadius: 14,
+            }}
+          />
+        )}
+        <div style={{ position: 'relative' }}>
         <p style={{ fontSize: '0.83rem', color: 'rgba(255,255,255,0.65)', margin: '0 0 0.3rem', fontWeight: 500 }}>
           Welcome{firstName ? `, ${firstName}` : ''} to your BuildQuote Manufacturer Portal
         </p>
@@ -453,6 +469,7 @@ export default async function ManufacturerPortalPage() {
             </div>
           ))}
         </div>
+        </div>{/* end position:relative content wrapper */}
       </div>
 
       {/* ── Catalogues ── */}
