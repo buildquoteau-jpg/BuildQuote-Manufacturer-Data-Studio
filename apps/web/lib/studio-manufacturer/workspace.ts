@@ -133,6 +133,40 @@ export type ManufacturerPreviewResult =
   | { ok: false; error: string }
 
 // ============================================================
+// Portal types — manufacturer-facing dashboard
+// ============================================================
+
+export type PortalSystem = {
+  id: string
+  name: string
+  category: string | null
+  description: string | null
+  verificationStatus: string
+  productionSystemId: string | null
+  sourceDocumentId: string | null
+}
+
+export type PortalDocument = {
+  id: string
+  documentName: string
+  documentType: string | null
+  documentDate: string | null
+  status: string
+  uploadedAt: string
+  fileSizeBytes: number | null
+}
+
+export type PortalData = {
+  manufacturer: ManufacturerInfo
+  documents: PortalDocument[]
+  systems: PortalSystem[]
+}
+
+export type PortalDataResult =
+  | { ok: true; data: PortalData }
+  | { ok: false; error: string }
+
+// ============================================================
 // Internal helpers
 // ============================================================
 
@@ -446,5 +480,95 @@ export async function getManufacturerPreviewData(
       websiteUrl: m.website_url,
     },
     systems: systemsWithColours,
+  }
+}
+
+// ============================================================
+// getPortalData
+// Single query set for the manufacturer portal dashboard.
+// Returns manufacturer info, documents (catalogues), and
+// staged systems with verification + publish state.
+// ============================================================
+
+export async function getPortalData(
+  manufacturerId: string,
+): Promise<PortalDataResult> {
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const [mfrResult, docsResult, systemsResult] = await Promise.all([
+    c.supabase
+      .from('data_studio_manufacturers')
+      .select('id, name, slug, status, description, website_url, hero_image_url, logo_url')
+      .eq('id', manufacturerId)
+      .single(),
+    c.supabase
+      .from('source_documents')
+      .select('id, document_name, document_type, document_date, status, uploaded_at, file_size_bytes')
+      .eq('manufacturer_id', manufacturerId)
+      .order('uploaded_at', { ascending: false })
+      .limit(50),
+    c.supabase
+      .from('staged_systems')
+      .select('id, name, category, description, verification_status, production_system_id, source_document_id')
+      .eq('manufacturer_id', manufacturerId)
+      .order('sort_order', { ascending: true })
+      .limit(100),
+  ])
+
+  if (mfrResult.error || !mfrResult.data) {
+    return { ok: false, error: 'Manufacturer workspace not found.' }
+  }
+
+  const m = mfrResult.data as {
+    id: string; name: string; slug: string; status: string
+    description: string | null; website_url: string | null
+    hero_image_url: string | null; logo_url: string | null
+  }
+
+  type DocRow = {
+    id: string; document_name: string; document_type: string | null
+    document_date: string | null; status: string; uploaded_at: string
+    file_size_bytes: number | null
+  }
+  const documents: PortalDocument[] = ((docsResult.data ?? []) as DocRow[]).map((d) => ({
+    id: d.id,
+    documentName: d.document_name,
+    documentType: d.document_type,
+    documentDate: d.document_date,
+    status: d.status,
+    uploadedAt: d.uploaded_at,
+    fileSizeBytes: d.file_size_bytes,
+  }))
+
+  type SysRow = {
+    id: string; name: string; category: string | null; description: string | null
+    verification_status: string; production_system_id: string | null
+    source_document_id: string | null
+  }
+  const systems: PortalSystem[] = ((systemsResult.data ?? []) as SysRow[]).map((s) => ({
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    description: s.description,
+    verificationStatus: s.verification_status,
+    productionSystemId: s.production_system_id,
+    sourceDocumentId: s.source_document_id,
+  }))
+
+  return {
+    ok: true,
+    data: {
+      manufacturer: {
+        id: m.id,
+        name: m.name,
+        slug: m.slug,
+        status: m.status,
+        description: m.description,
+        websiteUrl: m.website_url,
+      },
+      documents,
+      systems,
+    },
   }
 }

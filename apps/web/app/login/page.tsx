@@ -3,7 +3,6 @@ import { getStudioSession, resolvePostLoginPath } from '@/lib/studio-auth/sessio
 import { LoginForm } from '@/components/studio/LoginForm'
 
 export default async function LoginPage() {
-  // If the user already has a valid Studio profile, send them to the right area directly
   const session = await getStudioSession()
   if (session.profile) {
     redirect(resolvePostLoginPath(session))
@@ -14,55 +13,113 @@ export default async function LoginPage() {
 
   return (
     <div
-      className="studio-page"
       style={{
-        justifyContent: 'center',
-        alignItems: 'center',
         minHeight: '100vh',
-        padding: '1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #0f3a4d 0%, #185D7A 60%, #1a7a9e 100%)',
+        padding: '1.5rem',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 400 }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '1.4rem', marginBottom: '0.25rem' }}>BuildQuote Data Studio</h1>
-          <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.9rem', margin: 0 }}>
-            Private Manufacturer Administration Portal
+      {/* Card */}
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 420,
+          background: '#fff',
+          borderRadius: 16,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Card header */}
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #185D7A 0%, #1a7a9e 100%)',
+            padding: '2rem 2rem 1.75rem',
+            textAlign: 'center',
+          }}
+        >
+          {/* BQ monogram */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 52,
+              height: 52,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.15)',
+              marginBottom: '1rem',
+              fontSize: '1.3rem',
+              fontWeight: 800,
+              color: '#fff',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            BQ
+          </div>
+          <h1
+            style={{
+              fontSize: '1.25rem',
+              fontWeight: 700,
+              color: '#fff',
+              margin: '0 0 0.3rem',
+              letterSpacing: '-0.01em',
+            }}
+          >
+            BuildQuote Data Studio
+          </h1>
+          <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.85rem', margin: 0 }}>
+            Manufacturer Portal
           </p>
         </div>
 
-        {envMissing && (
-          <div className="studio-warn" style={{ marginBottom: '1.5rem', fontSize: '0.83rem' }}>
-            Supabase environment variables are not configured. Add{' '}
-            <code>NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
-            <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{' '}
-            <code>apps/web/.env.local</code>.
-          </div>
-        )}
+        {/* Form area */}
+        <div style={{ padding: '1.75rem 2rem 2rem' }}>
+          {envMissing && (
+            <div
+              style={{
+                background: '#fef3c7',
+                border: '1px solid #fcd34d',
+                borderRadius: 8,
+                padding: '0.7rem 1rem',
+                fontSize: '0.8rem',
+                color: '#92400e',
+                marginBottom: '1.25rem',
+              }}
+            >
+              Studio environment not configured. Add Supabase variables to <code>.env.local</code>.
+            </div>
+          )}
 
-        <div
-          style={{
-            background: 'var(--ds-card-bg)',
-            border: '1px solid var(--ds-border)',
-            borderRadius: 8,
-            padding: '1.75rem',
-          }}
-        >
-          <h2 style={{ fontSize: '1.05rem', marginBottom: '1.25rem' }}>Sign in to continue</h2>
+          <h2
+            style={{
+              fontSize: '1rem',
+              fontWeight: 600,
+              color: 'var(--ds-text)',
+              marginBottom: '1.25rem',
+            }}
+          >
+            Sign in to continue
+          </h2>
+
           <LoginForm />
         </div>
-
-        <p
-          style={{
-            marginTop: '1.25rem',
-            textAlign: 'center',
-            fontSize: '0.8rem',
-            color: 'var(--ds-text-faint)',
-            margin: '1.25rem 0 0',
-          }}
-        >
-          Authorised users only. Contact BuildQuote to request access.
-        </p>
       </div>
+
+      <p
+        style={{
+          marginTop: '1.5rem',
+          fontSize: '0.78rem',
+          color: 'rgba(255,255,255,0.5)',
+          textAlign: 'center',
+        }}
+      >
+        Authorised users only · Contact BuildQuote to request access
+      </p>
     </div>
   )
 }
