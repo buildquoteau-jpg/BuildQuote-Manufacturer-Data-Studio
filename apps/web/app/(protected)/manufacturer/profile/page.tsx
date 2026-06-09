@@ -1,5 +1,5 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
-import { resolveWorkspaceContext, getManufacturerInfo } from '@/lib/studio-manufacturer/workspace'
+import { resolveWorkspaceContextFromRequest, getManufacturerInfo } from '@/lib/studio-manufacturer/workspace'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { BrandProfileForm } from './BrandProfileForm'
@@ -28,7 +28,7 @@ async function getFullManufacturerProfile(manufacturerId: string) {
 
 export default async function ManufacturerProfilePage() {
   const session = await getStudioSession()
-  const ctx = resolveWorkspaceContext(session)
+  const ctx = await resolveWorkspaceContextFromRequest(session)
 
   if (!ctx.found) {
     return (

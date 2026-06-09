@@ -4,7 +4,7 @@
 
 import { getStudioSession } from '@/lib/studio-auth/session'
 import {
-  resolveWorkspaceContext,
+  resolveWorkspaceContextFromRequest,
   getManufacturerPreviewData,
 } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
@@ -12,7 +12,7 @@ import { StudioStatusBadge } from '@/components/studio/StudioStatusBadge'
 
 export default async function ManufacturerPreviewPage() {
   const session = await getStudioSession()
-  const ctx = resolveWorkspaceContext(session)
+  const ctx = await resolveWorkspaceContextFromRequest(session)
 
   if (!ctx.found) {
     return (

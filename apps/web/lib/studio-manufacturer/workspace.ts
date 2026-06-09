@@ -4,8 +4,11 @@
 // RLS note: migrations 004–006 grant open SELECT to anon and authenticated
 // roles on all data_studio_* and staged_* tables. No policy changes needed.
 
+import { cookies } from 'next/headers'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import type { StudioSession, StudioManufacturerMembership } from '@/lib/studio-auth/session'
+
+const GATE_COOKIE = 'admin_workspace_gate'
 
 // ============================================================
 // Workspace context resolver (pure, no DB call)
@@ -27,12 +30,29 @@ export type WorkspaceContext =
 
 /**
  * Determines the active manufacturer workspace from the resolved session.
- * buildquote_admin gets admin_no_context (no memberships).
+ * buildquote_admin gets admin_no_context (no memberships), unless
+ * adminImpersonatedManufacturerId is provided (set via the workspace gate cookie).
  * manufacturer_user with no active memberships gets no_membership.
  * Multiple memberships: first active membership used as default.
  */
-export function resolveWorkspaceContext(session: StudioSession): WorkspaceContext {
+export function resolveWorkspaceContext(
+  session: StudioSession,
+  adminImpersonatedManufacturerId?: string | null,
+): WorkspaceContext {
   if (session.globalRole === 'buildquote_admin') {
+    if (adminImpersonatedManufacturerId) {
+      return {
+        found: true,
+        manufacturerId: adminImpersonatedManufacturerId,
+        membership: {
+          id: 'admin-gate',
+          manufacturerId: adminImpersonatedManufacturerId,
+          role: 'manufacturer_admin',
+          status: 'active',
+        },
+        allMemberships: [],
+      }
+    }
     return { found: false, reason: 'admin_no_context', allMemberships: [] }
   }
 
@@ -47,6 +67,30 @@ export function resolveWorkspaceContext(session: StudioSession): WorkspaceContex
     membership,
     allMemberships: session.memberships,
   }
+}
+
+/**
+ * Async variant that reads the admin workspace gate cookie for impersonation.
+ * Use this in manufacturer portal pages instead of resolveWorkspaceContext directly.
+ */
+export async function resolveWorkspaceContextFromRequest(
+  session: StudioSession,
+): Promise<WorkspaceContext> {
+  let adminImpersonation: string | null = null
+  if (session.globalRole === 'buildquote_admin') {
+    const jar = await cookies()
+    adminImpersonation = jar.get(GATE_COOKIE)?.value ?? null
+  }
+  return resolveWorkspaceContext(session, adminImpersonation)
+}
+
+/**
+ * Returns the manufacturer ID from the admin workspace gate cookie, or null.
+ * Used by the manufacturer layout to show the exit banner.
+ */
+export async function getAdminImpersonatedManufacturerId(): Promise<string | null> {
+  const jar = await cookies()
+  return jar.get(GATE_COOKIE)?.value ?? null
 }
 
 // ============================================================

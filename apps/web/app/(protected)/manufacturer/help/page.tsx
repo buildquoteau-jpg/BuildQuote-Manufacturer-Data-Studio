@@ -1,6 +1,6 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import {
-  resolveWorkspaceContext,
+  resolveWorkspaceContextFromRequest,
   getManufacturerInfo,
 } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
@@ -26,7 +26,7 @@ const HELP_SECTIONS = [
 
 export default async function ManufacturerHelpPage() {
   const session = await getStudioSession()
-  const ctx = resolveWorkspaceContext(session)
+  const ctx = await resolveWorkspaceContextFromRequest(session)
 
   let workspaceName: string | null = null
   if (ctx.found) {

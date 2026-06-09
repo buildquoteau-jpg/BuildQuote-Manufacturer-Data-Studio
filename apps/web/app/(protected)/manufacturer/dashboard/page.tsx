@@ -1,6 +1,6 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import {
-  resolveWorkspaceContext,
+  resolveWorkspaceContextFromRequest,
   getPortalData,
   type PortalSystem,
   type PortalDocument,
@@ -358,7 +358,7 @@ function CatalogueCard({ doc, manufacturerId }: { doc: PortalDocument; manufactu
 
 export default async function ManufacturerPortalPage() {
   const session = await getStudioSession()
-  const ctx = resolveWorkspaceContext(session)
+  const ctx = await resolveWorkspaceContextFromRequest(session)
 
   const firstName = session.profile?.fullName
     ? session.profile.fullName.split(' ')[0]

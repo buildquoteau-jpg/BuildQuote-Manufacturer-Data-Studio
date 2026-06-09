@@ -1,5 +1,6 @@
 import { StudioShell } from '@/components/studio/StudioShell'
 import { getAdminManufacturerList } from '@/lib/studio-admin/manufacturers'
+import { ManufacturersList } from './WorkspaceGateModal'
 
 export default async function AdminManufacturersPage() {
   const result = await getAdminManufacturerList()
@@ -50,63 +51,7 @@ export default async function AdminManufacturersPage() {
           </span>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {result.manufacturers.map((m) => (
-            <a
-              key={m.id}
-              href={`/admin/manufacturers/${m.id}`}
-              style={{
-                background: 'var(--ds-card-bg)',
-                border: '1px solid var(--ds-border)',
-                borderRadius: 8,
-                padding: '1rem 1.25rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '0.75rem',
-                textDecoration: 'none',
-                color: 'inherit',
-                transition: 'box-shadow 0.15s',
-              }}
-            >
-              {/* Name + slug */}
-              <div style={{ minWidth: 0 }}>
-                <div
-                  style={{
-                    fontWeight: 600,
-                    color: 'var(--ds-navy)',
-                    marginBottom: '0.2rem',
-                    fontSize: '0.95rem',
-                  }}
-                >
-                  {m.name}
-                </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>
-                  {m.slug}
-                  {' · '}
-                  {m.documentCount} doc{m.documentCount !== 1 ? 's' : ''}
-                  {' · '}
-                  {m.systemCount} system{m.systemCount !== 1 ? 's' : ''}
-                  {' · '}
-                  {m.componentCount} component{m.componentCount !== 1 ? 's' : ''}
-                </div>
-              </div>
-
-              {/* Status + arrow */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
-                <span
-                  className={`studio-badge studio-badge-${
-                    m.status === 'active' ? 'approved' : m.status === 'archived' ? 'draft' : 'draft'
-                  }`}
-                >
-                  {m.status}
-                </span>
-                <span style={{ color: 'var(--ds-text-faint)', fontSize: '0.85rem' }}>→</span>
-              </div>
-            </a>
-          ))}
-        </div>
+        <ManufacturersList manufacturers={result.manufacturers} />
       )}
 
       <div

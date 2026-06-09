@@ -1,5 +1,5 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
-import { resolveWorkspaceContext, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
+import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { VerificationGrid } from './VerificationGrid'
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function ManufacturerReviewPage() {
   const session = await getStudioSession()
-  const ctx = resolveWorkspaceContext(session)
+  const ctx = await resolveWorkspaceContextFromRequest(session)
 
   if (!ctx.found) {
     return (

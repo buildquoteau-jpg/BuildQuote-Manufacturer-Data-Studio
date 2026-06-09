@@ -1,6 +1,6 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import {
-  resolveWorkspaceContext,
+  resolveWorkspaceContextFromRequest,
   getManufacturerDocuments,
   getManufacturerInfo,
 } from '@/lib/studio-manufacturer/workspace'
@@ -50,7 +50,7 @@ function docBadgeClass(status: string): string {
 
 export default async function ManufacturerDocumentsPage() {
   const session = await getStudioSession()
-  const ctx = resolveWorkspaceContext(session)
+  const ctx = await resolveWorkspaceContextFromRequest(session)
 
   if (!ctx.found) {
     return (
