@@ -5,6 +5,7 @@ import {
 } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 import type { ManufacturerDocument } from '@/lib/studio-manufacturer/workspace'
+import { DocumentsClient } from './DocumentsClient'
 
 function formatFileSize(bytes: number | null): string {
   if (!bytes) return ''
@@ -45,12 +46,6 @@ function docBadgeClass(status: string): string {
   return `studio-badge studio-badge-${STATUS_BADGE[status] ?? 'draft'}`
 }
 
-const DOCUMENT_TYPES = [
-  { id: 'product_guide', label: 'Product Guide' },
-  { id: 'installation_guide', label: 'Installation Guide' },
-  { id: 'brochure', label: 'Brochure / Catalogue' },
-]
-
 export default async function ManufacturerDocumentsPage() {
   const session = await getStudioSession()
   const ctx = resolveWorkspaceContext(session)
@@ -75,55 +70,19 @@ export default async function ManufacturerDocumentsPage() {
     <StudioShell role="manufacturer" subtitle="Documents">
       <h1 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Documents</h1>
 
-      {/* Upload zone — not connected yet */}
+      {/* Upload zone */}
       <div className="studio-section" style={{ marginTop: 0 }}>
         <div className="studio-section-heading">Upload a document</div>
-        <div className="studio-upload-zone">
-          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📎</div>
-          <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
-            Upload pipeline coming later
-          </p>
-          <p style={{ fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-            Document upload will be enabled once storage and auth are wired.
-          </p>
-
-          <div
-            style={{
-              display: 'flex',
-              gap: '0.5rem',
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-              marginBottom: '1.25rem',
-            }}
-          >
-            {DOCUMENT_TYPES.map((dt) => (
-              <button
-                key={dt.id}
-                disabled
-                className="studio-btn studio-btn-ghost"
-                style={{ fontSize: '0.82rem' }}
-              >
-                {dt.label}
-              </button>
-            ))}
-          </div>
-
-          <button disabled className="studio-btn studio-btn-primary">
-            Select file to upload — coming later
-          </button>
+        <DocumentsClient manufacturerId={ctx.manufacturerId} />
+        <div
+          style={{
+            marginTop: '0.75rem',
+            fontSize: '0.8rem',
+            color: 'var(--ds-text-faint)',
+          }}
+        >
+          Accepted: PDF, CSV, XLSX, PNG, JPG · Max 50 MB
         </div>
-      </div>
-
-      <div
-        style={{
-          marginTop: '0.75rem',
-          fontSize: '0.8rem',
-          color: 'var(--ds-text-faint)',
-          paddingLeft: '0.25rem',
-        }}
-      >
-        Accepted: PDF · Max 50 MB · Supported types: Product Guide, Installation Guide,
-        Brochure/Catalogue
       </div>
 
       {/* Source documents */}
