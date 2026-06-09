@@ -10,7 +10,7 @@ const DOCUMENT_TYPES = [
   { id: 'product_guide',        label: 'Product Guide' },
   { id: 'installation_guide',   label: 'Installation Guide' },
   { id: 'brochure',             label: 'Brochure / Catalogue' },
-  { id: 'price_list',           label: 'Price List / CSV' },
+  { id: 'price_list',           label: 'CSV' },
   { id: 'technical_data_sheet', label: 'Technical Data Sheet' },
   { id: 'other',                label: 'Other' },
 ]
