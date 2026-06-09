@@ -1309,9 +1309,7 @@ function ExpandedCardView({
       : system.australian_made,
     notes:              notes || system.notes,
     source_url:         system.source_url,
-    install_guide_url:  fieldStates['install_guide_url']?.status === 'edited'
-      ? fieldStates['install_guide_url'].verifiedValue
-      : system.install_guide_url,
+    install_guide_url:  system.install_guide_url,
     profiles: system.profiles.map(p => ({
       product_code: p.product_code, profile_name: p.profile_name,
       dimensions: p.dimensions, length_mm: p.length_mm,
