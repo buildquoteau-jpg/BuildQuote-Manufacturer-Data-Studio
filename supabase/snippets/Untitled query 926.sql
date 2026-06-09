@@ -1,0 +1,1 @@
+SELECT id, name FROM data_studio_manufacturers;

@@ -588,9 +588,10 @@ export default async function ManufacturerPortalPage() {
         }}
       >
         {[
-          { href: '/manufacturer/documents', label: 'All documents' },
-          { href: '/manufacturer/review',    label: 'Review queue' },
-          { href: '/manufacturer/preview',   label: 'Preview' },
+          { href: '/manufacturer/profile',   label: 'Brand profile' },
+          { href: '/manufacturer/documents', label: 'Documents' },
+          { href: '/manufacturer/review',    label: 'Verify systems' },
+          { href: '/studio/showroom',        label: 'Showroom' },
           { href: '/manufacturer/help',      label: 'Help & Support' },
         ].map((item: { href: string; label: string }) => (
           <a

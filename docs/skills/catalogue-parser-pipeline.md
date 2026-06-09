@@ -37,6 +37,31 @@ Run from repo root with the `.venv-docling` Python environment.
 
 ---
 
+## Step 1b: Merge multiple Docling outputs (when multiple PDFs exist)
+
+If the manufacturer has multiple source PDFs (e.g. main catalogue + accessories/fixings sheet), extract each with Docling then merge before parsing. This ensures Stage 2 sees the full component/accessory data.
+
+```powershell
+$primary   = Get-Content ".local/docling-output/<primary-stem>/output.md" -Raw
+$secondary = Get-Content ".local/docling-output/<accessory-stem>/output.md" -Raw
+
+$merged = @"
+<!-- SOURCE: <primary label> -->
+$primary
+
+<!-- SOURCE: <accessory label> -->
+$secondary
+"@
+
+$merged | Set-Content ".local/docling-output/<slug>_merged.md" -Encoding UTF8
+```
+
+Use `<slug>_merged.md` as the `--input` to the parser.
+
+**Note:** The parser processes each `<!-- SOURCE -->` block as a separate chunk. Systems and colours are deduped automatically. Components are deduped by SKU. Do not merge docs that represent completely separate product lines.
+
+---
+
 ## Step 2: AI parsing (dry run first)
 
 ```powershell

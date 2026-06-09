@@ -398,7 +398,8 @@ export function ShowroomClient({
                 @media (min-width: 640px) { .showroom-mfr-grid { grid-template-columns: repeat(3, 1fr); } }
                 @media (min-width: 900px) { .showroom-mfr-grid { grid-template-columns: repeat(4, 1fr); } }
                 .showroom-mfr-card { background: #ffffff; border: 1.5px solid #e5e7eb; border-radius: 14px; overflow: hidden; text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: box-shadow 0.15s, border-color 0.15s; }
-                .showroom-mfr-card:hover { box-shadow: 0 6px 24px rgba(24,93,122,0.13); border-color: #185D7A; }
+                .showroom-mfr-card:hover { box-shadow: 0 6px 24px rgba(24,93,122,0.13); border-color: #185D7A; text-decoration: none; }
+                .showroom-mfr-card:hover * { text-decoration: none; }
               `}</style>
               <div className="showroom-mfr-grid">
                 {filteredManufacturers.map((m) => (

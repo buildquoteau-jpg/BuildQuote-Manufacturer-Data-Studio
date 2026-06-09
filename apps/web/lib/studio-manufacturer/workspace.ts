@@ -108,34 +108,6 @@ export type PreviewSystem = {
   colours: string[]
 }
 
-// ============================================================
-// Result envelope types
-// ============================================================
-
-export type ManufacturerInfoResult =
-  | { ok: true; manufacturer: ManufacturerInfo }
-  | { ok: false; error: string }
-
-export type ManufacturerDocumentsResult =
-  | { ok: true; documents: ManufacturerDocument[] }
-  | { ok: false; error: string }
-
-export type WorkspaceCountsResult =
-  | { ok: true; counts: WorkspaceCounts }
-  | { ok: false; error: string }
-
-export type ManufacturerReviewResult =
-  | { ok: true; data: ManufacturerReviewData }
-  | { ok: false; error: string }
-
-export type ManufacturerPreviewResult =
-  | { ok: true; manufacturer: ManufacturerInfo; systems: PreviewSystem[] }
-  | { ok: false; error: string }
-
-// ============================================================
-// Portal types — manufacturer-facing dashboard
-// ============================================================
-
 export type PortalSystem = {
   id: string
   name: string
@@ -164,6 +136,30 @@ export type PortalData = {
 
 export type PortalDataResult =
   | { ok: true; data: PortalData }
+  | { ok: false; error: string }
+
+// ============================================================
+// Result envelope types
+// ============================================================
+
+export type ManufacturerInfoResult =
+  | { ok: true; manufacturer: ManufacturerInfo }
+  | { ok: false; error: string }
+
+export type ManufacturerDocumentsResult =
+  | { ok: true; documents: ManufacturerDocument[] }
+  | { ok: false; error: string }
+
+export type WorkspaceCountsResult =
+  | { ok: true; counts: WorkspaceCounts }
+  | { ok: false; error: string }
+
+export type ManufacturerReviewResult =
+  | { ok: true; data: ManufacturerReviewData }
+  | { ok: false; error: string }
+
+export type ManufacturerPreviewResult =
+  | { ok: true; manufacturer: ManufacturerInfo; systems: PreviewSystem[] }
   | { ok: false; error: string }
 
 // ============================================================
@@ -484,6 +480,210 @@ export async function getManufacturerPreviewData(
 }
 
 // ============================================================
+// getManufacturerVerificationData
+// Full system card data for the manufacturer verification UI.
+// Mirrors getAdminManufacturerSystemCards but without admin gate.
+// ============================================================
+
+export type VerificationSystemProfile = {
+  id: string
+  product_code: string | null
+  profile_name: string
+  dimensions: string | null
+  length_mm: number | null
+  height_mm: number | null
+  width_mm: number | null
+  thickness_mm: number | null
+  uom: string | null
+  supplier_pack_qty: number | null
+  supplier_pack_uom: string | null
+  sort_order: number | null
+}
+
+export type VerificationSystemComponent = {
+  sku: string | null
+  name: string
+  description: string | null
+  category: string | null
+  uom: string | null
+  supplier_pack_qty: number | null
+  supplier_pack_uom: string | null
+  sort_order: number | null
+}
+
+export type VerificationSystemColour = {
+  colour_name: string
+  sku_suffix: string | null
+  is_stocked: boolean | null
+}
+
+export type VerificationSystem = {
+  id: string
+  name: string
+  product_code: string | null
+  category: string | null
+  subcategory: string | null
+  description: string | null
+  hero_image_url: string | null
+  australian_made: boolean | null
+  bal_rating: string | null
+  fire_rating: string | null
+  acoustic_rating: string | null
+  moisture_resistant: boolean | null
+  structural_grade: string | null
+  website_url: string | null
+  source_url: string | null
+  install_guide_url: string | null
+  tech_data_url: string | null
+  notes: string | null
+  verification_status: string
+  reviewer_notes: string | null
+  verified_at: string | null
+  profiles: VerificationSystemProfile[]
+  components: VerificationSystemComponent[]
+  colours: VerificationSystemColour[]
+}
+
+export type ManufacturerVerificationResult =
+  | { ok: true; manufacturer: ManufacturerInfo; systems: VerificationSystem[] }
+  | { ok: false; error: string }
+
+export async function getManufacturerVerificationData(
+  manufacturerId: string,
+): Promise<ManufacturerVerificationResult> {
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const [mfrResult, systemsResult] = await Promise.all([
+    c.supabase
+      .from('data_studio_manufacturers')
+      .select('id, name, slug, status, description, website_url')
+      .eq('id', manufacturerId)
+      .single(),
+    c.supabase
+      .from('staged_systems')
+      .select(
+        'id, name, product_code, category, subcategory, description, hero_image_url, ' +
+        'australian_made, bal_rating, fire_rating, acoustic_rating, moisture_resistant, ' +
+        'structural_grade, website_url, source_url, install_guide_url, tech_data_url, ' +
+        'notes, verification_status, reviewer_notes, verified_at',
+      )
+      .eq('manufacturer_id', manufacturerId)
+      .order('sort_order')
+      .limit(100),
+  ])
+
+  if (mfrResult.error || !mfrResult.data) {
+    return { ok: false, error: mfrResult.error?.message ?? 'Manufacturer not found.' }
+  }
+  if (systemsResult.error) {
+    return { ok: false, error: `Failed to load systems: ${systemsResult.error.message}` }
+  }
+
+  const m = mfrResult.data as {
+    id: string; name: string; slug: string; status: string
+    description: string | null; website_url: string | null
+  }
+
+  type SysRow = {
+    id: string; name: string; product_code: string | null
+    category: string | null; subcategory: string | null; description: string | null
+    hero_image_url: string | null; australian_made: boolean | null
+    bal_rating: string | null; fire_rating: string | null
+    acoustic_rating: string | null; moisture_resistant: boolean | null
+    structural_grade: string | null; website_url: string | null
+    source_url: string | null; install_guide_url: string | null
+    tech_data_url: string | null; notes: string | null
+    verification_status: string; reviewer_notes: string | null
+    verified_at: string | null
+  }
+
+  const systemRows = (systemsResult.data ?? []) as unknown as SysRow[]
+  const systemIds = systemRows.map((s) => s.id)
+
+  if (systemIds.length === 0) {
+    return {
+      ok: true,
+      manufacturer: {
+        id: m.id, name: m.name, slug: m.slug, status: m.status,
+        description: m.description, websiteUrl: m.website_url,
+      },
+      systems: [],
+    }
+  }
+
+  const [profilesResult, coloursResult, sysComponentsResult] = await Promise.all([
+    c.supabase
+      .from('staged_system_profiles')
+      .select(
+        'id, staged_system_id, product_code, profile_name, dimensions, ' +
+        'length_mm, height_mm, width_mm, thickness_mm, uom, ' +
+        'supplier_pack_qty, supplier_pack_uom, sort_order',
+      )
+      .in('staged_system_id', systemIds)
+      .order('sort_order'),
+    c.supabase
+      .from('staged_system_colours')
+      .select('staged_system_id, colour_name, sku_suffix, is_stocked')
+      .in('staged_system_id', systemIds)
+      .order('sort_order'),
+    c.supabase
+      .from('staged_system_components')
+      .select(
+        'staged_system_id, staged_components(sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order)',
+      )
+      .in('staged_system_id', systemIds),
+  ])
+
+  type ProfileRow = VerificationSystemProfile & { staged_system_id: string }
+  type ColourRow  = VerificationSystemColour  & { staged_system_id: string }
+  type CompLink   = { staged_system_id: string; staged_components: VerificationSystemComponent | VerificationSystemComponent[] | null }
+
+  const profilesMap  = new Map<string, VerificationSystemProfile[]>()
+  const coloursMap   = new Map<string, VerificationSystemColour[]>()
+  const componentsMap = new Map<string, VerificationSystemComponent[]>()
+
+  for (const r of (profilesResult.data ?? []) as unknown as ProfileRow[]) {
+    const { staged_system_id, ...profile } = r
+    const list = profilesMap.get(staged_system_id) ?? []
+    list.push(profile)
+    profilesMap.set(staged_system_id, list)
+  }
+
+  for (const r of (coloursResult.data ?? []) as ColourRow[]) {
+    const { staged_system_id, ...colour } = r
+    const list = coloursMap.get(staged_system_id) ?? []
+    list.push(colour)
+    coloursMap.set(staged_system_id, list)
+  }
+
+  for (const r of ((sysComponentsResult.data as unknown as CompLink[]) ?? [])) {
+    if (!r.staged_components) continue
+    const comp = Array.isArray(r.staged_components) ? r.staged_components[0] : r.staged_components
+    if (!comp) continue
+    const list = componentsMap.get(r.staged_system_id) ?? []
+    list.push(comp)
+    componentsMap.set(r.staged_system_id, list)
+  }
+
+  const systems: VerificationSystem[] = systemRows.map((s) => ({
+    ...s,
+    profiles:   profilesMap.get(s.id)   ?? [],
+    colours:    coloursMap.get(s.id)    ?? [],
+    components: componentsMap.get(s.id) ?? [],
+  }))
+
+  return {
+    ok: true,
+    manufacturer: {
+      id: m.id, name: m.name, slug: m.slug, status: m.status,
+      description: m.description, websiteUrl: m.website_url,
+    },
+    systems,
+  }
+}
+
+// ============================================================
 // getPortalData
 // Single query set for the manufacturer portal dashboard.
 // Returns manufacturer info, documents (catalogues), and
@@ -560,12 +760,8 @@ export async function getPortalData(
     ok: true,
     data: {
       manufacturer: {
-        id: m.id,
-        name: m.name,
-        slug: m.slug,
-        status: m.status,
-        description: m.description,
-        websiteUrl: m.website_url,
+        id: m.id, name: m.name, slug: m.slug, status: m.status,
+        description: m.description, websiteUrl: m.website_url,
       },
       documents,
       systems,

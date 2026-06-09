@@ -318,7 +318,7 @@ def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, int
             if provider == "openai":
                 response = client.chat.completions.create(
                     model=client._model,
-                    max_completion_tokens=32000,
+                    max_completion_tokens=16000,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -594,7 +594,7 @@ def build_plan(manufacturer_id, all_systems, all_profiles, all_colours, all_comp
     return {
         "stagedSystems": [clean_record(s, SYSTEM_FIELDS) for s in all_systems],
         "stagedSystemProfiles": [clean_record(p, PROFILE_FIELDS) for p in all_profiles],
-        "stagedSystemColours": [clean_record(c, COLOUR_FIELDS) for c in all_colours],
+        "stagedSystemColours": [clean_record(c, COLOUR_FIELDS) for c in all_colours if c.get("colour_name")],
         "stagedComponents": [clean_record(c, COMPONENT_FIELDS) for c in all_components],
         "stagedSystemComponents": [clean_record(lnk, LINK_FIELDS) for lnk in all_links],
         "fieldVerifications": [],

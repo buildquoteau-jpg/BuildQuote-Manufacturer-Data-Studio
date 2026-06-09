@@ -1,56 +1,9 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
-import {
-  resolveWorkspaceContext,
-  getManufacturerReviewData,
-} from '@/lib/studio-manufacturer/workspace'
+import { resolveWorkspaceContext, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
-import type { StatusCount } from '@/lib/studio-manufacturer/workspace'
+import { VerificationGrid } from './VerificationGrid'
 
-const STATUS_COLOUR: Record<string, string> = {
-  approved:          '#166534',
-  in_review:         '#92400e',
-  pending_review:    'var(--ds-text-muted)',
-  needs_source_check: '#991b1b',
-  // field_verifications statuses
-  pending:           'var(--ds-text-muted)',
-  rejected:          '#991b1b',
-}
-
-function statusColour(status: string): string {
-  return STATUS_COLOUR[status] ?? 'var(--ds-text-muted)'
-}
-
-function StatusPill({ status, count }: { status: string; count: number }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.3rem',
-        background: 'var(--ds-page-bg)',
-        border: '1px solid var(--ds-border-soft)',
-        borderRadius: 4,
-        padding: '0.2rem 0.55rem',
-        fontSize: '0.78rem',
-        color: statusColour(status),
-        fontWeight: 600,
-      }}
-    >
-      {count} <span style={{ fontWeight: 400, opacity: 0.75 }}>{status.replace(/_/g, ' ')}</span>
-    </span>
-  )
-}
-
-function StatusBar({ groups }: { groups: StatusCount[] }) {
-  if (groups.length === 0) return null
-  return (
-    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
-      {groups.map((g) => (
-        <StatusPill key={g.status} status={g.status} count={g.count} />
-      ))}
-    </div>
-  )
-}
+export const dynamic = 'force-dynamic'
 
 export default async function ManufacturerReviewPage() {
   const session = await getStudioSession()
@@ -58,258 +11,94 @@ export default async function ManufacturerReviewPage() {
 
   if (!ctx.found) {
     return (
-      <StudioShell role="manufacturer" subtitle="Review queue">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Review overview</h1>
+      <StudioShell role="manufacturer" subtitle="Verify systems">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Verify your systems</h1>
         <div className="studio-info">
           {ctx.reason === 'admin_no_context'
-            ? 'Admin support access. Select a manufacturer workspace from the admin panel first.'
+            ? 'Admin support access — select a manufacturer workspace from the admin panel first.'
             : 'No manufacturer workspace assigned. Contact BuildQuote admin.'}
         </div>
       </StudioShell>
     )
   }
 
-  const result = await getManufacturerReviewData(ctx.manufacturerId)
+  const result = await getManufacturerVerificationData(ctx.manufacturerId)
 
   if (!result.ok) {
     return (
-      <StudioShell role="manufacturer" subtitle="Review queue">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Review overview</h1>
-        <div className="studio-warn">Could not load review data: {result.error}</div>
+      <StudioShell role="manufacturer" subtitle="Verify systems">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Verify your systems</h1>
+        <div className="studio-warn">Could not load systems: {result.error}</div>
       </StudioShell>
     )
   }
 
-  const { data } = result
+  const { manufacturer, systems } = result
+  const verifiedCount = systems.filter(s => s.verification_status === 'manufacturer_verified').length
+  const inReviewCount = systems.filter(s => s.verification_status === 'in_review').length
+  const pendingCount  = systems.filter(s => s.verification_status === 'pending_review').length
 
   return (
-    <StudioShell role="manufacturer" subtitle="Review queue">
-      <h1 style={{ fontSize: '1.25rem', marginBottom: '0.35rem' }}>Review overview</h1>
-      <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-        Read-only snapshot of extracted records awaiting human verification.
-        Editing and approval controls come later.
-      </p>
-
-      {/* Summary counts */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-          gap: '0.65rem',
-          marginBottom: '1.5rem',
-        }}
-      >
-        {[
-          { label: 'Systems', value: data.systemCount },
-          { label: 'Components', value: data.componentCount },
-          { label: 'Profiles', value: data.profileCount },
-          { label: 'Colours', value: data.colourCount },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            style={{
-              background: 'var(--ds-card-bg)',
-              border: '1px solid var(--ds-border-soft)',
-              borderRadius: 8,
-              padding: '0.8rem 1rem',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '1.4rem',
-                fontWeight: 700,
-                color: 'var(--ds-navy)',
-                marginBottom: '0.1rem',
-              }}
-            >
-              {stat.value}
-            </div>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--ds-text-sub)' }}>
-              {stat.label}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Systems section */}
-      <div className="studio-section" style={{ marginTop: 0 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginBottom: '0.6rem',
-            paddingBottom: '0.4rem',
-            borderBottom: '1px solid var(--ds-border-soft)',
-          }}
-        >
-          <span style={{ fontSize: '1rem' }}>🏗</span>
-          <span
-            className="studio-section-heading"
-            style={{ margin: 0, border: 'none', padding: 0 }}
-          >
-            Systems
-          </span>
-          <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--ds-text-faint)' }}>
-            {data.systemCount} staged
+    <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Verify systems`}>
+      {/* Header */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+          <h1 style={{ fontSize: '1.25rem' }}>Verify your systems</h1>
+          <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-faint)' }}>
+            {systems.length} system{systems.length !== 1 ? 's' : ''}
           </span>
         </div>
+        <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 0.9rem' }}>
+          Review each product system card below — check every field, correct errors, and mark the card verified when you are happy with it.
+          Verified cards are reviewed by BuildQuote before publishing.
+        </p>
 
-        {data.systemStatusGroups.length > 0 && (
-          <StatusBar groups={data.systemStatusGroups} />
-        )}
-
-        {data.systems.length === 0 ? (
-          <p
-            style={{
-              fontSize: '0.875rem',
-              color: 'var(--ds-text-muted)',
-              marginTop: '0.75rem',
-            }}
-          >
-            No staged systems yet.
-          </p>
-        ) : (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.4rem',
-              marginTop: '0.65rem',
-            }}
-          >
-            {data.systems.map((sys) => (
-              <div
-                key={sys.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: 'var(--ds-card-bg)',
-                  border: '1px solid var(--ds-border-soft)',
-                  borderRadius: 6,
-                  padding: '0.6rem 0.9rem',
-                  gap: '0.5rem',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--ds-text)' }}>
-                    {sys.name}
-                  </span>
-                  {sys.category && (
-                    <span
-                      style={{
-                        fontSize: '0.78rem',
-                        color: 'var(--ds-text-faint)',
-                        marginLeft: '0.4rem',
-                      }}
-                    >
-                      · {sys.category}
-                    </span>
-                  )}
-                </div>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    color: statusColour(sys.verificationStatus),
-                    fontWeight: 600,
-                  }}
-                >
-                  {sys.verificationStatus.replace(/_/g, ' ')}
-                </span>
+        {/* Progress bar */}
+        {systems.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180, maxWidth: 340 }}>
+              <div style={{ height: 6, background: 'var(--ds-border)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.round((verifiedCount / systems.length) * 100)}%`,
+                  background: '#16a34a',
+                  borderRadius: 99,
+                  transition: 'width 0.4s ease',
+                }} />
               </div>
-            ))}
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.78rem', flexWrap: 'wrap' }}>
+              {verifiedCount > 0 && (
+                <span style={{ color: '#16a34a', fontWeight: 600 }}>
+                  {verifiedCount} verified
+                </span>
+              )}
+              {inReviewCount > 0 && (
+                <span style={{ color: '#d97706', fontWeight: 600 }}>
+                  {inReviewCount} in review
+                </span>
+              )}
+              {pendingCount > 0 && (
+                <span style={{ color: 'var(--ds-text-faint)', fontWeight: 600 }}>
+                  {pendingCount} not started
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Components section */}
-      <div className="studio-section">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginBottom: '0.6rem',
-            paddingBottom: '0.4rem',
-            borderBottom: '1px solid var(--ds-border-soft)',
-          }}
-        >
-          <span style={{ fontSize: '1rem' }}>🔩</span>
-          <span
-            className="studio-section-heading"
-            style={{ margin: 0, border: 'none', padding: 0 }}
-          >
-            Components / Accessories
-          </span>
-          <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--ds-text-faint)' }}>
-            {data.componentCount} staged
-          </span>
+      {systems.length === 0 ? (
+        <div className="studio-info">
+          No staged systems found for your workspace yet. Contact BuildQuote admin if you expect to see systems here.
         </div>
-
-        {data.componentStatusGroups.length > 0 && (
-          <StatusBar groups={data.componentStatusGroups} />
-        )}
-
-        {data.componentCount === 0 && (
-          <p
-            style={{
-              fontSize: '0.875rem',
-              color: 'var(--ds-text-muted)',
-              marginTop: '0.75rem',
-            }}
-          >
-            No staged components yet.
-          </p>
-        )}
-      </div>
-
-      {/* Profiles & colours summary */}
-      {(data.profileCount > 0 || data.colourCount > 0) && (
-        <div className="studio-section">
-          <div
-            style={{
-              display: 'flex',
-              gap: '1.5rem',
-              flexWrap: 'wrap',
-              fontSize: '0.85rem',
-              color: 'var(--ds-text-sub)',
-            }}
-          >
-            {data.profileCount > 0 && (
-              <span>
-                <span style={{ fontSize: '1rem' }}>📐</span>{' '}
-                <strong>{data.profileCount}</strong> profile variants
-              </span>
-            )}
-            {data.colourCount > 0 && (
-              <span>
-                <span style={{ fontSize: '1rem' }}>🎨</span>{' '}
-                <strong>{data.colourCount}</strong> colour / finish options
-              </span>
-            )}
-          </div>
-        </div>
+      ) : (
+        <VerificationGrid
+          manufacturerId={ctx.manufacturerId}
+          manufacturerName={manufacturer.name}
+          systems={systems}
+        />
       )}
-
-      {/* Footer note */}
-      <div className="studio-section">
-        <div
-          style={{
-            background: 'var(--ds-card-bg)',
-            border: '1px solid var(--ds-border-soft)',
-            borderRadius: 8,
-            padding: '1rem 1.25rem',
-            fontSize: '0.85rem',
-            color: 'var(--ds-text-muted)',
-          }}
-        >
-          Approve / flag / edit controls are not available yet. Once all records are verified,
-          you will be able to mark this workspace as ready for BuildQuote review. Production
-          publish remains BuildQuote-admin gated.
-        </div>
-      </div>
     </StudioShell>
   )
 }
