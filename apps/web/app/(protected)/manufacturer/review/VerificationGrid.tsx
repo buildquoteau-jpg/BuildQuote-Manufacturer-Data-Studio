@@ -1059,6 +1059,34 @@ function ExpandedCardView({
   const [verifyMsg, setVerifyMsg]       = useState<string | null>(null)
   const [verifyErr, setVerifyErr]       = useState<string | null>(null)
 
+  // Resizable panel
+  const [leftWidth, setLeftWidth] = useState(440)
+  const dragging = useRef(false)
+  const dragStart = useRef({ x: 0, width: 440 })
+
+  function onDragHandleMouseDown(e: React.MouseEvent) {
+    dragging.current = true
+    dragStart.current = { x: e.clientX, width: leftWidth }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    function onMouseMove(ev: MouseEvent) {
+      if (!dragging.current) return
+      const delta = ev.clientX - dragStart.current.x
+      const next = Math.min(680, Math.max(280, dragStart.current.width + delta))
+      setLeftWidth(next)
+    }
+    function onMouseUp() {
+      dragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }
+
   // Panel state for add-forms
   const [showAddProfile,   setShowAddProfile]   = useState(false)
   const [showAddColour,    setShowAddColour]     = useState(false)
@@ -1217,14 +1245,41 @@ function ExpandedCardView({
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#9ca3af', padding: '4px', lineHeight: 1 }}>×</button>
         </div>
 
-        {/* Body — two columns */}
+        {/* Body — two columns (resizable) */}
         <div style={{ flex: 1, display: 'flex', gap: 0, overflow: 'hidden' }}>
           {/* Left: system card preview */}
-          <div style={{ flex: '0 0 440px', minWidth: '320px', maxWidth: '520px', overflowY: 'auto', padding: '20px', background: '#f0f4f8', borderRight: '1px solid #e5e7eb' }}>
+          <div style={{ flex: `0 0 ${leftWidth}px`, minWidth: '280px', maxWidth: '680px', overflowY: 'auto', padding: '20px', background: '#f0f4f8' }}>
             <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
               Final card preview
             </div>
             <SystemCard data={cardData} />
+          </div>
+
+          {/* Drag handle */}
+          <div
+            onMouseDown={onDragHandleMouseDown}
+            style={{
+              width: '6px', flexShrink: 0, cursor: 'col-resize',
+              background: 'transparent',
+              borderLeft: '1px solid #e5e7eb',
+              borderRight: '1px solid #e5e7eb',
+              position: 'relative',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#cbd5e1' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+            title="Drag to resize"
+          >
+            {/* Grip dots */}
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex', flexDirection: 'column', gap: '4px',
+            }}>
+              {[0,1,2].map(i => (
+                <div key={i} style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#94a3b8' }} />
+              ))}
+            </div>
           </div>
 
           {/* Right: field editor */}
