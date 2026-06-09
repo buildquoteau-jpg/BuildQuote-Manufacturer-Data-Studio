@@ -16,11 +16,11 @@ const REVIEWER_NAV: NavItem[] = [
 ]
 
 const MFR_NAV: NavItem[] = [
-  { label: 'Dashboard', href: '/manufacturer/dashboard' },
-  { label: 'Documents', href: '/manufacturer/documents' },
-  { label: 'Review', href: '/manufacturer/review' },
-  { label: 'Preview', href: '/manufacturer/preview' },
-  { label: 'Help', href: '/manufacturer/help' },
+  { label: 'Dashboard',       href: '/manufacturer/dashboard' },
+  { label: 'Documents',       href: '/manufacturer/documents' },
+  { label: 'Verify systems',  href: '/manufacturer/review' },
+  { label: 'Showroom',        href: '/studio/showroom' },
+  { label: 'Help',            href: '/manufacturer/help' },
 ]
 
 const DASHBOARD_NAV: NavItem[] = [
