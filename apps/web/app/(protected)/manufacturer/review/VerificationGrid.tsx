@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useCallback, useRef } from 'react'
+import { useState, useEffect, useTransition, useCallback, useRef } from 'react'
 import { SystemCard } from '@/components/system-card/SystemCard'
 import type { SystemCardData } from '@/components/system-card/SystemCard'
 import type { VerificationSystem, VerificationSystemProfile, VerificationSystemColour, VerificationSystemComponent } from '@/lib/studio-manufacturer/workspace'
@@ -1212,11 +1212,14 @@ function ExpandedCardView({
   const isVerified = system.verification_status === 'manufacturer_verified'
 
   // Mark system in_review when opened
-  useState(() => {
-    if (system.verification_status === 'pending_review') {
-      setSystemInReview(system.id, manufacturerId).catch(() => {})
+  useEffect(() => {
+    if (initialSystem.verification_status === 'pending_review') {
+      setSystemInReview(initialSystem.id, manufacturerId).then((res) => {
+        if (res.ok) onStatusChange(initialSystem.id, 'in_review', null)
+      }).catch(() => {})
     }
-  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function handleFieldChange(fieldName: string, state: FieldState | null) {
     setFieldStates(prev => {
