@@ -1161,12 +1161,14 @@ function ExpandedCardView({
   manufacturerName,
   onClose,
   onStatusChange,
+  onSystemFieldUpdate,
 }: {
   system: VerificationSystem
   manufacturerId: string
   manufacturerName: string
   onClose: () => void
   onStatusChange: (systemId: string, newStatus: string, reviewerNotes: string | null) => void
+  onSystemFieldUpdate: (systemId: string, fieldName: string, value: string) => void
 }) {
   const [system, setSystem] = useState(initialSystem)
   const [fieldStates, setFieldStates]   = useState<FieldStateMap>({})
@@ -1227,6 +1229,10 @@ function ExpandedCardView({
       if (state === null) { const next = { ...prev }; delete next[fieldName]; return next }
       return { ...prev, [fieldName]: state }
     })
+    if (state?.status === 'edited' && state.verifiedValue !== null) {
+      setSystem(prev => ({ ...prev, [fieldName]: state.verifiedValue }))
+      onSystemFieldUpdate(system.id, fieldName, state.verifiedValue)
+    }
   }
 
   async function persistNotes() {
@@ -1628,6 +1634,12 @@ export function VerificationGrid({
     ))
   }
 
+  function handleSystemFieldUpdate(systemId: string, fieldName: string, value: string) {
+    setSystems(prev => prev.map(s =>
+      s.id === systemId ? { ...s, [fieldName]: value } : s,
+    ))
+  }
+
   const statusOrder = { pending_review: 0, in_review: 1, manufacturer_verified: 2 }
   const sorted = [...systems].sort((a, b) =>
     (statusOrder[a.verification_status as keyof typeof statusOrder] ?? 0) -
@@ -1678,6 +1690,7 @@ export function VerificationGrid({
           manufacturerName={manufacturerName}
           onClose={() => setExpandedId(null)}
           onStatusChange={handleStatusChange}
+          onSystemFieldUpdate={handleSystemFieldUpdate}
         />
       )}
     </>
