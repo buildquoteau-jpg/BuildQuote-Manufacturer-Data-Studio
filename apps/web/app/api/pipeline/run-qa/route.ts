@@ -108,14 +108,18 @@ Compare what was extracted vs what the hints file says should exist. Respond wit
       generatedAt: new Date().toISOString(),
     }
 
-    // Persist report to a local file for later retrieval
-    const reportDir = path.join(repoRoot, '.local', 'qa-reports')
-    await fs.mkdir(reportDir, { recursive: true })
-    await fs.writeFile(
-      path.join(reportDir, `${slug}_latest.json`),
-      JSON.stringify(report, null, 2),
-      'utf-8',
-    )
+    // Persist report locally if filesystem is writable (not available on Vercel)
+    try {
+      const reportDir = path.join(repoRoot, '.local', 'qa-reports')
+      await fs.mkdir(reportDir, { recursive: true })
+      await fs.writeFile(
+        path.join(reportDir, `${slug}_latest.json`),
+        JSON.stringify(report, null, 2),
+        'utf-8',
+      )
+    } catch {
+      // read-only filesystem (Vercel) — skip local write
+    }
 
     return NextResponse.json({ ok: true, report })
   } catch (err: any) {
