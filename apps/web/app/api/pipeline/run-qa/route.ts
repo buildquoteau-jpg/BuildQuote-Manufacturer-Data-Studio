@@ -64,21 +64,18 @@ Components (${components?.length ?? 0} total, showing first 30):
 ${componentSummary}
 
 ## Your task:
-Compare what was extracted vs what the hints file says should exist. Produce a QA report in this EXACT JSON format (respond with only valid JSON, no markdown wrapper):
+Compare what was extracted vs what the hints file says should exist. Respond with ONLY valid JSON — no markdown fences, no prose, no rawMarkdown field. Use this exact shape:
 
 {
   "overallScore": <integer 1-10>,
-  "summary": "<2-3 sentence overview of extraction quality>",
-  "missingSystemsFromHints": ["<system name>", ...],
-  "systemsWithNoProfiles": ["<system name>", ...],
-  "systemsWithNoComponents": ["<system name>", ...],
-  "duplicateNames": ["<system name>", ...],
-  "reparseSuggestions": [
-    { "system": "<name>", "reason": "<why it needs reparsing>" }
-  ],
-  "hintsAdjustmentSuggested": <true|false>,
-  "hintsAdjustmentNotes": "<specific suggestions to loosen or fix the hints file, or empty string>",
-  "rawMarkdown": "<full human-readable report in markdown>"
+  "summary": "<2-3 sentence overview>",
+  "missingSystemsFromHints": ["<system name>"],
+  "systemsWithNoProfiles": ["<system name>"],
+  "systemsWithNoComponents": ["<system name>"],
+  "duplicateNames": ["<system name>"],
+  "reparseSuggestions": [{ "system": "<name>", "reason": "<why>" }],
+  "hintsAdjustmentSuggested": true,
+  "hintsAdjustmentNotes": "<suggestions or empty string>"
 }`
 
   try {
@@ -89,34 +86,25 @@ Compare what was extracted vs what the hints file says should exist. Produce a Q
     })
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '{}'
-    let reportData: any = {}
-    try {
-      reportData = JSON.parse(text)
-    } catch {
-      // rawMarkdown inside JSON often contains unescaped quotes — extract fields individually
-      const extract = (key: string) => {
-        const m = text.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`))
-        return m ? m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : ''
-      }
-      const extractNum = (key: string) => { const m = text.match(new RegExp(`"${key}"\\s*:\\s*(\\d+)`)); return m ? parseInt(m[1]) : 5 }
-      const extractBool = (key: string) => { const m = text.match(new RegExp(`"${key}"\\s*:\\s*(true|false)`)); return m ? m[1] === 'true' : false }
-      const extractArr = (key: string): string[] => { const m = text.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*?)\\]`)); if (!m) return []; return [...m[1].matchAll(/"([^"]*)"/g)].map(x => x[1]) }
-      reportData = {
-        overallScore: extractNum('overallScore'),
-        summary: extract('summary'),
-        missingSystemsFromHints: extractArr('missingSystemsFromHints'),
-        systemsWithNoProfiles: extractArr('systemsWithNoProfiles'),
-        systemsWithNoComponents: extractArr('systemsWithNoComponents'),
-        duplicateNames: extractArr('duplicateNames'),
-        reparseSuggestions: [],
-        hintsAdjustmentSuggested: extractBool('hintsAdjustmentSuggested'),
-        hintsAdjustmentNotes: extract('hintsAdjustmentNotes'),
-        rawMarkdown: extract('rawMarkdown') || text,
-      }
-    }
+    // Strip any accidental markdown fences before parsing
+    const cleaned = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()
+    const reportData: any = JSON.parse(cleaned)
+
+    // Build rawMarkdown server-side so Claude never has to embed it in JSON
+    const missing = (reportData.missingSystemsFromHints ?? []).map((s: string) => `- ${s}`).join('\n')
+    const reparse = (reportData.reparseSuggestions ?? []).map((r: any) => `- **${r.system}**: ${r.reason}`).join('\n')
+    const rawMarkdown = [
+      `## QA Report — ${manufacturerName}`,
+      `**Score:** ${reportData.overallScore}/10`,
+      `\n${reportData.summary}`,
+      missing ? `\n### Missing systems\n${missing}` : '',
+      reparse ? `\n### Reparse suggestions\n${reparse}` : '',
+      reportData.hintsAdjustmentNotes ? `\n### Hints adjustments\n${reportData.hintsAdjustmentNotes}` : '',
+    ].filter(Boolean).join('\n')
 
     const report = {
       ...reportData,
+      rawMarkdown,
       generatedAt: new Date().toISOString(),
     }
 
