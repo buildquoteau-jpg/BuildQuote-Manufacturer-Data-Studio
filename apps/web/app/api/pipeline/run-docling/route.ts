@@ -85,22 +85,34 @@ export async function POST(req: NextRequest) {
   const outputMd = path.join(outputDir, 'output.md')
   const mdContent = await fs.readFile(outputMd, 'utf-8').catch(() => '')
 
-  // Count chunks from markers
-  const chunkMatches = mdContent.match(/<!-- chunk \d+:/g) ?? []
-  const chunkCount = chunkMatches.length
-  const pageMatches = mdContent.match(/pages (\d+)-(\d+)/g) ?? []
-  const pageCount = pageMatches.length > 0
-    ? parseInt(pageMatches[pageMatches.length - 1].split('-')[1])
-    : 0
+  // Parse per-chunk detail from markers: <!-- chunk N: pages X-Y -->
+  const chunkHeaderRegex = /<!-- chunk (\d+): pages (\d+)-(\d+) -->/g
+  const chunks: { index: number; startPage: number; endPage: number; charCount: number; status: 'ok' | 'empty' | 'short' }[] = []
+  const sections = mdContent.split(/(?=<!-- chunk \d+: pages \d+-\d+ -->)/)
+
+  for (const section of sections) {
+    const match = /<!-- chunk (\d+): pages (\d+)-(\d+) -->/.exec(section)
+    if (!match) continue
+    const idx = parseInt(match[1])
+    const startPage = parseInt(match[2])
+    const endPage = parseInt(match[3])
+    const body = section.replace(/<!-- chunk \d+: pages \d+-\d+ -->/, '').trim()
+    const charCount = body.length
+    const status = charCount === 0 ? 'empty' : charCount < 200 ? 'short' : 'ok'
+    chunks.push({ index: idx, startPage, endPage, charCount, status })
+  }
+
+  const chunkCount = chunks.length
+  const pageCount = chunks.length > 0 ? chunks[chunks.length - 1].endPage : 0
+  const failedChunks = chunks.filter(c => c.status !== 'ok')
 
   // Store output path in a sidecar index file for the parser to pick up
   const indexPath = path.join(repoRoot, '.local', 'docling-index.json')
   let index: Record<string, any> = {}
   try { index = JSON.parse(await fs.readFile(indexPath, 'utf-8')) } catch {}
-  index[documentId] = { outputDir, outputMdPath: outputMd, chunkCount, pageCount, extractedAt: new Date().toISOString() }
+  index[documentId] = { outputDir, outputMdPath: outputMd, chunkCount, pageCount, chunks, extractedAt: new Date().toISOString() }
   await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf-8')
 
-  // Update document status
   await supabase
     .from('source_documents')
     .update({ status: 'extracted' } as any)
@@ -112,6 +124,7 @@ export async function POST(req: NextRequest) {
     outputMdPath: outputMd,
     chunkCount,
     pageCount,
-    preview: mdContent.slice(0, 800),
+    chunks,
+    failedChunks,
   })
 }
