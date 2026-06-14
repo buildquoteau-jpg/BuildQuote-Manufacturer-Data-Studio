@@ -215,7 +215,8 @@ CREATE TABLE public.staged_system_profiles (
     uom                 TEXT,
     image_url           TEXT,
     website_url         TEXT,
-    extracted_at        TIMESTAMPTZ
+    extracted_at        TIMESTAMPTZ,
+    procurement_route   TEXT
 );
 
 -- ============================================================
@@ -266,7 +267,8 @@ CREATE TABLE public.staged_components (
     parser_notes              JSONB,
     image_url                 TEXT,
     website_url               TEXT,
-    extracted_at              TIMESTAMPTZ
+    extracted_at              TIMESTAMPTZ,
+    procurement_route         TEXT
 );
 
 -- ============================================================

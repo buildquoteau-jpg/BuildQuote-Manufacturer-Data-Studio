@@ -28,6 +28,7 @@ export interface SystemComponent {
   supplier_pack_qty: number | null
   supplier_pack_uom: string | null
   sort_order: number | null
+  procurement_route: 'specialist_supplier' | 'trade_merchant' | null
 }
 
 export interface SystemColour {
@@ -420,6 +421,58 @@ function ProfilesSection({
 
 // ─── Components section ───────────────────────────────────────────────────────
 
+const ROUTE_LABELS: Record<string, string> = {
+  specialist_supplier: 'Specialist supplier',
+  trade_merchant: 'Trade merchant',
+}
+
+function ComponentRow({ c, i, selected, onToggle }: {
+  c: SystemComponent
+  i: number
+  selected: Set<number>
+  onToggle: (idx: number) => void
+}) {
+  const isSel = selected.has(i)
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(i)}
+      style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: '10px', width: '100%', textAlign: 'left',
+        padding: '12px 12px',
+        background: isSel ? '#eef6fa' : '#f9fafb',
+        border: `1.5px solid ${isSel ? '#185D7A' : '#e5e7eb'}`,
+        borderRadius: '10px', cursor: 'pointer', transition: 'all 0.12s',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: '14px', fontWeight: isSel ? 700 : 600,
+          color: isSel ? '#0f2d3d' : '#111827', lineHeight: 1.3,
+        }}>
+          {c.name}
+        </div>
+        <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+          {c.description && (
+            <span style={{ fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{c.description}</span>
+          )}
+          {c.sku && (
+            <span style={{
+              fontSize: '11px', fontFamily: 'monospace', color: '#4b5563',
+              background: isSel ? '#d4ecf5' : '#f3f4f6',
+              padding: '1px 5px', borderRadius: '4px',
+            }}>
+              {c.sku}
+            </span>
+          )}
+        </div>
+      </div>
+      <Checkbox checked={isSel} />
+    </button>
+  )
+}
+
 function ComponentsSection({
   components, selected, onToggle,
 }: {
@@ -429,6 +482,24 @@ function ComponentsSection({
 }) {
   const [open, setOpen] = useState(false)
   if (components.length === 0) return null
+
+  const routes = new Set(components.map(c => c.procurement_route).filter(Boolean))
+  const isSplit = routes.has('specialist_supplier') && routes.has('trade_merchant')
+
+  const groups: { route: string | null; label: string; items: { c: SystemComponent; i: number }[] }[] = isSplit
+    ? [
+        {
+          route: 'specialist_supplier',
+          label: ROUTE_LABELS.specialist_supplier,
+          items: components.map((c, i) => ({ c, i })).filter(({ c }) => c.procurement_route === 'specialist_supplier'),
+        },
+        {
+          route: 'trade_merchant',
+          label: ROUTE_LABELS.trade_merchant,
+          items: components.map((c, i) => ({ c, i })).filter(({ c }) => c.procurement_route === 'trade_merchant'),
+        },
+      ].filter(g => g.items.length > 0)
+    : [{ route: null, label: '', items: components.map((c, i) => ({ c, i })) }]
 
   return (
     <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
@@ -454,49 +525,43 @@ function ComponentsSection({
       </button>
 
       {open && (
-        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {components.map((c, i) => {
-            const isSel = selected.has(i)
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => onToggle(i)}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-                  gap: '10px', width: '100%', textAlign: 'left',
-                  padding: '12px 12px',
-                  background: isSel ? '#eef6fa' : '#f9fafb',
-                  border: `1.5px solid ${isSel ? '#185D7A' : '#e5e7eb'}`,
-                  borderRadius: '10px', cursor: 'pointer', transition: 'all 0.12s',
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: '14px', fontWeight: isSel ? 700 : 600,
-                    color: isSel ? '#0f2d3d' : '#111827', lineHeight: 1.3,
-                  }}>
-                    {c.name}
-                  </div>
-                  <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                    {c.description && (
-                      <span style={{ fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{c.description}</span>
-                    )}
-                    {c.sku && (
-                      <span style={{
-                        fontSize: '11px', fontFamily: 'monospace', color: '#4b5563',
-                        background: isSel ? '#d4ecf5' : '#f3f4f6',
-                        padding: '1px 5px', borderRadius: '4px',
-                      }}>
-                        {c.sku}
-                      </span>
-                    )}
-                  </div>
+        <div style={{ marginTop: '10px' }}>
+          {isSplit && (
+            <div style={{
+              marginBottom: '12px',
+              padding: '10px 14px',
+              background: '#fffbeb',
+              border: '1.5px solid #fde68a',
+              borderRadius: '10px',
+              fontSize: '12px',
+              color: '#92400e',
+              fontWeight: 600,
+              lineHeight: 1.5,
+            }}>
+              This system's components span 2 supplier types. Your RFQ will be split accordingly.
+            </div>
+          )}
+
+          {groups.map(({ route, label, items }) => (
+            <div key={route ?? 'all'}>
+              {isSplit && (
+                <div style={{
+                  fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: '#6b7280',
+                  marginBottom: '6px', marginTop: '6px',
+                  paddingLeft: '4px',
+                  borderLeft: '3px solid #d1d5db',
+                }}>
+                  {label}
                 </div>
-                <Checkbox checked={isSel} />
-              </button>
-            )
-          })}
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: isSplit ? '10px' : 0 }}>
+                {items.map(({ c, i }) => (
+                  <ComponentRow key={i} c={c} i={i} selected={selected} onToggle={onToggle} />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
