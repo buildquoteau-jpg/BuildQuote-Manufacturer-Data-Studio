@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { logout } from '@/lib/studio-auth/actions'
+import { getStudioSession } from '@/lib/studio-auth/session'
 
 export type StudioRole = 'admin' | 'reviewer' | 'manufacturer' | 'dashboard'
 
@@ -58,9 +59,12 @@ type Props = {
   children: ReactNode
 }
 
-export function StudioShell({ role, subtitle, workspaceName, notice, showPipelineNav, children }: Props) {
+export async function StudioShell({ role, subtitle, workspaceName, notice, showPipelineNav, children }: Props) {
+  const session = await getStudioSession()
+  const isAdmin = session.globalRole === 'buildquote_admin'
   const baseNav = NAV_BY_ROLE[role]
-  const nav = showPipelineNav
+  const showPipeline = showPipelineNav ?? isAdmin
+  const nav = (role === 'manufacturer' && showPipeline)
     ? [...baseNav.filter(n => n.href !== '/manufacturer/help'), { label: 'Pipeline', href: '/manufacturer/pipeline' }, { label: 'Help', href: '/manufacturer/help' }]
     : baseNav
   const badge = BADGE_BY_ROLE[role]
