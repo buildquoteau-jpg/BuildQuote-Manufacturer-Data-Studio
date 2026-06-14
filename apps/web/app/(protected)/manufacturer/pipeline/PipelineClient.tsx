@@ -115,6 +115,8 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
   const [parseStatus, setParseStatus] = useState<StepStatus>('idle')
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
+  const [parseLiveStage, setParseLiveStage] = useState<string | null>(null)
+  const parsePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [qaStatus, setQaStatus] = useState<StepStatus>('idle')
   const [qaError, setQaError] = useState<string | null>(null)
@@ -148,7 +150,10 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
   useEffect(() => { loadQa() }, [loadQa])
 
   // Stop polling on unmount
-  useEffect(() => () => { if (doclingPollRef.current) clearInterval(doclingPollRef.current) }, [])
+  useEffect(() => () => {
+    if (doclingPollRef.current) clearInterval(doclingPollRef.current)
+    if (parsePollRef.current) clearInterval(parsePollRef.current)
+  }, [])
 
   // Reset step results when doc changes
   function selectDoc(id: string) {
@@ -277,19 +282,38 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
     setParseStatus('running')
     setParseResult(null)
     setParseError(null)
+    setParseLiveStage('Queuing job…')
     const res = await fetch('/api/pipeline/run-parser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ manufacturerId, manufacturerName, slug: manufacturerSlug, documentId: selectedDocId, dryRun: false }),
     })
     const data = await res.json()
-    if (!data.ok) {
+    if (!data.ok && !data.jobStarted) {
       setParseError(data.error ?? 'Unknown error')
       setParseStatus('error')
+      setParseLiveStage(null)
       return
     }
-    setParseResult({ systemCount: data.systemCount, profileCount: data.profileCount, componentCount: data.componentCount })
-    setParseStatus('done')
+    // Poll for completion
+    parsePollRef.current = setInterval(async () => {
+      const r = await fetch(`/api/pipeline/parser-status?documentId=${selectedDocId}`)
+      const s = await r.json()
+      if (s.status === 'running') {
+        const stage = s.currentStage === 'stage2' ? 'Stage 2 — components & links…' : s.currentStage === 'stage1' ? 'Stage 1 — systems, profiles, colours…' : 'Running…'
+        setParseLiveStage(stage)
+      } else if (s.status === 'done') {
+        if (parsePollRef.current) { clearInterval(parsePollRef.current); parsePollRef.current = null }
+        setParseLiveStage(null)
+        setParseResult({ systemCount: s.systemCount, profileCount: s.profileCount, componentCount: s.componentCount })
+        setParseStatus('done')
+      } else if (s.status === 'error') {
+        if (parsePollRef.current) { clearInterval(parsePollRef.current); parsePollRef.current = null }
+        setParseLiveStage(null)
+        setParseError(s.error ?? 'Unknown error')
+        setParseStatus('error')
+      }
+    }, 3000)
   }
 
   async function runQa() {
@@ -569,6 +593,9 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
             disabled={doclingStatus !== 'done'}
             disabledReason="Run Docling first"
           >
+            {parseStatus === 'running' && parseLiveStage && (
+              <div style={{ fontSize: '0.85rem', color: '#d97706', fontStyle: 'italic' }}>⟳ {parseLiveStage}</div>
+            )}
             {parseStatus === 'done' && parseResult && (
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <Metric label="Systems" value={parseResult.systemCount} color="green" />

@@ -13,20 +13,19 @@ export async function GET(req: NextRequest) {
 
   const supabase = createStudioServiceClient()
 
-  // Get the most recent docling job for this document
   const { data: job } = await supabase
     .from('pipeline_jobs')
     .select('*')
     .eq('document_id', documentId)
-    .eq('job_type', 'docling')
+    .eq('job_type', 'parser')
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
 
   if (!job) return NextResponse.json({ status: 'idle' })
 
-  const progress = (job.progress as any) ?? {}
   const result = (job.result as any) ?? {}
+  const progress = (job.progress as any) ?? {}
 
   return NextResponse.json({
     status: job.status,
@@ -34,15 +33,10 @@ export async function GET(req: NextRequest) {
     startedAt: job.started_at,
     completedAt: job.completed_at,
     error: job.error_message,
-    // live progress fields (written by worker during run)
-    totalChunks: progress.totalChunks ?? null,
-    totalPages: progress.totalPages ?? null,
-    completedChunks: progress.completedChunks ?? [],
-    currentChunk: progress.currentChunk ?? null,
+    currentStage: progress.currentStage ?? null,
     log: job.log_lines ?? [],
-    // final result fields (written by worker on completion)
-    chunks: result.chunks ?? [],
-    failedChunks: result.failedChunks ?? [],
-    outputDir: result.outputDir ?? null,
+    systemCount: result.systemCount ?? 0,
+    profileCount: result.profileCount ?? 0,
+    componentCount: result.componentCount ?? 0,
   })
 }
