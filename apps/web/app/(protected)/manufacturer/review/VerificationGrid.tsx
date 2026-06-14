@@ -1003,6 +1003,7 @@ function AddComponentForm({
         id: selected.id, name: selected.name, sku: selected.sku,
         description: selected.description, category: null, uom: null,
         supplier_pack_qty: null, supplier_pack_uom: null, sort_order: null,
+        procurement_route: null,
       })
     })
   }
@@ -1019,6 +1020,7 @@ function AddComponentForm({
         id: res.id, name: name.trim(), sku: sku.trim() || null,
         description: desc.trim() || null, category: null, uom: null,
         supplier_pack_qty: null, supplier_pack_uom: null, sort_order: null,
+        procurement_route: null,
       })
     })
   }
@@ -1321,6 +1323,7 @@ function ExpandedCardView({
       sku: c.sku, name: c.name, description: c.description, category: c.category,
       uom: c.uom, supplier_pack_qty: c.supplier_pack_qty,
       supplier_pack_uom: c.supplier_pack_uom, sort_order: c.sort_order,
+      procurement_route: c.procurement_route,
     })),
     colours: system.colours.map(c => ({
       colour_name: c.colour_name, sku_suffix: c.sku_suffix, is_stocked: c.is_stocked,

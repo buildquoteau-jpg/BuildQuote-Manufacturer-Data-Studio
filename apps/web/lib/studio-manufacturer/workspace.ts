@@ -557,6 +557,7 @@ export type VerificationSystemComponent = {
   supplier_pack_qty: number | null
   supplier_pack_uom: string | null
   sort_order: number | null
+  procurement_route: 'specialist_supplier' | 'trade_merchant' | null
 }
 
 export type VerificationSystemColour = {
@@ -679,7 +680,7 @@ export async function getManufacturerVerificationData(
     c.supabase
       .from('staged_system_components')
       .select(
-        'staged_system_id, staged_components(id, sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order)',
+        'staged_system_id, staged_components(id, sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order, procurement_route)',
       )
       .in('staged_system_id', systemIds),
   ])

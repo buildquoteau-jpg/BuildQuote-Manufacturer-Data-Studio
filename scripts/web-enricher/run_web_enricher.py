@@ -226,8 +226,12 @@ def abs_url(href, page_url):
     return None
 
 
-def scrape_product_links(listing_url):
-    """Fetch the products listing page and return [{name, url, slug}]."""
+def scrape_product_links(listing_url, product_path_prefix="/products/"):
+    """Fetch the products listing page and return [{name, url, slug}].
+
+    product_path_prefix: only links whose path contains this string are kept.
+    Pass "/" to accept all same-domain links (e.g. sites using /<slug>/ at root).
+    """
     from bs4 import BeautifulSoup
 
     html = fetch_html(listing_url)
@@ -244,10 +248,13 @@ def scrape_product_links(listing_url):
         href = a["href"]
         if href.startswith("/"):
             href = base + href
-        if "/products/" not in href:
+        if not href.startswith(base):
             continue
-        slug = href.rstrip("/").split("/")[-1]
-        if not slug or slug == "products" or href in seen:
+        path = urlparse(href).path
+        if product_path_prefix != "/" and product_path_prefix not in path:
+            continue
+        slug = path.rstrip("/").split("/")[-1]
+        if not slug or href in seen:
             continue
         seen.add(href)
         links.append({
@@ -471,7 +478,7 @@ def parse_hints_config(hints_text):
     """
     config = {}
 
-    for key in ("base_url", "products_listing_url"):
+    for key in ("base_url", "products_listing_url", "product_path_prefix"):
         m = re.search(rf"^{key}:\s*(.+)$", hints_text, re.MULTILINE)
         if m:
             config[key] = m.group(1).strip()
@@ -604,8 +611,9 @@ def main():
         return
 
     # Scrape the product listing page
+    product_path_prefix = hints_config.get("product_path_prefix", "/products/")
     print(f"\n[enricher] Scraping product listing: {listing_url}")
-    product_links = scrape_product_links(listing_url)
+    product_links = scrape_product_links(listing_url, product_path_prefix=product_path_prefix)
     print(f"[enricher] Found {len(product_links)} product links")
 
     # Split rows: known slug mapping vs needs GPT
