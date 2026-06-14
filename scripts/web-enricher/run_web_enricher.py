@@ -85,7 +85,7 @@ Return this exact JSON (no other text):
 # Target fields
 # ============================================================
 
-TARGET_FIELDS = ("hero_image_url", "website_url", "source_url")
+TARGET_FIELDS = ("hero_image_url", "website_url", "source_url", "install_guide_urls", "tech_data_url")
 
 
 # ============================================================
@@ -335,16 +335,61 @@ def _pick_hero(product_name, candidates):
     return candidates[0]
 
 
+def _extract_pdf_links(soup, page_url):
+    """
+    Find install guide and tech data PDF links on a product page.
+    Returns (install_guide_urls, tech_data_url).
+    install_guide_urls is a list of {label, url} dicts (supports multiple guides).
+    """
+    from urllib.parse import urljoin
+
+    INSTALL_KEYWORDS = ("install", "installation", "fixing guide", "application guide", "how to", "installer")
+    TECH_KEYWORDS    = ("technical", "tech data", "data sheet", "datasheet", "specification", "tds", "sds", "safety data")
+
+    install_guides = []
+    tech_data_url  = None
+
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.lower().endswith(".pdf"):
+            continue
+        full_url = urljoin(page_url, href)
+        label_text = (a.get_text(strip=True) or a.get("title") or "").lower()
+        aria = (a.get("aria-label") or "").lower()
+        text = f"{label_text} {aria} {href.lower()}"
+
+        is_install = any(kw in text for kw in INSTALL_KEYWORDS)
+        is_tech    = any(kw in text for kw in TECH_KEYWORDS)
+
+        if is_install:
+            label = a.get_text(strip=True) or "Installation Guide"
+            install_guides.append({"label": label, "url": full_url})
+        elif is_tech and not tech_data_url:
+            tech_data_url = full_url
+
+    return install_guides or None, tech_data_url
+
+
 def extract_fields_from_page(soup, page_url, product_name="", skip_hero_asset_ids=None):
     """Extract target fields from a parsed product page via BeautifulSoup."""
     result = {
         "hero_image_url": None,
         "website_url": page_url,
         "source_url": page_url,
+        "install_guide_urls": None,
+        "tech_data_url": None,
     }
 
     candidates = _collect_hero_candidates(soup, page_url, skip_hero_asset_ids or [])
     result["hero_image_url"] = _pick_hero(product_name, candidates)
+
+    install_guides, tech_data_url = _extract_pdf_links(soup, page_url)
+    if install_guides:
+        result["install_guide_urls"] = install_guides
+        print(f"    install guides found: {len(install_guides)}")
+    if tech_data_url:
+        result["tech_data_url"] = tech_data_url
+        print(f"    tech data found: {tech_data_url[:60]}...")
 
     return result
 
@@ -461,11 +506,19 @@ def parse_hints_config(hints_text):
 
 def build_patch(row, extracted):
     """Only include fields that are currently null and have a new non-null value."""
-    return {
-        field: extracted[field]
-        for field in TARGET_FIELDS
-        if row.get(field) is None and extracted.get(field)
-    }
+    patch = {}
+    for field in TARGET_FIELDS:
+        current = row.get(field)
+        new_val = extracted.get(field)
+        if not new_val:
+            continue
+        # install_guide_urls is a list — treat empty list as null
+        if isinstance(current, list) and len(current) > 0:
+            continue
+        if current is not None and not isinstance(current, list):
+            continue
+        patch[field] = new_val
+    return patch
 
 
 def print_results_table(results):
