@@ -359,7 +359,7 @@ function generateFixtureSystems(
       structural_grade: null,
       double_sided: null,
       sheet_format: null,
-      install_guide_url: null,
+      install_guide_urls: null,
       tech_data_url: null,
       notes: null,
       sort_order: i,

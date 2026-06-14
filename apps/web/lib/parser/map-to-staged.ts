@@ -85,7 +85,7 @@ export type PlannedStagedSystem = {
   structural_grade: string | null
   double_sided: boolean
   sheet_format: string | null
-  install_guide_url: string | null
+  install_guide_urls: { label: string; url: string }[] | null
   tech_data_url: string | null
   notes: string | null               // migration 007
   sort_order: number
@@ -479,7 +479,7 @@ function planSystem(
       structural_grade: s.structural_grade ?? null,
       double_sided: s.double_sided ?? false,
       sheet_format: s.sheet_format ?? null,
-      install_guide_url: s.install_guide_url ?? null,
+      install_guide_urls: s.install_guide_urls ?? null,
       tech_data_url: s.tech_data_url ?? null,
       notes: s.notes ?? null,
       sort_order: s.sort_order ?? 0,

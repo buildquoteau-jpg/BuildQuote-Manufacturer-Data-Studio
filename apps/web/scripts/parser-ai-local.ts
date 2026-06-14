@@ -201,7 +201,7 @@ Assign sequential keys: "system_0", "system_1" / "profile_0", "profile_1" / "com
   "structural_grade": null,
   "double_sided": null,
   "sheet_format": null,
-  "install_guide_url": null,
+  "install_guide_urls": null,
   "tech_data_url": null,
   "notes": null,
   "sort_order": 0,

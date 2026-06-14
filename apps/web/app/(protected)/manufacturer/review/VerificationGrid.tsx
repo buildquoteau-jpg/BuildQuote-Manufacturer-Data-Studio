@@ -1309,7 +1309,7 @@ function ExpandedCardView({
     australian_made:    system.australian_made,
     notes:              system.notes,
     source_url:         system.source_url,
-    install_guide_url:  system.install_guide_url,
+    install_guide_urls: system.install_guide_urls,
     profiles: system.profiles.map(p => ({
       product_code: p.product_code, profile_name: p.profile_name,
       dimensions: p.dimensions, length_mm: p.length_mm,
@@ -1424,12 +1424,16 @@ function ExpandedCardView({
               <FieldRow {...fieldRowProps('Hero image URL', 'hero_image_url', { isUrl: true })} />
               {system.website_url  && <FieldRow {...fieldRowProps('Manufacturer website', 'website_url', { isUrl: true })} />}
               {system.source_url   && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
-              {system.install_guide_url
-                ? <FieldRow {...fieldRowProps('Install guide URL', 'install_guide_url', { isUrl: true })} />
+              {(system.install_guide_urls ?? []).length > 0
+                ? (system.install_guide_urls ?? []).map((g, i) => (
+                    <FieldRow key={i} {...fieldRowProps(`Install guide${(system.install_guide_urls?.length ?? 0) > 1 ? ` ${i + 1}` : ''} URL`, 'install_guide_urls', { isUrl: true })}
+                      currentValue={g.url}
+                    />
+                  ))
                 : (
                   <FieldRow
-                    label="Install guide URL" fieldName="install_guide_url" currentValue={null}
-                    fieldState={fieldStates['install_guide_url'] ?? null}
+                    label="Install guide URL" fieldName="install_guide_urls" currentValue={null}
+                    fieldState={fieldStates['install_guide_urls'] ?? null}
                     systemId={system.id} manufacturerId={manufacturerId} isUrl
                     onStateChange={handleFieldChange}
                   />

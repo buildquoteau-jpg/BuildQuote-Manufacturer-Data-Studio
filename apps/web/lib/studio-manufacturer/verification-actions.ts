@@ -40,7 +40,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string }
 const STAGED_TEXT_FIELDS = [
   'name', 'category', 'subcategory', 'description',
   'hero_image_url', 'website_url', 'source_url',
-  'install_guide_url', 'tech_data_url',
+  'install_guide_urls', 'tech_data_url',
   'bal_rating', 'fire_rating', 'acoustic_rating', 'structural_grade',
 ] as const
 

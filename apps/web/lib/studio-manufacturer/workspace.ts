@@ -582,7 +582,7 @@ export type VerificationSystem = {
   structural_grade: string | null
   website_url: string | null
   source_url: string | null
-  install_guide_url: string | null
+  install_guide_urls: { label: string; url: string }[] | null
   tech_data_url: string | null
   notes: string | null
   verification_status: string
@@ -614,7 +614,7 @@ export async function getManufacturerVerificationData(
       .select(
         'id, name, product_code, category, subcategory, description, hero_image_url, ' +
         'australian_made, bal_rating, fire_rating, acoustic_rating, moisture_resistant, ' +
-        'structural_grade, website_url, source_url, install_guide_url, tech_data_url, ' +
+        'structural_grade, website_url, source_url, install_guide_urls, tech_data_url, ' +
         'notes, verification_status, reviewer_notes, verified_at',
       )
       .eq('manufacturer_id', manufacturerId)
@@ -641,7 +641,7 @@ export async function getManufacturerVerificationData(
     bal_rating: string | null; fire_rating: string | null
     acoustic_rating: string | null; moisture_resistant: boolean | null
     structural_grade: string | null; website_url: string | null
-    source_url: string | null; install_guide_url: string | null
+    source_url: string | null; install_guide_urls: { label: string; url: string }[] | null
     tech_data_url: string | null; notes: string | null
     verification_status: string; reviewer_notes: string | null
     verified_at: string | null

@@ -43,3 +43,5 @@ supabase/.temp/
 
 # Local extraction artifacts (gitignored — may contain copyrighted catalogue text)
 .local/
+.vercel
+.env*.local
