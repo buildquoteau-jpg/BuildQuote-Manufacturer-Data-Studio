@@ -74,7 +74,30 @@ Extract exactly the following systems. Each named product in the catalogue is a 
 **None.** Products do not come in colour variants. Do not extract colours.
 
 ## Components
-**None.** Individual roll sizes/SKUs and packaging variants are noted in descriptions but should **not** be extracted as separate components. Keep extraction at the system level.
+Components are **other pro clima products explicitly recommended or required** on a system's catalogue page. Only extract a component link when the source page text directly names another pro clima product as required, recommended, or part of the system.
+
+**Critical rules:**
+- NEVER extract a component that has its own catalogue page as a component — it is a system. Every named product in the systems list above is a system, not a component.
+- ONLY extract components where the source text says something like "use with", "required", "recommended with", "part of the system", or lists products under an "accessories" or "system components" heading on that page.
+- Roll sizes, SKU codes, and packaging variants (e.g. "available in 60mm, 100mm") are NOT components — they belong in the system description only.
+
+**Known component relationships to look for:**
+
+| System | Likely components (only if stated on that system's page) |
+|---|---|
+| SOLITEX EXTASANA® | TESCON EXTORA®, TESCON EXTOSEAL®, TESCON® NAIDECK patch, PRESSFIX |
+| SOLITEX EXTASANA ADHERO® | PRESSFIX XL, TESCON EXTOSEAL® |
+| SOLITEX ADHERO® VISTO | ADHERO® VISTO Floor Drain, SOLITEX ADHERO® VISTO strips, TESCON EXTOSEAL® |
+| INTELLO® PLUS | INTELLO® conneX, TESCON® VANA, ORCON® MULTIBOND, INSTAABOX |
+| AEROSANA® VISCONN | AEROFIXX, AEROBOXX, AEROSANA® VISCONN FLEECE |
+| AEROSANA® VISCONN WHITE | AEROFIXX, AEROBOXX |
+| AEROSANA® VISCONN FIBRE | AEROFIXX, AEROBOXX |
+| KAFLEX mono/duo | TESCON® VANA, TESCON EXTORA® |
+| KAFLEX multi | TESCON® VANA, TESCON EXTORA® |
+| KAFLEX post | TESCON® VANA |
+| ROFLEX 20 | TESCON EXTORA®, TESCON® NAIDECK patch |
+| ROFLEX 30/50/100/150/200/250/300 | TESCON EXTORA®, TESCON® NAIDECK patch |
+| INSTAABOX | TESCON® VANA |
 
 ## Product codes (ID codes)
 Products have ID codes (e.g. `1AR04701`, `13323`). Include these in the system `description` or `parser_notes` — they are useful reference but BuildQuote does not have a dedicated product-code field at the system level.
