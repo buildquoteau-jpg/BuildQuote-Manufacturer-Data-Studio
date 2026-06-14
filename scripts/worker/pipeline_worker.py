@@ -38,8 +38,9 @@ from dotenv import load_dotenv
 
 load_dotenv(".env.local")
 
-SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"].rstrip("/")
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+# Worker always talks to production Supabase — that's where Vercel writes jobs
+SUPABASE_URL = os.environ.get("PRODUCTION_SUPABASE_URL", os.environ["NEXT_PUBLIC_SUPABASE_URL"]).rstrip("/")
+SUPABASE_KEY = os.environ.get("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY", os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 WORKER_ID = socket.gethostname()
 POLL_INTERVAL = 4  # seconds between polls
 REPO_ROOT = Path(__file__).parent.parent.parent
