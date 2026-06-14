@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ManufacturerDocument } from '@/lib/studio-manufacturer/workspace'
 
 type Stats = {
@@ -102,6 +102,15 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
   const [doclingResult, setDoclingResult] = useState<DoclingResult | null>(null)
   const [doclingError, setDoclingError] = useState<string | null>(null)
   const [rerunningChunk, setRerunningChunk] = useState<number | null>(null)
+  const [doclingLive, setDoclingLive] = useState<{
+    totalChunks: number | null
+    totalPages: number | null
+    completedChunks: { chunkNo: number; startPage: number; endPage: number }[]
+    currentChunk: { chunkNo: number; startPage: number; endPage: number } | null
+    elapsedSecs: number
+  } | null>(null)
+  const doclingPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const doclingStartRef = useRef<number | null>(null)
 
   const [parseStatus, setParseStatus] = useState<StepStatus>('idle')
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
@@ -138,17 +147,51 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
   useEffect(() => { loadHints() }, [loadHints])
   useEffect(() => { loadQa() }, [loadQa])
 
+  // Stop polling on unmount
+  useEffect(() => () => { if (doclingPollRef.current) clearInterval(doclingPollRef.current) }, [])
+
   // Reset step results when doc changes
   function selectDoc(id: string) {
+    if (doclingPollRef.current) { clearInterval(doclingPollRef.current); doclingPollRef.current = null }
     setSelectedDocId(id)
     setDoclingStatus('idle')
     setDoclingResult(null)
     setDoclingError(null)
+    setDoclingLive(null)
     setParseStatus('idle')
     setParseResult(null)
     setParseError(null)
     setQaStatus('idle')
     setQaError(null)
+  }
+
+  function startDoclingPolling(docId: string) {
+    doclingStartRef.current = Date.now()
+    doclingPollRef.current = setInterval(async () => {
+      const res = await fetch(`/api/pipeline/docling-status?documentId=${docId}`)
+      const data = await res.json()
+      const elapsed = Math.round((Date.now() - (doclingStartRef.current ?? Date.now())) / 1000)
+
+      if (data.status === 'running') {
+        setDoclingLive({
+          totalChunks: data.totalChunks,
+          totalPages: data.totalPages,
+          completedChunks: data.completedChunks ?? [],
+          currentChunk: data.currentChunk,
+          elapsedSecs: elapsed,
+        })
+      } else if (data.status === 'done') {
+        if (doclingPollRef.current) { clearInterval(doclingPollRef.current); doclingPollRef.current = null }
+        setDoclingLive(null)
+        setDoclingResult({ chunkCount: data.totalChunks, pageCount: data.totalPages, chunks: data.chunks ?? [], failedChunks: data.failedChunks ?? [] })
+        setDoclingStatus('done')
+      } else if (data.status === 'error') {
+        if (doclingPollRef.current) { clearInterval(doclingPollRef.current); doclingPollRef.current = null }
+        setDoclingLive(null)
+        setDoclingError(data.error ?? 'Unknown error')
+        setDoclingStatus('error')
+      }
+    }, 2000)
   }
 
   async function saveHints() {
@@ -191,19 +234,21 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
     setDoclingStatus('running')
     setDoclingResult(null)
     setDoclingError(null)
+    setDoclingLive({ totalChunks: null, totalPages: null, completedChunks: [], currentChunk: null, elapsedSecs: 0 })
     const res = await fetch('/api/pipeline/run-docling', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ manufacturerId, documentId: selectedDocId }),
     })
     const data = await res.json()
-    if (!data.ok) {
+    if (!data.ok && !data.jobStarted) {
       setDoclingError(data.error ?? 'Unknown error')
       setDoclingStatus('error')
+      setDoclingLive(null)
       return
     }
-    setDoclingResult({ chunkCount: data.chunkCount, pageCount: data.pageCount, chunks: data.chunks ?? [], failedChunks: data.failedChunks ?? [] })
-    setDoclingStatus('done')
+    // Job started in background — begin polling
+    startDoclingPolling(selectedDocId)
   }
 
   async function rerunChunk(chunk: ChunkInfo) {
@@ -399,6 +444,55 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
             onRun={runDocling}
             disabled={!selectedDocId}
           >
+            {/* Live tally while running */}
+            {doclingStatus === 'running' && doclingLive && (
+              <div>
+                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', fontWeight: 700, color: '#d97706' }}>
+                    ⏱ {Math.floor(doclingLive.elapsedSecs / 60)}:{String(doclingLive.elapsedSecs % 60).padStart(2, '0')}
+                  </span>
+                  {doclingLive.totalChunks && (
+                    <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>
+                      {doclingLive.completedChunks.length} / {doclingLive.totalChunks} chunks done
+                      {doclingLive.totalPages ? ` · ${doclingLive.totalPages} pages total` : ''}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {doclingLive.totalChunks && Array.from({ length: doclingLive.totalChunks }, (_, i) => i + 1).map(n => {
+                    const done = doclingLive.completedChunks.find(c => c.chunkNo === n)
+                    const active = doclingLive.currentChunk?.chunkNo === n
+                    return (
+                      <div key={n} style={{
+                        display: 'flex', alignItems: 'center', gap: '0.75rem',
+                        padding: '0.35rem 0.75rem', borderRadius: 6,
+                        background: done ? '#f0fdf4' : active ? '#fef3c7' : 'var(--ds-card-bg)',
+                        border: `1px solid ${done ? '#86efac' : active ? '#fcd34d' : 'var(--ds-border)'}`,
+                      }}>
+                        <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', minWidth: 56, color: 'var(--ds-text-muted)' }}>
+                          Chunk {n}
+                        </span>
+                        {(done || active) && (
+                          <span style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)' }}>
+                            pp. {(done ?? doclingLive.currentChunk)?.startPage}–{(done ?? doclingLive.currentChunk)?.endPage}
+                          </span>
+                        )}
+                        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 700,
+                          color: done ? '#16a34a' : active ? '#d97706' : 'var(--ds-text-faint)' }}>
+                          {done ? '✓ done' : active ? '⟳ extracting…' : 'waiting'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                  {!doclingLive.totalChunks && (
+                    <div style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', fontStyle: 'italic' }}>
+                      Starting up… (downloading PDF and counting pages)
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {doclingStatus === 'done' && doclingResult && (
               <div>
                 {/* Success metric */}
