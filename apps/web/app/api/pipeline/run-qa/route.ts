@@ -93,9 +93,26 @@ Compare what was extracted vs what the hints file says should exist. Produce a Q
     try {
       reportData = JSON.parse(text)
     } catch {
-      // Try to extract JSON from the text
-      const match = text.match(/\{[\s\S]*\}/)
-      if (match) reportData = JSON.parse(match[0])
+      // rawMarkdown inside JSON often contains unescaped quotes — extract fields individually
+      const extract = (key: string) => {
+        const m = text.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`))
+        return m ? m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : ''
+      }
+      const extractNum = (key: string) => { const m = text.match(new RegExp(`"${key}"\\s*:\\s*(\\d+)`)); return m ? parseInt(m[1]) : 5 }
+      const extractBool = (key: string) => { const m = text.match(new RegExp(`"${key}"\\s*:\\s*(true|false)`)); return m ? m[1] === 'true' : false }
+      const extractArr = (key: string): string[] => { const m = text.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*?)\\]`)); if (!m) return []; return [...m[1].matchAll(/"([^"]*)"/g)].map(x => x[1]) }
+      reportData = {
+        overallScore: extractNum('overallScore'),
+        summary: extract('summary'),
+        missingSystemsFromHints: extractArr('missingSystemsFromHints'),
+        systemsWithNoProfiles: extractArr('systemsWithNoProfiles'),
+        systemsWithNoComponents: extractArr('systemsWithNoComponents'),
+        duplicateNames: extractArr('duplicateNames'),
+        reparseSuggestions: [],
+        hintsAdjustmentSuggested: extractBool('hintsAdjustmentSuggested'),
+        hintsAdjustmentNotes: extract('hintsAdjustmentNotes'),
+        rawMarkdown: extract('rawMarkdown') || text,
+      }
     }
 
     const report = {

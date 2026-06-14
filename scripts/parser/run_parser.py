@@ -35,6 +35,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Force unbuffered stdout so output appears immediately when piped
+sys.stdout.reconfigure(line_buffering=True)
+
 
 # ============================================================
 # Prompts
@@ -348,6 +351,10 @@ def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, int
         except Exception as e:
             err_str = str(e)
             is_rate_limit = "429" in err_str or "rate_limit" in err_str.lower() or "rate limit" in err_str.lower()
+            is_credit_error = "credit" in err_str.lower() or "billing" in err_str.lower() or "balance" in err_str.lower()
+            if is_credit_error:
+                print(f"    [FATAL] API credit/billing error — aborting parser run: {e}")
+                sys.exit(f"[FATAL] Insufficient API credits. Top up your Anthropic account or use --openai-model to switch provider.")
             if is_rate_limit and attempt < max_retries:
                 print(f"    [RATE LIMIT] {label} attempt {attempt} — waiting {delay}s before retry...")
                 time.sleep(delay)

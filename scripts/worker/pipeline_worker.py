@@ -33,7 +33,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import boto3
 import requests
+from botocore.config import Config
 from dotenv import load_dotenv
 
 load_dotenv(".env.local")
@@ -42,6 +44,12 @@ load_dotenv(".env.local")
 SUPABASE_URL = os.environ.get("PRODUCTION_SUPABASE_URL", os.environ["NEXT_PUBLIC_SUPABASE_URL"]).rstrip("/")
 SUPABASE_KEY = os.environ.get("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY", os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 WORKER_ID = socket.gethostname()
+
+R2_ACCOUNT_ID = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID", "")
+R2_ACCESS_KEY = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID", "")
+R2_SECRET_KEY = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY", "")
+R2_BUCKET = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "studio-buildquote")
+R2_ENDPOINT = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 POLL_INTERVAL = 4  # seconds between polls
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -135,31 +143,19 @@ def fail_job(job_id: str, error: str, log_lines: list[str]):
 
 # ── R2 / storage download ─────────────────────────────────────────────────────
 
-def download_document(storage_key: str, dest_path: Path):
-    """Download a file from Supabase Storage (R2-backed) via signed URL."""
-    r = requests.post(
-        f"{SUPABASE_URL}/storage/v1/object/sign/source-documents",
-        headers=HEADERS,
-        json={"expiresIn": 600},
+def download_document(storage_key: str, dest_path: Path, bucket: str | None = None):
+    """Download a PDF from Cloudflare R2 using the S3-compatible API."""
+    r2 = boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT,
+        aws_access_key_id=R2_ACCESS_KEY,
+        aws_secret_access_key=R2_SECRET_KEY,
+        config=Config(signature_version="s3v4"),
+        region_name="auto",
     )
-    # Try signed URL endpoint
-    r2 = requests.post(
-        f"{SUPABASE_URL}/storage/v1/object/sign/source-documents/{storage_key}",
-        headers=HEADERS,
-        json={"expiresIn": 600},
-    )
-    if r2.ok:
-        signed = r2.json().get("signedURL") or r2.json().get("signedUrl")
-        if signed:
-            full_url = signed if signed.startswith("http") else f"{SUPABASE_URL}/storage/v1{signed}"
-            resp = requests.get(full_url, stream=True)
-            resp.raise_for_status()
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(dest_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            return
-    raise RuntimeError(f"Could not get signed URL for {storage_key}: {r2.status_code} {r2.text}")
+    target_bucket = bucket or R2_BUCKET
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    r2.download_file(target_bucket, storage_key, str(dest_path))
 
 
 # ── Job handlers ──────────────────────────────────────────────────────────────
@@ -347,7 +343,7 @@ def handle_parser(job: dict):
 
     script = REPO_ROOT / "scripts" / "parser" / "run_parser.py"
     cmd = [
-        sys.executable, str(script),
+        sys.executable, "-u", str(script),
         "--input", str(output_md),
         "--manufacturer-id", manufacturer_id,
         "--manufacturer-name", manufacturer_name,
@@ -422,9 +418,9 @@ def handle_rerun_chunk(job: dict):
     if not pdf_path.exists():
         # Try to re-download
         try:
-            rows = sb_get("source_documents", f"id=eq.{document_id}&select=storage_key")
+            rows = sb_get("source_documents", f"id=eq.{document_id}&select=storage_key,storage_bucket")
             if rows:
-                download_document(rows[0]["storage_key"], pdf_path)
+                download_document(rows[0]["storage_key"], pdf_path, bucket=rows[0].get("storage_bucket"))
         except Exception as e:
             fail_job(job_id, f"PDF not found locally and download failed: {e}", log)
             return
