@@ -270,7 +270,7 @@ LINK_FIELDS = {
 # Helpers
 # ============================================================
 
-def load_env():
+def load_env(production=False):
     try:
         from dotenv import dotenv_values
         repo_root = Path(__file__).parent.parent.parent
@@ -282,11 +282,17 @@ def load_env():
                 os.environ[k] = v  # always override so empty env vars don't block
     except ImportError:
         pass
+    if production:
+        supabase_url = os.environ.get("PRODUCTION_SUPABASE_URL")
+        service_key = os.environ.get("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY")
+    else:
+        supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+        service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     return (
         os.environ.get("ANTHROPIC_API_KEY"),
         os.environ.get("OPENAI_API_KEY"),
-        os.environ.get("NEXT_PUBLIC_SUPABASE_URL"),
-        os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+        supabase_url,
+        service_key,
     )
 
 
@@ -602,6 +608,69 @@ def build_plan(manufacturer_id, all_systems, all_profiles, all_colours, all_comp
     }
 
 
+def insert_stage2_direct(plan, supabase_url, service_key, dry_run_dir, ts):
+    """Insert components + system-component links directly via REST (Stage 2 standalone only)."""
+    import httpx
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+
+    components = plan["stagedComponents"]
+    resolved_links = plan.get("_resolvedLinks", [])
+
+    # Strip internal temp keys before inserting
+    def strip_temp(rec):
+        return {k: v for k, v in rec.items() if not k.startswith("_")}
+
+    inserted_components = []
+    for comp in components:
+        payload = strip_temp(comp)
+        if not payload.get("sort_order"):
+            payload["sort_order"] = 0
+        resp = httpx.post(f"{supabase_url}/rest/v1/staged_components", json=payload, headers=headers, timeout=30)
+        if resp.status_code not in (200, 201):
+            print(f"[ERROR] Failed to insert component '{comp.get('name')}': {resp.status_code} {resp.text}")
+            sys.exit(1)
+        row = resp.json()
+        inserted = row[0] if isinstance(row, list) else row
+        inserted_components.append(inserted)
+        print(f"  [insert] component: {inserted.get('name')} -> {inserted.get('id')}")
+
+    comp_idx_to_id = {i: c["id"] for i, c in enumerate(inserted_components)}
+
+    inserted_links = []
+    for lnk in resolved_links:
+        comp_id = comp_idx_to_id.get(lnk["_comp_idx"])
+        if not comp_id:
+            print(f"  [WARN] link skipped — could not find inserted component at index {lnk['_comp_idx']}")
+            continue
+        payload = {
+            "staged_system_id": lnk["staged_system_id"],
+            "staged_component_id": comp_id,
+            "role": lnk.get("role"),
+            "notes": lnk.get("notes"),
+            "sort_order": lnk.get("sort_order") or 0,
+            "extraction_confidence": lnk.get("extraction_confidence"),
+        }
+        resp = httpx.post(f"{supabase_url}/rest/v1/staged_system_components", json=payload, headers=headers, timeout=30)
+        if resp.status_code not in (200, 201):
+            print(f"[ERROR] Failed to insert link: {resp.status_code} {resp.text}")
+            sys.exit(1)
+        row = resp.json()
+        inserted_links.append(row[0] if isinstance(row, list) else row)
+
+    print(f"\n[parser] Inserted {len(inserted_components)} components, {len(inserted_links)} links")
+
+    result = {"inserted_components": inserted_components, "inserted_links": inserted_links}
+    dry_run_dir.mkdir(parents=True, exist_ok=True)
+    result_path = dry_run_dir / f"rpc_result_{ts}.json"
+    result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[parser] Result written to: {result_path}")
+
+
 def call_rpc(plan, supabase_url, service_key):
     import httpx
     url = f"{supabase_url}/rest/v1/rpc/insert_parser_output_plan_v1"
@@ -630,9 +699,10 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Write plan JSON locally, skip Supabase")
     parser.add_argument("--stage", choices=["1", "2", "both"], default="both")
     parser.add_argument("--openai-model", default=None, help="Use OpenAI instead of Anthropic (e.g. gpt-4.5-preview, gpt-4o)")
+    parser.add_argument("--production", action="store_true", help="Target production Supabase (reads PRODUCTION_SUPABASE_URL + PRODUCTION_SUPABASE_SERVICE_ROLE_KEY from .env.local)")
     args = parser.parse_args()
 
-    anthropic_key, openai_key, supabase_url, service_key = load_env()
+    anthropic_key, openai_key, supabase_url, service_key = load_env(production=args.production)
 
     use_openai = bool(args.openai_model)
 
@@ -687,11 +757,29 @@ def main():
         print(f"[parser] {len(all_systems)} unique systems after dedup")
 
     # Stage 2 — components
+    existing_systems_by_id = {}  # id -> {name, product_code} for standalone stage 2 direct insert
     if args.stage in ("2", "both"):
         system_context = [
             {"name": s.get("name"), "product_code": s.get("product_code")}
             for s in all_systems
         ]
+        # When running --stage 2 standalone, fetch existing systems from Supabase
+        # (with IDs) so the AI has context and so links can be resolved via real UUIDs.
+        if not system_context and supabase_url and service_key:
+            try:
+                import urllib.request
+                req_url = f"{supabase_url}/rest/v1/staged_systems?manufacturer_id=eq.{args.manufacturer_id}&select=id,name,product_code&limit=200"
+                req = urllib.request.Request(req_url, headers={
+                    "apikey": service_key,
+                    "Authorization": f"Bearer {service_key}",
+                })
+                with urllib.request.urlopen(req) as resp:
+                    fetched = json.loads(resp.read())
+                system_context = [{"name": s["name"], "product_code": s.get("product_code")} for s in fetched]
+                existing_systems_by_id = {s["id"]: s for s in fetched}
+                print(f"[parser] Fetched {len(system_context)} existing systems from Supabase for stage 2 context")
+            except Exception as e:
+                print(f"[parser] Warning: could not fetch existing systems from Supabase: {e}")
         print(f"\n[parser] === Stage 2: components ({len(system_context)} known systems) ===")
         for chunk in chunks:
             comps, links = parse_stage2(client, chunk, args.manufacturer_name, hints_text, system_context, inter_call_delay=inter_call_delay)
@@ -699,21 +787,82 @@ def main():
             all_links.extend(links)
         print(f"\n[parser] Stage 2 total: {len(all_components)} components, {len(all_links)} links")
 
-    # Resolve temp keys
+    # Resolve temp keys / FK links
     print(f"\n[parser] Resolving FK links...")
-    all_systems, all_profiles, all_colours, all_components, all_links = assign_temp_keys(
-        all_systems, all_profiles, all_colours, all_components, all_links
-    )
+    standalone_stage2 = args.stage == "2" and bool(existing_systems_by_id)
 
-    # Build plan
-    plan = build_plan(args.manufacturer_id, all_systems, all_profiles, all_colours, all_components, all_links)
+    if standalone_stage2:
+        # Systems already exist in Supabase — resolve links to real UUIDs directly.
+        name_to_sys_id = {}
+        code_to_sys_id = {}
+        for sys_id, s in existing_systems_by_id.items():
+            n = (s.get("name") or "").lower().strip()
+            c = (s.get("product_code") or "").strip()
+            if n:
+                name_to_sys_id[n] = sys_id
+            if c:
+                code_to_sys_id[c] = sys_id
+
+        comp_name_map = {}
+        for i, c in enumerate(all_components):
+            c["_temp_key"] = f"component_{i}"
+            c["manufacturer_id"] = args.manufacturer_id
+            c.setdefault("source_document_id", None)
+            c.setdefault("source_chunk_id", None)
+            n = (c.get("name") or "").lower().strip()
+            if n:
+                comp_name_map[n] = i
+
+        resolved_links = []
+        skipped = 0
+        for lnk in all_links:
+            sys_match = lnk.pop("staged_system_match", None) or lnk.pop("system_match", None) or {}
+            comp_match = lnk.pop("component_match", None) or {}
+            sys_id = (
+                name_to_sys_id.get((sys_match.get("system_name") or sys_match.get("name") or "").lower().strip())
+                or code_to_sys_id.get((sys_match.get("product_code") or "").strip())
+            )
+            comp_name = (comp_match.get("name") or "").lower().strip()
+            comp_idx = comp_name_map.get(comp_name)
+            if sys_id is not None and comp_idx is not None:
+                resolved_links.append({
+                    "staged_system_id": sys_id,
+                    "_comp_idx": comp_idx,
+                    "role": lnk.get("role"),
+                    "notes": lnk.get("notes"),
+                    "sort_order": lnk.get("sort_order"),
+                    "extraction_confidence": lnk.get("extraction_confidence"),
+                })
+            else:
+                skipped += 1
+
+        if skipped:
+            print(f"  [WARN] {skipped} component links dropped — unresolved FK")
+        print(f"  {len(resolved_links)} links resolved to existing system UUIDs")
+
+        plan = {
+            "stagedSystems": [],
+            "stagedSystemProfiles": [],
+            "stagedSystemColours": [],
+            "stagedComponents": [clean_record(c, COMPONENT_FIELDS) for c in all_components],
+            "stagedSystemComponents": [],  # handled separately via direct insert
+            "_resolvedLinks": resolved_links,  # carries real system UUIDs for direct insert
+        }
+    else:
+        all_systems, all_profiles, all_colours, all_components, all_links = assign_temp_keys(
+            all_systems, all_profiles, all_colours, all_components, all_links
+        )
+        plan = build_plan(args.manufacturer_id, all_systems, all_profiles, all_colours, all_components, all_links)
 
     print(f"\n[parser] Insertion plan:")
     print(f"  Systems    : {len(plan['stagedSystems'])}")
     print(f"  Profiles   : {len(plan['stagedSystemProfiles'])}")
     print(f"  Colours    : {len(plan['stagedSystemColours'])}")
     print(f"  Components : {len(plan['stagedComponents'])}")
-    print(f"  Links      : {len(plan['stagedSystemComponents'])}")
+    if standalone_stage2:
+        print(f"  Links      : {len(plan.get('_resolvedLinks', []))} (direct insert, not via RPC)")
+    else:
+        print(f"  Links      : {len(plan['stagedSystemComponents'])}")
 
     # Dry run or insert
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -724,6 +873,9 @@ def main():
         plan_path = dry_run_dir / f"plan_{ts}.json"
         plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\n[parser] Dry run — plan written to: {plan_path}")
+    elif standalone_stage2:
+        print(f"\n[parser] Stage 2 standalone — inserting components + links directly...")
+        insert_stage2_direct(plan, supabase_url, service_key, dry_run_dir, ts)
     else:
         print(f"\n[parser] Calling Supabase RPC...")
         result = call_rpc(plan, supabase_url, service_key)

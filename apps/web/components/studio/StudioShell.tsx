@@ -53,11 +53,16 @@ type Props = {
    * Pass null to suppress any notice (default: no notice).
    */
   notice?: string | null
+  /** When true, renders the Pipeline nav item (admin-only). */
+  showPipelineNav?: boolean
   children: ReactNode
 }
 
-export function StudioShell({ role, subtitle, workspaceName, notice, children }: Props) {
-  const nav = NAV_BY_ROLE[role]
+export function StudioShell({ role, subtitle, workspaceName, notice, showPipelineNav, children }: Props) {
+  const baseNav = NAV_BY_ROLE[role]
+  const nav = showPipelineNav
+    ? [...baseNav.filter(n => n.href !== '/manufacturer/help'), { label: 'Pipeline', href: '/manufacturer/pipeline' }, { label: 'Help', href: '/manufacturer/help' }]
+    : baseNav
   const badge = BADGE_BY_ROLE[role]
   // Default: no notice. Pages opt in by passing a string.
   const noticeText = notice ?? null

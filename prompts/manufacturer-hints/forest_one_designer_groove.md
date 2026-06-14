@@ -35,7 +35,21 @@ Each system is sold in 4 sheet lengths — extract these as `system_profiles`, N
 **None.** Product is pre-primed and ready to paint — do not extract any colour rows.
 
 ## Components
-**None.** The brochure mentions corner/end-join finishing options but explicitly states these are "commonly available from local hardware retailers" — they are not branded ForestOne accessories. Do not extract any components.
+Extract suggested installation accessories from the install guide. No SKU is fine — set sku=null. Link every component to all 3 systems: "Designer Groove VJ100", "Designer Groove VJ150", "Designer Groove REGENCY150".
+
+Keep descriptions short. Use role="fixing" for nails/screws, role="adhesive" for glues, role="consumable" for misc.
+
+Components to extract:
+1. Bullet Head Nail 2mm x 40mm — nail, hammer fixing wall linings
+2. Paslode ND Brad 14ga x 45mm — nail, nail gun wall linings
+3. Paslode Duo-Fast C2.5 x 45 Ring Shank — nail, nail gun ceiling linings
+4. ICCONS Needle Point CSK Head Screw 8-15 x 20mm (sku: TP796) — screw, timber frame
+5. ICCONS Needle Point CSK Head Screw 8-15 x 30mm (sku: TP796) — screw, timber frame
+6. ICCONS Self-Drilling CSK Head Screw 8-18 x 20mm (sku: TP326) — screw, steel frame
+7. ICCONS Self-Drilling CSK Head Screw 8-18 x 30mm (sku: TP326) — screw, steel frame
+8. Flexible Construction Adhesive — adhesive, fixing sheets to studs
+9. PVA Adhesive — adhesive, corners and mouldings
+10. Timber Based Filler — consumable, filling nail/screw holes
 
 ## Key system attributes
 - `moisture_resistant` = true (Ultra Moisture-Resistant MDF)
