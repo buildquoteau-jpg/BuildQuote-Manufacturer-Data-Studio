@@ -3,9 +3,8 @@
 import { useState } from 'react'
 import type { WidgetData } from '@/lib/data/getWidgetData'
 
-export function ManufacturerHero({ manufacturer, supplierName }: {
+export function ManufacturerHero({ manufacturer }: {
   manufacturer: WidgetData['manufacturer']
-  supplierName?: string
 }) {
   const [logoError, setLogoError] = useState(false)
 
@@ -61,20 +60,7 @@ export function ManufacturerHero({ manufacturer, supplierName }: {
         {manufacturer.name}
       </div>
 
-      {supplierName && (
-        <div style={{
-          display: 'inline-block',
-          fontSize: '12px',
-          color: 'rgba(255,255,255,0.75)',
-          background: 'rgba(255,255,255,0.12)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: '20px',
-          padding: '4px 12px',
-          marginBottom: '20px',
-        }}>
-          Stocked at {supplierName}
-        </div>
-      )}
+
 
       {manufacturer.description && (
         <p style={{

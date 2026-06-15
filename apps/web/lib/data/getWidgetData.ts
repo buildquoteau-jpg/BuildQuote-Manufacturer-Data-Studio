@@ -1,4 +1,11 @@
-import { createProductionClient } from '@/lib/supabase/production'
+import { createClient } from '@supabase/supabase-js'
+
+function getDataStudioClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createClient(url, key)
+}
 
 export type WidgetManufacturer = {
   name: string
@@ -50,14 +57,11 @@ export type WidgetProfile = {
 export type WidgetSystem = {
   id: string
   name: string
-  product_code: string
-  slug: string
+  product_code: string | null
   category: string
   subcategory: string | null
   description: string | null
   dimensions: string | null
-  length_m: number | null
-  double_sided: boolean
   hero_image_url: string | null
   website_url: string | null
   install_guide_urls: { label: string; url: string }[] | null
@@ -69,6 +73,7 @@ export type WidgetSystem = {
   structural_grade: string | null
   bal_rating: string | null
   australian_made: boolean | null
+  double_sided: boolean
   system_colours: WidgetColour[]
   system_components: WidgetComponent[]
   system_profiles: WidgetProfile[]
@@ -76,131 +81,120 @@ export type WidgetSystem = {
 
 export type WidgetData = {
   id: string
-  name: string
   manufacturer: WidgetManufacturer | null
-  supplier: {
-    name: string
-    website_url: string | null
-  } | null
   systems: WidgetSystem[]
 }
 
 export async function getWidgetData(token: string): Promise<WidgetData | null> {
-  const supabase = createProductionClient()
+  const supabase = getDataStudioClient()
 
-  const { data, error } = await supabase
-    .from('embed_widgets')
-    .select(`
-      id,
-      name,
-      suppliers (
-        name,
-        website_url
-      ),
-      embed_widget_systems (
-        sort_order,
-        systems (
-          id,
-          name,
-          product_code,
-          slug,
-          category,
-          subcategory,
-          description,
-          dimensions,
-          length_m,
-          double_sided,
-          hero_image_url,
-          website_url,
-          install_guide_urls,
-          design_guide_url,
-          notes,
-          fire_rating,
-          acoustic_rating,
-          moisture_resistant,
-          structural_grade,
-          bal_rating,
-          australian_made,
-          manufacturers (
-            name,
-            slug,
-            logo_url,
-            hero_image_url,
-            website_url,
-            description
-          ),
-          system_colours (
-            colour_name,
-            image_url,
-            sort_order,
-            is_stocked
-          ),
-          system_components (
-            id,
-            role,
-            notes,
-            sort_order,
-            components (
-              name,
-              sku,
-              description,
-              category,
-              uom,
-              procurement_route
-            )
-          ),
-          system_profiles (
-            id,
-            profile_name,
-            name,
-            product_code,
-            dimensions,
-            length_mm,
-            width_mm,
-            height_mm,
-            thickness_mm,
-            uom,
-            supplier_pack_qty,
-            supplier_pack_uom,
-            sort_order
-          )
-        )
-      )
-    `)
+  // Resolve widget
+  const { data: widget, error: widgetError } = await supabase
+    .from('manufacturer_embed_widgets')
+    .select('id, manufacturer_id')
     .eq('public_token', token)
     .eq('status', 'active')
     .single()
 
-  if (error || !data) return null
+  if (widgetError || !widget) return null
 
-  const widgetSystems = data.embed_widget_systems as any[]
-  const sortedSystems = widgetSystems
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((ws) => {
-      const sys = ws.systems as any
-      const { manufacturers: _mf, ...sysWithoutMf } = sys
-      return {
-        ...sysWithoutMf,
-        system_colours: (sys.system_colours || []).sort(
-          (a: WidgetColour, b: WidgetColour) => a.sort_order - b.sort_order
-        ),
-        system_components: (sys.system_components || []).sort(
-          (a: WidgetComponent, b: WidgetComponent) => a.sort_order - b.sort_order
-        ),
-        system_profiles: (sys.system_profiles || []).sort(
-          (a: WidgetProfile, b: WidgetProfile) => a.sort_order - b.sort_order
-        ),
-      } as WidgetSystem
-    })
+  const w = widget as { id: string; manufacturer_id: string }
 
-  const firstSys = widgetSystems[0]?.systems as any
-  const manufacturer: WidgetManufacturer | null = firstSys?.manufacturers ?? null
+  // Fetch manufacturer + widget systems in parallel
+  const [mfrResult, widgetSystemsResult] = await Promise.all([
+    supabase
+      .from('data_studio_manufacturers')
+      .select('name, slug, logo_url, hero_image_url, website_url, description')
+      .eq('id', w.manufacturer_id)
+      .single(),
+    supabase
+      .from('manufacturer_embed_widget_systems')
+      .select('staged_system_id, sort_order')
+      .eq('embed_widget_id', w.id)
+      .order('sort_order'),
+  ])
 
-  return {
-    id: (data as any).id,
-    name: (data as any).name,
-    manufacturer,
-    supplier: (data as any).suppliers,
-    systems: sortedSystems,
+  const manufacturer = mfrResult.data
+    ? (mfrResult.data as WidgetManufacturer)
+    : null
+
+  const widgetSystems = (widgetSystemsResult.data ?? []) as { staged_system_id: string; sort_order: number }[]
+  const systemIds = widgetSystems.map(ws => ws.staged_system_id)
+
+  if (systemIds.length === 0) {
+    return { id: w.id, manufacturer, systems: [] }
   }
+
+  // Fetch full system data
+  const { data: systemRows } = await supabase
+    .from('staged_systems')
+    .select(
+      'id, name, product_code, category, subcategory, description, dimensions, ' +
+      'hero_image_url, website_url, install_guide_urls, design_guide_url, notes, ' +
+      'fire_rating, acoustic_rating, moisture_resistant, structural_grade, ' +
+      'bal_rating, australian_made, double_sided'
+    )
+    .in('id', systemIds)
+
+  // Fetch profiles, colours, components for all systems
+  const [profilesRes, coloursRes, sysCompRes] = await Promise.all([
+    supabase
+      .from('staged_system_profiles')
+      .select('id, staged_system_id, profile_name, product_code, dimensions, length_mm, width_mm, height_mm, thickness_mm, uom, supplier_pack_qty, supplier_pack_uom, sort_order')
+      .in('staged_system_id', systemIds)
+      .order('sort_order'),
+    supabase
+      .from('staged_system_colours')
+      .select('staged_system_id, colour_name, image_url, sort_order, is_stocked')
+      .in('staged_system_id', systemIds)
+      .order('sort_order'),
+    supabase
+      .from('staged_system_components')
+      .select('id, staged_system_id, role, notes, sort_order, staged_components(name, sku, description, category, uom, procurement_route)')
+      .in('staged_system_id', systemIds)
+      .order('sort_order'),
+  ])
+
+  type ProfileRow = { id: string; staged_system_id: string; profile_name: string | null; product_code: string | null; dimensions: string | null; length_mm: number | null; width_mm: number | null; height_mm: number | null; thickness_mm: number | null; uom: string | null; supplier_pack_qty: number | null; supplier_pack_uom: string | null; sort_order: number }
+  type ColourRow  = { staged_system_id: string; colour_name: string; image_url: string | null; sort_order: number; is_stocked: boolean }
+  type SysCompRow = { id: string; staged_system_id: string; role: string; notes: string | null; sort_order: number; staged_components: any }
+
+  const profilesMap  = new Map<string, WidgetProfile[]>()
+  const coloursMap   = new Map<string, WidgetColour[]>()
+  const componentsMap = new Map<string, WidgetComponent[]>()
+
+  for (const r of (profilesRes.data ?? []) as ProfileRow[]) {
+    const { staged_system_id, ...rest } = r
+    const list = profilesMap.get(staged_system_id) ?? []
+    list.push({ ...rest, name: rest.profile_name })
+    profilesMap.set(staged_system_id, list)
+  }
+
+  for (const r of (coloursRes.data ?? []) as ColourRow[]) {
+    const { staged_system_id, ...rest } = r
+    const list = coloursMap.get(staged_system_id) ?? []
+    list.push(rest)
+    coloursMap.set(staged_system_id, list)
+  }
+
+  for (const r of (sysCompRes.data ?? []) as SysCompRow[]) {
+    const comp = Array.isArray(r.staged_components) ? r.staged_components[0] : r.staged_components
+    const list = componentsMap.get(r.staged_system_id) ?? []
+    list.push({ id: r.id, role: r.role, notes: r.notes, sort_order: r.sort_order, components: comp ?? null })
+    componentsMap.set(r.staged_system_id, list)
+  }
+
+  // Preserve widget sort_order
+  const sortMap = new Map(widgetSystems.map(ws => [ws.staged_system_id, ws.sort_order]))
+
+  const systems: WidgetSystem[] = ((systemRows ?? []) as any[])
+    .sort((a, b) => (sortMap.get(a.id) ?? 0) - (sortMap.get(b.id) ?? 0))
+    .map(s => ({
+      ...s,
+      system_profiles:   profilesMap.get(s.id)   ?? [],
+      system_colours:    coloursMap.get(s.id)     ?? [],
+      system_components: componentsMap.get(s.id)  ?? [],
+    }))
+
+  return { id: w.id, manufacturer, systems }
 }

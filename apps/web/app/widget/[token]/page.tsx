@@ -21,30 +21,21 @@ export default async function WidgetPage({
       background: '#f9fafb',
       minHeight: '100vh',
     }}>
-      <ManufacturerHero
-        manufacturer={widget.manufacturer}
-        supplierName={widget.supplier?.name}
-      />
+      <ManufacturerHero manufacturer={widget.manufacturer} />
 
       <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#9ca3af' }}>
         {widget.systems.length === 1
-          ? '1 profile available'
-          : `${widget.systems.length} profiles available`}
+          ? '1 system available'
+          : `${widget.systems.length} systems available`}
       </p>
 
       <WidgetClient
         systems={widget.systems}
-        widgetId={widget.id}
-        supplierName={widget.supplier?.name}
+        widgetToken={token}
         manufacturerName={widget.manufacturer?.name}
       />
 
-      <div style={{
-        marginTop: '32px',
-        textAlign: 'center',
-        fontSize: '11px',
-        color: '#d1d5db',
-      }}>
+      <div style={{ marginTop: '32px', textAlign: 'center', fontSize: '11px', color: '#d1d5db' }}>
         Powered by BuildQuote
       </div>
     </div>
