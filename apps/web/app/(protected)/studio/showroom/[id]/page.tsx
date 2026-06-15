@@ -64,13 +64,28 @@ async function getData(id: string): Promise<{ manufacturer: ShowroomManufacturer
     return null
   }
 
-  const { data: mfr, error: mfrError } = await supabase
+  let { data: mfr, error: mfrError } = await supabase
     .from('data_studio_manufacturers')
     .select('id, name, slug, description, logo_url, hero_image_url, hero_image_position_y, website_url')
     .eq('id', id)
     .single()
 
-  if (mfrError || !mfr) return null
+  if (mfrError) {
+    // Migration 031 may not be applied yet — fall back without the new column.
+    if (mfrError.code === '42703' || mfrError.message?.includes('hero_image_position_y')) {
+      const { data: fb, error: fbErr } = await supabase
+        .from('data_studio_manufacturers')
+        .select('id, name, slug, description, logo_url, hero_image_url, website_url')
+        .eq('id', id)
+        .single()
+      if (fbErr || !fb) return null
+      mfr = { ...(fb as any), hero_image_position_y: null }
+      mfrError = null
+    } else {
+      return null
+    }
+  }
+  if (!mfr) return null
 
   const { data: systems, error: sysError } = await supabase
     .from('staged_systems')

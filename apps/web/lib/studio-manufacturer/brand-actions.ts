@@ -51,20 +51,34 @@ export async function saveBrandProfile(
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
+  const payload = {
+    description:    fields.description?.trim()    || null,
+    website_url:    fields.website_url?.trim()    || null,
+    hero_image_url: fields.hero_image_url?.trim() || null,
+    hero_image_position_y: clampPositionY(fields.hero_image_position_y),
+    logo_url:       fields.logo_url?.trim()       || null,
+    phone:          fields.phone?.trim()           || null,
+    abn:            fields.abn?.trim()             || null,
+    updated_at:     new Date().toISOString(),
+  }
+
   const { error } = await supabase
     .from('data_studio_manufacturers')
-    .update({
-      description:    fields.description?.trim()    || null,
-      website_url:    fields.website_url?.trim()    || null,
-      hero_image_url: fields.hero_image_url?.trim() || null,
-      hero_image_position_y: clampPositionY(fields.hero_image_position_y),
-      logo_url:       fields.logo_url?.trim()       || null,
-      phone:          fields.phone?.trim()           || null,
-      abn:            fields.abn?.trim()             || null,
-      updated_at:     new Date().toISOString(),
-    })
+    .update(payload)
     .eq('id', manufacturerId)
 
-  if (error) return { ok: false, error: error.message }
-  return { ok: true }
+  if (!error) return { ok: true }
+
+  // Migration 031 may not be applied yet — retry without the new column.
+  if (error.code === '42703' || error.message?.includes('hero_image_position_y')) {
+    const { hero_image_position_y: _dropped, ...payloadWithout } = payload
+    const { error: retryErr } = await supabase
+      .from('data_studio_manufacturers')
+      .update(payloadWithout)
+      .eq('id', manufacturerId)
+    if (!retryErr) return { ok: true }
+    return { ok: false, error: retryErr.message }
+  }
+
+  return { ok: false, error: error.message }
 }
