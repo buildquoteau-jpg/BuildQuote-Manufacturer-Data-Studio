@@ -1,6 +1,7 @@
 import { StudioShell } from '@/components/studio/StudioShell'
 import { getAdminManufacturerList } from '@/lib/studio-admin/manufacturers'
 import { ManufacturersList } from './WorkspaceGateModal'
+import { NewManufacturerButton } from './NewManufacturerButton'
 
 export default async function AdminManufacturersPage() {
   const result = await getAdminManufacturerList()
@@ -18,9 +19,12 @@ export default async function AdminManufacturersPage() {
         }}
       >
         <h1 style={{ fontSize: '1.25rem' }}>Manufacturer workspaces</h1>
-        <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>
-          Read-only overview of Data Studio manufacturer workspaces.
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>
+            Overview of Data Studio manufacturer workspaces.
+          </span>
+          <NewManufacturerButton />
+        </div>
       </div>
 
       <div className="studio-info" style={{ marginBottom: '1.25rem' }}>
@@ -54,20 +58,6 @@ export default async function AdminManufacturersPage() {
         <ManufacturersList manufacturers={result.manufacturers} />
       )}
 
-      <div
-        style={{
-          marginTop: '1.5rem',
-          padding: '1rem 1.25rem',
-          background: 'var(--ds-card-bg)',
-          border: '1px solid var(--ds-border-soft)',
-          borderRadius: 8,
-          fontSize: '0.82rem',
-          color: 'var(--ds-text-muted)',
-        }}
-      >
-        Manufacturer workspace management (invite users, create workspaces, suspend access)
-        is coming in a later release.
-      </div>
     </StudioShell>
   )
 }
