@@ -37,21 +37,38 @@ DESIGN_GUIDE_URL = (
 # Add more entries as additional TDS PDFs are downloaded and parsed.
 
 SYSTEMS: dict[str, str] = {
-    # --- Membranes ---
-    "Ametalin CeaseFire®":               "Ametalin-CeaseFire%C2%AE-Technical-Data-Sheet_APM-45762-0.pdf",
-    "FireSark® Micro-perforated":        "FireSark-Micro-perforated-Technical-Data-Sheet_APM-45762-2.pdf",
-    "SilverSark® xR HD":                 "SilverSark-xR-HD-Technical-Data-Sheet_APM-45763-6.pdf",
-    "SilverSark® xR XHD":                "SilverSark-xR-XHD-Technical-Data-Sheet_APM-45763-7.pdf",
-    "VapourTech® RWC Roof Wall Commercial": "VapourTech-RWC-Roof-Wall-Commercial-Technical-Data-Sheet_APM-45763-0.pdf",
-    "ThermalLiner™":                     "ThermalLiner-Technical-Data-Sheet_APM-45764-9.pdf",
-    # --- Thermal break ---
-    "ThermalBreak®":                     "ThermalBreak-Technical-Data-Sheet_APM-45758-2.pdf",
-    # TODO: add remaining products once their TDS PDFs are downloaded and parsed
-    # e.g.:
-    # "SilverSark® HVB":                "SilverSark-HVB-Technical-Data-Sheet_APM-XXXXX-X.pdf",
-    # "SilverSark® xR":                 "SilverSark-xR-Technical-Data-Sheet_APM-XXXXX-X.pdf",
-    # "VapourTech® Wall Wrap":          "VapourTech-...",
-    # "AirTech® ...":                   "AirTech-...",
+    # --- Non-Combustible Membranes ---
+    "Ametalin CeaseFire®":                   "Ametalin-CeaseFire%C2%AE-Technical-Data-Sheet_APM-45762-0.pdf",
+    "FireSark®":                             "FireSark-Technical-Data-Sheet_APM-45762-1.pdf",
+    "FireSark® Micro-perforated":            "FireSark-Micro-perforated-Technical-Data-Sheet_APM-45762-2.pdf",
+    # --- Reflective Sarking ---
+    "SilverSark® HVB":                       "SilverSark-HVB-Technical-Data-Sheet_APM-45763-3.pdf",
+    "SilverSark® TRE":                       "SilverSark-TRE-Technical-Data-Sheet_APM-45763-4.pdf",
+    "SilverSark® HD":                        "SilverSark-HD-Technical-Data-Sheet_APM-45763-2.pdf",
+    "SilverSark® XHD":                       "SilverSark-XHD-Technical-Data-Sheet_APM-45763-5.pdf",
+    "SilverSark® xR HD":                     "SilverSark-xR-HD-Technical-Data-Sheet_APM-45763-6.pdf",
+    "SilverSark® xR XHD":                   "SilverSark-xR-XHD-Technical-Data-Sheet_APM-45763-7.pdf",
+    # --- Reflective Wall Wraps ---
+    "SilverWrap® LD":                        "SilverWrap-LD-Technical-Data-Sheet_APM-45764-0.pdf",
+    "SilverWrap® LD Micro-perforated":       "SilverWrap-LD-Micro-perforated-Technical-Data-Sheet_APM-45764-1.pdf",
+    "SilverWrap® MD":                        "SilverWrap-MD-Technical-Data-Sheet_APM-45764-2.pdf",
+    "SilverWrap® MD Micro-perforated":       "SilverWrap-MD-Micro-perforated-Technical-Data-Sheet_APM-45764-3.pdf",
+    "SilverWrap® HD Micro-perforated":       "SilverWrap-Micro-perforated-HD-Technical-Data-Sheet_APM-46764-4.pdf",
+    "SilverWrap® XHD Micro-perforated":      "SilverWrap-XHD-Micro-perforated-Technical-Data-Sheet_APM-45764-5.pdf",
+    "SilverWrap® xR HD Micro-perforated":    "SilverWrap-xR-HD-Micro-perforated-Technical-Data-Sheet_APM-45764-6.pdf",
+    # --- Vapour Permeable Membranes ---
+    "VapourTech® RWC Roof Wall Commercial":  "VapourTech-RWC-Roof-Wall-Commercial-Technical-Data-Sheet_APM-45763-0.pdf",
+    "VapourTech® Wall":                      "VapourTech-Wall-Technical-Data-Sheet_APM-45763-1.pdf",
+    "VapourTech® Brane® VHP":               "VapourTech-Brane-VHP-Technical-Data-Sheet_APM-46072-0.pdf",
+    # --- Thermal Products ---
+    "ThermalBreak®":                         "ThermalBreak-Technical-Data-Sheet_APM-45758-2.pdf",
+    "ThermalLiner™":                         "ThermalLiner-Technical-Data-Sheet_APM-45764-9.pdf",
+    # --- Floor Products ---
+    "SilverFloor®":                          "SilverFloor-Technical-Data-Sheet_APM-45762-3.pdf",
+    "ThermalFloor™":                         "ThermalFloor-Technical-Data-Sheet_-APM-45764-12.pdf",
+    # --- Drainage Battens ---
+    "Ametalin Cavity Drainage Battens™":     "Ametalin-Cavity-Drainage-Battens%E2%84%A2-Technical-Data-Sheet_APM-45726-1.pdf",
+    "Ametalin ThermalCav™ Drainage Battens": "Ametalin-ThermalCav%E2%84%A2-Drainage-Battens-Technical-Data-Sheet_APM-45726-0.pdf",
 }
 
 
