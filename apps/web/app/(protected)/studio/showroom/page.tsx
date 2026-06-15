@@ -10,6 +10,7 @@ export type ShowroomManufacturer = {
   description: string | null
   logo_url: string | null
   hero_image_url: string | null
+  hero_image_position_y: number | null
   system_count: number
 }
 
@@ -21,12 +22,26 @@ async function getShowroomManufacturers(): Promise<ShowroomManufacturer[]> {
     return []
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('data_studio_manufacturers')
-    .select('id, name, slug, description, logo_url, hero_image_url, staged_systems ( id )')
+    .select('id, name, slug, description, logo_url, hero_image_url, hero_image_position_y, staged_systems ( id )')
     .order('name')
 
-  if (error || !data) return []
+  if (error) {
+    // Migration 031 may not be applied yet — fall back without the new column.
+    if (error.code === '42703' || error.message?.includes('hero_image_position_y')) {
+      const { data: fb, error: fbErr } = await supabase
+        .from('data_studio_manufacturers')
+        .select('id, name, slug, description, logo_url, hero_image_url, staged_systems ( id )')
+        .order('name')
+      if (fbErr || !fb) return []
+      data = (fb as any[]).map((m) => ({ ...m, hero_image_position_y: null }))
+    } else {
+      return []
+    }
+  }
+
+  if (!data) return []
 
   return (data as any[]).map((m) => ({
     id: m.id,
@@ -35,6 +50,7 @@ async function getShowroomManufacturers(): Promise<ShowroomManufacturer[]> {
     description: m.description ?? null,
     logo_url: m.logo_url ?? null,
     hero_image_url: m.hero_image_url ?? null,
+    hero_image_position_y: m.hero_image_position_y ?? null,
     system_count: (m.staged_systems ?? []).length,
   }))
 }

@@ -432,7 +432,13 @@ export function ShowroomClient({
                   <a key={m.id} href={`/studio/showroom/${m.id}`} className="showroom-mfr-card">
                     <div style={{
                       height: '110px', flexShrink: 0,
-                      background: m.hero_image_url ? `url(${m.hero_image_url}) center/cover` : '#f0f4f8',
+                      ...(m.hero_image_url
+                        ? {
+                            backgroundImage: `url(${m.hero_image_url})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: `center ${m.hero_image_position_y ?? 50}%`,
+                          }
+                        : { background: '#f0f4f8' }),
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       {!m.hero_image_url && (

@@ -70,14 +70,16 @@ function ImagePreview({ url, alt }: { url: string | null; alt: string }) {
   )
 }
 
-function HeroPreview({ url }: { url: string | null }) {
+function HeroPreview({ url, positionY }: { url: string | null; positionY: number }) {
   if (!url) return null
   return (
     <div style={{
       marginTop: '0.5rem',
       height: '120px',
       borderRadius: '8px',
-      background: `url(${url}) center/cover`,
+      backgroundImage: `url(${url})`,
+      backgroundSize: 'cover',
+      backgroundPosition: `center ${positionY}%`,
       border: '1px solid var(--ds-border)',
     }} />
   )
@@ -98,6 +100,7 @@ export function BrandProfileForm({
     description:    initialValues.description    ?? '',
     website_url:    initialValues.website_url    ?? '',
     hero_image_url: initialValues.hero_image_url ?? '',
+    hero_image_position_y: initialValues.hero_image_position_y ?? 50,
     logo_url:       initialValues.logo_url       ?? '',
     phone:          initialValues.phone          ?? '',
     abn:            initialValues.abn            ?? '',
@@ -114,6 +117,11 @@ export function BrandProfileForm({
     }
   }
 
+  function setPositionY(e: React.ChangeEvent<HTMLInputElement>) {
+    setFields(prev => ({ ...prev, hero_image_position_y: Number(e.target.value) }))
+    setSaved(false)
+  }
+
   function onFocus(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
     e.currentTarget.style.borderColor = 'var(--ds-navy)'
   }
@@ -128,6 +136,7 @@ export function BrandProfileForm({
         description:    fields.description    || null,
         website_url:    fields.website_url    || null,
         hero_image_url: fields.hero_image_url || null,
+        hero_image_position_y: fields.hero_image_position_y,
         logo_url:       fields.logo_url       || null,
         phone:          fields.phone          || null,
         abn:            fields.abn            || null,
@@ -186,8 +195,37 @@ export function BrandProfileForm({
             placeholder="https://cdn.yourbrand.com.au/hero.jpg"
             style={inputStyle}
           />
-          <HeroPreview url={fields.hero_image_url || null} />
+          <HeroPreview url={fields.hero_image_url || null} positionY={fields.hero_image_position_y} />
         </Field>
+
+        {/* Hero vertical position */}
+        {fields.hero_image_url && (
+          <Field
+            label="Hero vertical position"
+            hint="Slide to choose which part of the image stays in frame. The hero is cropped to a wide band, so tall images may need adjusting."
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', minWidth: '28px' }}>Top</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={fields.hero_image_position_y}
+                onChange={setPositionY}
+                style={{ flex: 1, accentColor: '#185D7A', cursor: 'pointer' }}
+                aria-label="Hero image vertical position"
+              />
+              <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', minWidth: '44px', textAlign: 'right' }}>Bottom</span>
+              <span style={{
+                fontSize: '0.72rem', fontWeight: 700, color: 'var(--ds-text-sub)',
+                minWidth: '38px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+              }}>
+                {fields.hero_image_position_y}%
+              </span>
+            </div>
+          </Field>
+        )}
 
         {/* Description */}
         <Field
@@ -286,9 +324,13 @@ export function BrandProfileForm({
           {/* Hero area */}
           <div style={{
             height: '110px',
-            background: fields.hero_image_url
-              ? `url(${fields.hero_image_url}) center/cover`
-              : '#f0f4f8',
+            ...(fields.hero_image_url
+              ? {
+                  backgroundImage: `url(${fields.hero_image_url})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: `center ${fields.hero_image_position_y}%`,
+                }
+              : { background: '#f0f4f8' }),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             {!fields.hero_image_url && (

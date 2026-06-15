@@ -18,6 +18,7 @@ CREATE TABLE public.data_studio_manufacturers (
     website_url                TEXT,
     logo_url                   TEXT,
     hero_image_url             TEXT,
+    hero_image_position_y      SMALLINT    NOT NULL DEFAULT 50,
     description                TEXT,
     abn                        TEXT,
     phone                      TEXT,
@@ -36,6 +37,9 @@ CREATE TABLE public.data_studio_user_profiles (
     full_name    TEXT,
     global_role  TEXT        NOT NULL DEFAULT 'manufacturer_user',
     status       TEXT        NOT NULL DEFAULT 'active',
+    company_email_primary   TEXT,
+    company_email_secondary TEXT,
+    login_email_preference  TEXT        NOT NULL DEFAULT 'primary',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
