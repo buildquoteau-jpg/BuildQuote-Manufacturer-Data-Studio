@@ -136,7 +136,7 @@ export default async function ManufacturerDocumentsPage() {
                   <div
                     style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.2rem' }}
                   >
-                    📄 {doc.documentName}
+                    {doc.documentName}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)' }}>
                     {formatDocType(doc.documentType)}

@@ -214,7 +214,6 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
-        <div style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>📎</div>
         <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
           Drop files here or click to browse
         </p>
@@ -262,12 +261,17 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
                   fontSize: '0.82rem',
                 }}
               >
-                <span style={{ fontSize: '0.95rem', flexShrink: 0 }}>
-                  {item.status === 'done' ? '✅'
-                    : item.status === 'error' ? '❌'
-                    : item.status === 'uploading' ? '⏳'
-                    : '⏰'}
-                </span>
+                <span style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  background: item.status === 'done' ? '#22c55e'
+                    : item.status === 'error' ? '#ef4444'
+                    : item.status === 'uploading' ? 'var(--ds-teal)'
+                    : '#cbd5e1',
+                }} />
                 <span style={{
                   flex: 1,
                   minWidth: 0,
