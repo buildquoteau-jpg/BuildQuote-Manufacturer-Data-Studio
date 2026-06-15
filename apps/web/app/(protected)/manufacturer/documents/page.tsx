@@ -144,6 +144,7 @@ export default async function ManufacturerDocumentsPage() {
                     {formatFileSize(doc.fileSizeBytes)}
                     {' · Uploaded '}
                     {formatDate(doc.uploadedAt)}
+                    {doc.uploaderName ? ` by ${doc.uploaderName}` : ''}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>

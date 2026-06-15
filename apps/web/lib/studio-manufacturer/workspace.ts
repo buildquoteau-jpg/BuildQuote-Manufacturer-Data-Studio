@@ -115,6 +115,7 @@ export type ManufacturerDocument = {
   status: string
   uploadedAt: string
   fileSizeBytes: number | null
+  uploaderName: string | null
 }
 
 export type WorkspaceCounts = {
@@ -171,6 +172,7 @@ export type PortalDocument = {
   status: string
   uploadedAt: string
   fileSizeBytes: number | null
+  uploaderName: string | null
 }
 
 export type PortalData = {
@@ -217,6 +219,27 @@ function makeClient() {
   } catch {
     return { ok: false as const, error: 'Supabase client not configured — check env vars.' }
   }
+}
+
+async function resolveUploaderNames(
+  supabase: ReturnType<typeof createStudioServerClient>,
+  authUserIds: string[],
+): Promise<Map<string, string>> {
+  if (!authUserIds.length) return new Map()
+  const { data } = await supabase
+    .from('data_studio_user_profiles')
+    .select('auth_user_id, full_name, email, global_role')
+    .in('auth_user_id', authUserIds)
+  const map = new Map<string, string>()
+  for (const row of (data ?? []) as Array<{
+    auth_user_id: string; full_name: string | null; email: string; global_role: string
+  }>) {
+    map.set(
+      row.auth_user_id,
+      row.full_name ?? (row.global_role === 'buildquote_admin' ? 'Admin' : row.email),
+    )
+  }
+  return map
 }
 
 function groupByStatus(
@@ -322,7 +345,7 @@ export async function getManufacturerDocuments(
 
   const { data, error } = await c.supabase
     .from('source_documents')
-    .select('id, document_name, document_type, document_date, status, uploaded_at, file_size_bytes')
+    .select('id, document_name, document_type, document_date, status, uploaded_at, file_size_bytes, uploaded_by')
     .eq('manufacturer_id', manufacturerId)
     .order('uploaded_at', { ascending: false })
     .limit(50)
@@ -334,10 +357,14 @@ export async function getManufacturerDocuments(
   type DocRow = {
     id: string; document_name: string; document_type: string | null
     document_date: string | null; status: string; uploaded_at: string
-    file_size_bytes: number | null
+    file_size_bytes: number | null; uploaded_by: string | null
   }
 
-  const documents: ManufacturerDocument[] = ((data ?? []) as DocRow[]).map((d) => ({
+  const rows = (data ?? []) as DocRow[]
+  const uploaderIds = Array.from(new Set(rows.map((d) => d.uploaded_by).filter((id): id is string => !!id)))
+  const uploaderNames = await resolveUploaderNames(c.supabase, uploaderIds)
+
+  const documents: ManufacturerDocument[] = rows.map((d) => ({
     id: d.id,
     documentName: d.document_name,
     documentType: d.document_type,
@@ -345,6 +372,7 @@ export async function getManufacturerDocuments(
     status: d.status,
     uploadedAt: d.uploaded_at,
     fileSizeBytes: d.file_size_bytes,
+    uploaderName: d.uploaded_by ? (uploaderNames.get(d.uploaded_by) ?? null) : null,
   }))
 
   return { ok: true, documents }
@@ -755,7 +783,7 @@ export async function getPortalData(
       .single(),
     c.supabase
       .from('source_documents')
-      .select('id, document_name, document_type, document_date, status, uploaded_at, file_size_bytes')
+      .select('id, document_name, document_type, document_date, status, uploaded_at, file_size_bytes, uploaded_by')
       .eq('manufacturer_id', manufacturerId)
       .order('uploaded_at', { ascending: false })
       .limit(50),
@@ -780,9 +808,13 @@ export async function getPortalData(
   type DocRow = {
     id: string; document_name: string; document_type: string | null
     document_date: string | null; status: string; uploaded_at: string
-    file_size_bytes: number | null
+    file_size_bytes: number | null; uploaded_by: string | null
   }
-  const documents: PortalDocument[] = ((docsResult.data ?? []) as DocRow[]).map((d) => ({
+  const docRows = (docsResult.data ?? []) as DocRow[]
+  const portalUploaderIds = Array.from(new Set(docRows.map((d) => d.uploaded_by).filter((id): id is string => !!id)))
+  const portalUploaderNames = await resolveUploaderNames(c.supabase, portalUploaderIds)
+
+  const documents: PortalDocument[] = docRows.map((d) => ({
     id: d.id,
     documentName: d.document_name,
     documentType: d.document_type,
@@ -790,6 +822,7 @@ export async function getPortalData(
     status: d.status,
     uploadedAt: d.uploaded_at,
     fileSizeBytes: d.file_size_bytes,
+    uploaderName: d.uploaded_by ? (portalUploaderNames.get(d.uploaded_by) ?? null) : null,
   }))
 
   type SysRow = {

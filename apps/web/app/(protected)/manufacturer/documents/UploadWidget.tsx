@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useRef, useState } from 'react'
 import {
   requestDocumentUploadUrl,
   recordDocumentUpload,
@@ -15,23 +15,25 @@ const DOCUMENT_TYPES = [
   { id: 'other',                label: 'Other' },
 ]
 
-const ACCEPTED_MIME = [
+const ACCEPTED_MIME = new Set([
   'application/pdf',
   'text/csv',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
   'image/png',
   'image/jpeg',
-]
+])
 
 const ACCEPT_ATTR = '.pdf,.csv,.xlsx,.xls,.png,.jpg,.jpeg'
+const MAX_BYTES = 50 * 1024 * 1024
 
-type UploadState =
-  | { phase: 'idle' }
-  | { phase: 'selecting' }
-  | { phase: 'uploading'; progress: number }
-  | { phase: 'done' }
-  | { phase: 'error'; message: string }
+type FileItem = {
+  id: string
+  file: File
+  documentType: string
+  status: 'pending' | 'uploading' | 'done' | 'error'
+  error?: string
+}
 
 interface Props {
   manufacturerId: string
@@ -40,109 +42,146 @@ interface Props {
 
 export function UploadWidget({ manufacturerId, onUploaded }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedType, setSelectedType] = useState<string>('product_guide')
-  const [state, setState] = useState<UploadState>({ phase: 'idle' })
-  const [isPending, startTransition] = useTransition()
+  const [selectedType, setSelectedType] = useState('product_guide')
+  const [items, setItems] = useState<FileItem[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+  const [rejectMsg, setRejectMsg] = useState('')
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    handleUpload(file)
-    e.target.value = ''
+  // Refs for the async processing loop — avoids stale-closure issues
+  const queueRef = useRef<FileItem[]>([])
+  const isProcessingRef = useRef(false)
+
+  function updateItemInState(id: string, patch: Partial<FileItem>) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)))
+    const idx = queueRef.current.findIndex((it) => it.id === id)
+    if (idx !== -1) queueRef.current[idx] = { ...queueRef.current[idx], ...patch }
   }
 
-  function handleUpload(file: File) {
-    if (!ACCEPTED_MIME.includes(file.type)) {
-      setState({ phase: 'error', message: `File type not accepted: ${file.name}` })
-      return
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      setState({ phase: 'error', message: 'File exceeds 50 MB limit.' })
-      return
-    }
+  async function runProcessing() {
+    if (isProcessingRef.current) return
+    isProcessingRef.current = true
+    let uploadedCount = 0
 
-    setState({ phase: 'uploading', progress: 0 })
+    while (true) {
+      const item = queueRef.current.find((it) => it.status === 'pending')
+      if (!item) break
 
-    startTransition(async () => {
+      updateItemInState(item.id, { status: 'uploading' })
+
       // 1. Get presigned URL
       const presignResult = await requestDocumentUploadUrl({
         manufacturerId,
-        originalFilename: file.name,
-        contentType: file.type,
-        fileSizeBytes: file.size,
-        documentType: selectedType,
+        originalFilename: item.file.name,
+        contentType: item.file.type,
+        fileSizeBytes: item.file.size,
+        documentType: item.documentType,
       })
 
       if (!presignResult.ok) {
-        setState({ phase: 'error', message: presignResult.error })
-        return
+        updateItemInState(item.id, { status: 'error', error: presignResult.error })
+        continue
       }
 
-      // 2. Upload directly to R2
-      setState({ phase: 'uploading', progress: 30 })
-
+      // 2. Upload to R2
       const uploadRes = await fetch(presignResult.uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
+        headers: { 'Content-Type': item.file.type },
+        body: item.file,
       })
 
       if (!uploadRes.ok) {
-        setState({ phase: 'error', message: `Upload failed: ${uploadRes.statusText}` })
-        return
+        updateItemInState(item.id, { status: 'error', error: `Upload failed (${uploadRes.status})` })
+        continue
       }
 
-      setState({ phase: 'uploading', progress: 80 })
-
       // 3. Record in Supabase
-      const docName = file.name.replace(/\.[^.]+$/, '')
-
       const recordResult = await recordDocumentUpload({
         manufacturerId,
-        originalFilename: file.name,
-        documentName: docName,
-        documentType: selectedType,
+        originalFilename: item.file.name,
+        documentName: item.file.name.replace(/\.[^.]+$/, ''),
+        documentType: item.documentType,
         storageKey: presignResult.storageKey,
-        contentType: file.type,
-        fileSizeBytes: file.size,
+        contentType: item.file.type,
+        fileSizeBytes: item.file.size,
       })
 
       if (!recordResult.ok) {
-        setState({ phase: 'error', message: recordResult.error })
-        return
+        updateItemInState(item.id, { status: 'error', error: recordResult.error })
+        continue
       }
 
-      setState({ phase: 'done' })
-      onUploaded()
+      updateItemInState(item.id, { status: 'done' })
+      uploadedCount++
+    }
 
-      setTimeout(() => setState({ phase: 'idle' }), 2000)
-    })
+    isProcessingRef.current = false
+    if (uploadedCount > 0) onUploaded()
+  }
+
+  function addFiles(files: File[]) {
+    setRejectMsg('')
+    const rejected: string[] = []
+    const accepted: FileItem[] = []
+
+    for (const file of files) {
+      if (!ACCEPTED_MIME.has(file.type)) {
+        rejected.push(file.name)
+        continue
+      }
+      if (file.size > MAX_BYTES) {
+        rejected.push(`${file.name} (exceeds 50 MB)`)
+        continue
+      }
+      accepted.push({
+        id: crypto.randomUUID(),
+        file,
+        documentType: selectedType,
+        status: 'pending',
+      })
+    }
+
+    if (rejected.length) {
+      setRejectMsg(`Skipped: ${rejected.join(', ')}`)
+    }
+    if (!accepted.length) return
+
+    queueRef.current = [...queueRef.current, ...accepted]
+    setItems((prev) => [...prev, ...accepted])
+    runProcessing()
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length) addFiles(files)
+    e.target.value = ''
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (file) handleUpload(file)
+    setIsDragging(false)
+    addFiles(Array.from(e.dataTransfer.files))
   }
 
-  const isUploading = state.phase === 'uploading' || isPending
+  function clearSettled() {
+    queueRef.current = queueRef.current.filter((it) => it.status === 'pending' || it.status === 'uploading')
+    setItems((prev) => prev.filter((it) => it.status === 'pending' || it.status === 'uploading'))
+    setRejectMsg('')
+  }
+
+  const isRunning = items.some((it) => it.status === 'uploading' || it.status === 'pending')
+  const allSettled = items.length > 0 && !isRunning
+  const doneCount = items.filter((it) => it.status === 'done').length
+  const errorCount = items.filter((it) => it.status === 'error').length
 
   return (
     <div>
       {/* Document type selector */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '0.5rem',
-          flexWrap: 'wrap',
-          marginBottom: '1rem',
-        }}
-      >
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         {DOCUMENT_TYPES.map((dt) => (
           <button
             key={dt.id}
             onClick={() => setSelectedType(dt.id)}
-            disabled={isUploading}
+            disabled={isRunning}
             className={`studio-btn ${selectedType === dt.id ? 'studio-btn-primary' : 'studio-btn-ghost'}`}
             style={{ fontSize: '0.82rem' }}
           >
@@ -154,89 +193,109 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
       {/* Drop zone */}
       <div
         onDrop={handleDrop}
-        onDragOver={(e) => e.preventDefault()}
-        onClick={() => !isUploading && fileInputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+        onDragLeave={() => setIsDragging(false)}
+        onClick={() => fileInputRef.current?.click()}
         style={{
-          border: '2px dashed var(--ds-border)',
+          border: `2px dashed ${isDragging ? 'var(--ds-teal)' : 'var(--ds-border)'}`,
           borderRadius: 8,
-          padding: '2rem',
+          padding: '1.75rem 2rem',
           textAlign: 'center',
-          cursor: isUploading ? 'default' : 'pointer',
-          opacity: isUploading ? 0.7 : 1,
-          transition: 'border-color 0.15s',
+          cursor: 'pointer',
+          background: isDragging ? 'rgba(24,93,122,0.04)' : undefined,
+          transition: 'border-color 0.15s, background 0.15s',
         }}
       >
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept={ACCEPT_ATTR}
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
-
-        {state.phase === 'idle' && (
-          <>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📎</div>
-            <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
-              Drop a file here or click to browse
-            </p>
-            <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>
-              PDF, CSV, XLSX, PNG, JPG · Max 50 MB
-            </p>
-          </>
-        )}
-
-        {state.phase === 'uploading' && (
-          <>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
-            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Uploading…</p>
-            <div
-              style={{
-                height: 4,
-                background: 'var(--ds-border-soft)',
-                borderRadius: 2,
-                overflow: 'hidden',
-                maxWidth: 300,
-                margin: '0 auto',
-              }}
-            >
-              <div
-                style={{
-                  height: '100%',
-                  width: `${state.progress}%`,
-                  background: 'var(--ds-teal)',
-                  borderRadius: 2,
-                  transition: 'width 0.3s',
-                }}
-              />
-            </div>
-          </>
-        )}
-
-        {state.phase === 'done' && (
-          <>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
-            <p style={{ fontWeight: 600 }}>Upload complete!</p>
-          </>
-        )}
-
-        {state.phase === 'error' && (
-          <>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>❌</div>
-            <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Upload failed</p>
-            <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', marginBottom: '0.75rem' }}>
-              {state.message}
-            </p>
-            <button
-              className="studio-btn studio-btn-ghost"
-              onClick={(e) => { e.stopPropagation(); setState({ phase: 'idle' }) }}
-              style={{ fontSize: '0.82rem' }}
-            >
-              Try again
-            </button>
-          </>
-        )}
+        <div style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>📎</div>
+        <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+          Drop files here or click to browse
+        </p>
+        <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>
+          PDF, CSV, XLSX, PNG, JPG · Max 50 MB · Multiple files supported
+        </p>
       </div>
+
+      {rejectMsg && (
+        <p style={{ fontSize: '0.78rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 600 }}>
+          {rejectMsg}
+        </p>
+      )}
+
+      {/* File queue */}
+      {items.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          {allSettled && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)' }}>
+                {doneCount} uploaded{errorCount > 0 ? `, ${errorCount} failed` : ''}
+              </span>
+              <button
+                onClick={clearSettled}
+                className="studio-btn studio-btn-ghost"
+                style={{ fontSize: '0.78rem', padding: '0.25rem 0.6rem' }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {items.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  padding: '0.45rem 0.75rem',
+                  background: 'var(--ds-card-bg)',
+                  border: '1px solid var(--ds-border-soft)',
+                  borderRadius: 6,
+                  fontSize: '0.82rem',
+                }}
+              >
+                <span style={{ fontSize: '0.95rem', flexShrink: 0 }}>
+                  {item.status === 'done' ? '✅'
+                    : item.status === 'error' ? '❌'
+                    : item.status === 'uploading' ? '⏳'
+                    : '⏰'}
+                </span>
+                <span style={{
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: 'var(--ds-text)',
+                }}>
+                  {item.file.name}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--ds-text-faint)', flexShrink: 0 }}>
+                  {DOCUMENT_TYPES.find((t) => t.id === item.documentType)?.label}
+                </span>
+                {item.status === 'uploading' && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--ds-teal)', flexShrink: 0 }}>
+                    Uploading…
+                  </span>
+                )}
+                {item.status === 'error' && item.error && (
+                  <span style={{ fontSize: '0.75rem', color: '#ef4444', flexShrink: 0, maxWidth: 160, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {item.error}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

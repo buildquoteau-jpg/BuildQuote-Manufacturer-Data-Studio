@@ -249,6 +249,16 @@ const DOC_TYPE_LABEL: Record<string, string> = {
   brochure:   'DOC',
 }
 
+function formatDate(isoString: string): string {
+  try {
+    return new Date(isoString).toLocaleDateString('en-AU', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    })
+  } catch {
+    return isoString
+  }
+}
+
 function formatFileSize(bytes: number | null): string {
   if (!bytes) return ''
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`
@@ -322,6 +332,7 @@ function CatalogueCard({ doc, manufacturerId }: { doc: PortalDocument; manufactu
             color: '#1e293b',
             marginBottom: '0.3rem',
             lineHeight: 1.3,
+            wordBreak: 'break-word',
           }}
         >
           {doc.documentName}
@@ -343,6 +354,10 @@ function CatalogueCard({ doc, manufacturerId }: { doc: PortalDocument; manufactu
                 {fileSize}
               </span>
             )}
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8', width: '100%' }}>
+              Uploaded {formatDate(doc.uploadedAt)}
+              {doc.uploaderName ? ` by ${doc.uploaderName}` : ''}
+            </span>
           </div>
           <div style={{ marginTop: '0.6rem' }}>
             <OpenDocumentButton documentId={doc.id} manufacturerId={manufacturerId} variant="button" />
