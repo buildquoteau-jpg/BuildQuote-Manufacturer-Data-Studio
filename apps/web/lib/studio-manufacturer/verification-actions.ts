@@ -259,7 +259,7 @@ export async function updateProfile(
   const supabase = createStudioServerClient()
   const { error } = await supabase
     .from('staged_system_profiles')
-    .update({ ...data, updated_at: new Date().toISOString() } as any)
+    .update(data as any)
     .eq('id', profileId)
     .eq('staged_system_id', systemId)
 
