@@ -5,6 +5,7 @@ import {
   saveAccountProfile,
   changePassword,
   sendPasswordReset,
+  updateLoginEmail,
   type AccountProfileFields,
 } from '@/lib/studio-manufacturer/account-actions'
 
@@ -103,6 +104,12 @@ export function AccountProfileForm({
   const [resetErr, setResetErr] = useState<string | null>(null)
   const [resetPending, startResetTransition] = useTransition()
 
+  // Change sign-in email state
+  const [newLoginEmail, setNewLoginEmail] = useState('')
+  const [emailMsg, setEmailMsg] = useState<string | null>(null)
+  const [emailErr, setEmailErr] = useState<string | null>(null)
+  const [emailPending, startEmailTransition] = useTransition()
+
   function onFocus(e: React.FocusEvent<HTMLInputElement>) {
     e.currentTarget.style.borderColor = 'var(--ds-navy)'
   }
@@ -151,6 +158,16 @@ export function AccountProfileForm({
       const res = await sendPasswordReset()
       if (!res.ok) { setResetErr(res.error); return }
       setResetMsg(`Reset link sent to ${signInEmail}. Check your inbox.`)
+    })
+  }
+
+  function handleUpdateEmail() {
+    setEmailErr(null); setEmailMsg(null)
+    startEmailTransition(async () => {
+      const res = await updateLoginEmail(newLoginEmail)
+      if (!res.ok) { setEmailErr(res.error); return }
+      setEmailMsg(`Confirmation link sent to ${newLoginEmail.trim().toLowerCase()}. Click it to finish the change — until then you keep signing in with ${signInEmail}.`)
+      setNewLoginEmail('')
     })
   }
 
@@ -209,7 +226,7 @@ export function AccountProfileForm({
 
         <Field
           label="Preferred email for login"
-          hint="Choose which company email you’d use to sign in. This is recorded as a preference — to change the email you actually authenticate with, contact BuildQuote."
+          hint="Which company email you’d normally use to sign in. This is recorded as a preference — to change the address you actually authenticate with, use “Sign-in email” below."
         >
           <label style={radioRow}>
             <input
@@ -233,12 +250,52 @@ export function AccountProfileForm({
           </label>
         </Field>
 
+      </section>
+
+      {/* ── Sign-in email ── */}
+      <section style={cardStyle}>
+        <div style={sectionLabelStyle}>Sign-in email</div>
+
         <div style={{
-          marginTop: '0.5rem', padding: '0.6rem 0.8rem', background: 'var(--ds-page-bg, #f8fafc)',
-          border: '1px solid var(--ds-border-soft)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--ds-text-muted)',
+          marginBottom: '1.1rem', padding: '0.6rem 0.8rem', background: 'var(--ds-page-bg, #f8fafc)',
+          border: '1px solid var(--ds-border-soft)', borderRadius: 8, fontSize: '0.8rem', color: 'var(--ds-text-muted)',
         }}>
-          Current sign-in email: <strong style={{ color: 'var(--ds-text)' }}>{signInEmail}</strong>
+          You currently sign in with <strong style={{ color: 'var(--ds-text)' }}>{signInEmail}</strong>
         </div>
+
+        <Field
+          label="New sign-in email"
+          hint="Enter your personal email to take over from the onboarding address. We’ll email a confirmation link to the new address — the change only takes effect once you click it."
+        >
+          <input
+            type="email"
+            value={newLoginEmail}
+            onChange={(e) => { setNewLoginEmail(e.target.value); setEmailErr(null); setEmailMsg(null) }}
+            onFocus={onFocus} onBlur={onBlur}
+            placeholder="you@personal-email.com"
+            style={inputStyle}
+          />
+        </Field>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleUpdateEmail}
+            disabled={emailPending || !newLoginEmail.trim()}
+            style={{
+              padding: '0.6rem 1.5rem', borderRadius: 8, border: 'none',
+              background: (emailPending || !newLoginEmail.trim()) ? '#9ca3af' : '#185D7A', color: '#fff',
+              fontSize: '0.875rem', fontWeight: 700, cursor: (emailPending || !newLoginEmail.trim()) ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {emailPending ? 'Sending…' : 'Update sign-in email'}
+          </button>
+          {emailErr && <span style={{ fontSize: '0.85rem', color: '#dc2626' }}>{emailErr}</span>}
+        </div>
+        {emailMsg && (
+          <p style={{ margin: '0.7rem 0 0', fontSize: '0.82rem', color: '#16a34a', fontWeight: 600, lineHeight: 1.5 }}>
+            {emailMsg}
+          </p>
+        )}
       </section>
 
       {/* Save profile */}

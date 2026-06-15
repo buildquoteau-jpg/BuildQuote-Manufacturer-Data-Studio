@@ -103,6 +103,47 @@ export async function changePassword(newPassword: string): Promise<AccountAction
   return { ok: true }
 }
 
+// ─── updateLoginEmail ───────────────────────────────────────────────────────--
+// Changes the user's actual Supabase auth (sign-in) email. Supabase sends a
+// confirmation link to the new address; the change takes effect once confirmed.
+// Used in onboarding: a dummy address is created, then the rep switches it to
+// their personal email here.
+
+export async function updateLoginEmail(newEmail: string): Promise<AccountActionResult> {
+  const session = await getStudioSession()
+  if (!session.profile || !session.user) return { ok: false, error: 'Not authenticated.' }
+
+  const email = normaliseEmail(newEmail)
+  if (!email || !EMAIL_RE.test(email)) {
+    return { ok: false, error: 'Enter a valid email address.' }
+  }
+  if (email === session.user.email?.toLowerCase()) {
+    return { ok: false, error: 'That is already your sign-in email.' }
+  }
+
+  // Land the confirmation link back on the account page.
+  const h = headers()
+  const origin =
+    h.get('origin') ??
+    (h.get('host') ? `https://${h.get('host')}` : process.env.NEXT_PUBLIC_SITE_URL ?? '')
+  const emailRedirectTo = origin ? `${origin}/manufacturer/account` : undefined
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase.auth.updateUser({ email }, { emailRedirectTo })
+
+  if (error) {
+    const msg = error.message.toLowerCase()
+    if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+      return { ok: false, error: 'That email is already in use by another account.' }
+    }
+    if (msg.includes('rate') || msg.includes('too many') || msg.includes('seconds')) {
+      return { ok: false, error: 'Please wait a moment before requesting another change.' }
+    }
+    return { ok: false, error: 'Could not start the email change. Please try again.' }
+  }
+  return { ok: true }
+}
+
 // ─── sendPasswordReset ──────────────────────────────────────────────────────--
 // Emails a branded recovery link to the user's actual sign-in email.
 
