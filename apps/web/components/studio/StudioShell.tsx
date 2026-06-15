@@ -21,6 +21,7 @@ const MFR_NAV: NavItem[] = [
   { label: 'Brand profile',   href: '/manufacturer/profile' },
   { label: 'Documents',       href: '/manufacturer/documents' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
+  { label: 'Widgets',         href: '/manufacturer/widgets' },
   { label: 'Showroom',        href: '/studio/showroom' },
   { label: 'Help',            href: '/manufacturer/help' },
 ]
