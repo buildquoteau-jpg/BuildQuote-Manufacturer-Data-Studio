@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
-import { createStudioServiceClient } from '@/lib/supabase/service'
+import { createStudioServerClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   const session = await getStudioSession()
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const supabase = createStudioServiceClient()
+  const supabase = createStudioServerClient()
   const { data, error } = await supabase
     .from('data_studio_manufacturers')
     .insert({
