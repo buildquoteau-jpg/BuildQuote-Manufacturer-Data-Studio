@@ -47,7 +47,7 @@ function ManufacturerHero({ manufacturer }: { manufacturer: ShowroomManufacturer
     ? {
         backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${manufacturer.hero_image_url})`,
         backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        backgroundPosition: `center ${manufacturer.hero_image_position_y ?? 50}%`,
       }
     : { background: 'linear-gradient(135deg, #1b3a2d 0%, #2d5a42 60%, #1b3a2d 100%)' }
 

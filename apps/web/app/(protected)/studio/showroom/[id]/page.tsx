@@ -52,6 +52,7 @@ export type ShowroomManufacturer = {
   description: string | null
   logo_url: string | null
   hero_image_url: string | null
+  hero_image_position_y: number | null
   website_url: string | null
 }
 
@@ -65,7 +66,7 @@ async function getData(id: string): Promise<{ manufacturer: ShowroomManufacturer
 
   const { data: mfr, error: mfrError } = await supabase
     .from('data_studio_manufacturers')
-    .select('id, name, slug, description, logo_url, hero_image_url, website_url')
+    .select('id, name, slug, description, logo_url, hero_image_url, hero_image_position_y, website_url')
     .eq('id', id)
     .single()
 

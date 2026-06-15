@@ -11,14 +11,15 @@ async function getFullManufacturerProfile(manufacturerId: string) {
     const supabase = createStudioServerClient()
     const { data, error } = await supabase
       .from('data_studio_manufacturers')
-      .select('id, name, slug, status, description, website_url, hero_image_url, logo_url, phone, abn')
+      .select('id, name, slug, status, description, website_url, hero_image_url, hero_image_position_y, logo_url, phone, abn')
       .eq('id', manufacturerId)
       .single()
     if (error || !data) return null
     return data as {
       id: string; name: string; slug: string; status: string
       description: string | null; website_url: string | null
-      hero_image_url: string | null; logo_url: string | null
+      hero_image_url: string | null; hero_image_position_y: number | null
+      logo_url: string | null
       phone: string | null; abn: string | null
     }
   } catch {
@@ -69,6 +70,7 @@ export default async function ManufacturerProfilePage() {
           description:    profile.description,
           website_url:    profile.website_url,
           hero_image_url: profile.hero_image_url,
+          hero_image_position_y: profile.hero_image_position_y ?? 50,
           logo_url:       profile.logo_url,
           phone:          profile.phone,
           abn:            profile.abn,
