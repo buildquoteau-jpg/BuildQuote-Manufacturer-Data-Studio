@@ -212,6 +212,7 @@ export interface ParsedSystemCandidate extends ParserEntityNotes {
   double_sided?: boolean | null
   sheet_format?: string | null
   install_guide_urls?: { label: string; url: string }[] | null
+  design_guide_url?: string | null
   tech_data_url?: string | null
   notes?: string | null
   sort_order?: number | null

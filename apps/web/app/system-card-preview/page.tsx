@@ -25,6 +25,7 @@ const AXON_CLADDING: SystemCardData = {
   australian_made: null,
   source_url: null,
   install_guide_urls: null,
+  design_guide_url: null,
   notes: 'Pre-primed/site-painted — no stocked colours.',
 
   profiles: [
@@ -166,6 +167,7 @@ const JDS_REGALFRAME: SystemCardData = {
   australian_made: null,
   source_url: null,
   install_guide_urls: null,
+  design_guide_url: null,
   notes: null,
 
   profiles: [

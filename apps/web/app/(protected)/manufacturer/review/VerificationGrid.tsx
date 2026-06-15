@@ -1312,6 +1312,7 @@ function ExpandedCardView({
     notes:              system.notes,
     source_url:         system.source_url,
     install_guide_urls: system.install_guide_urls,
+    design_guide_url:   system.design_guide_url,
     profiles: system.profiles.map(p => ({
       product_code: p.product_code, profile_name: p.profile_name,
       dimensions: p.dimensions, length_mm: p.length_mm,
@@ -1448,6 +1449,17 @@ function ExpandedCardView({
                   <FieldRow
                     label="Technical data URL" fieldName="tech_data_url" currentValue={null}
                     fieldState={fieldStates['tech_data_url'] ?? null}
+                    systemId={system.id} manufacturerId={manufacturerId} isUrl
+                    onStateChange={handleFieldChange}
+                  />
+                )
+              }
+              {system.design_guide_url
+                ? <FieldRow {...fieldRowProps('Design guide URL', 'design_guide_url', { isUrl: true })} />
+                : (
+                  <FieldRow
+                    label="Design guide URL" fieldName="design_guide_url" currentValue={null}
+                    fieldState={fieldStates['design_guide_url'] ?? null}
                     systemId={system.id} manufacturerId={manufacturerId} isUrl
                     onStateChange={handleFieldChange}
                   />
