@@ -243,6 +243,15 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Branded password-reset (recovery) email.
+# NOTE: this configures the LOCAL Supabase stack only. The production project
+# (oxvhmulxuvlfjyjzleki.supabase.co) reads its template from the Supabase
+# dashboard → Authentication → Email Templates → Reset Password. Paste the
+# contents of supabase/templates/recovery.html there to match.
+[auth.email.template.recovery]
+subject = "Reset your BuildQuote password"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true
