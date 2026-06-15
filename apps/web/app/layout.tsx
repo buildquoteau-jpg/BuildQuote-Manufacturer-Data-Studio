@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { DraftDisclaimerBanner, DraftWatermark } from '@/components/DraftDisclaimer'
 
 export const metadata: Metadata = {
   title: 'BuildQuote Data Studio',
@@ -13,7 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <DraftDisclaimerBanner />
+        <DraftWatermark />
+        {children}
+      </body>
     </html>
   )
 }
