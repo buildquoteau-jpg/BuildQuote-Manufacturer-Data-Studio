@@ -43,18 +43,21 @@ function fmtUom(uom: string | null): string {
 function ManufacturerHero({ manufacturer }: { manufacturer: ShowroomManufacturer }) {
   const [logoError, setLogoError] = useState(false)
 
+  // Styles kept identical to the public manufacturer-portal hero
+  // (app/widget/[token]/ManufacturerHero.tsx) so the studio preview matches
+  // exactly — the only addition is the vertical-position control.
   const bgStyle = manufacturer.hero_image_url
     ? {
         backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${manufacturer.hero_image_url})`,
         backgroundSize: 'cover',
         backgroundPosition: `center ${manufacturer.hero_image_position_y ?? 50}%`,
       }
-    : { background: 'linear-gradient(135deg, #1b3a2d 0%, #2d5a42 60%, #1b3a2d 100%)' }
+    : { background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 60%, #1e3a5f 100%)' }
 
   const showLogo = manufacturer.logo_url && !logoError
 
   return (
-    <div style={{ ...bgStyle, padding: '56px 32px 52px', textAlign: 'center', marginBottom: '28px' }}>
+    <div style={{ ...bgStyle, borderRadius: '14px', padding: '56px 32px 52px', textAlign: 'center', marginBottom: '28px', overflow: 'hidden' }}>
       {showLogo && (
         <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.93)', borderRadius: '10px', padding: '8px 18px', marginBottom: '20px' }}>
           <img src={manufacturer.logo_url!} alt={manufacturer.name} onError={() => setLogoError(true)} style={{ height: '38px', objectFit: 'contain', display: 'block' }} />
