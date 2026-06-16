@@ -10,30 +10,42 @@ type ManufacturerProfile = {
   id: string; name: string; slug: string; status: string
   description: string | null; website_url: string | null
   hero_image_url: string | null; hero_image_position_y: number | null
+  hero_wide_image_url: string | null; hero_wide_image_position_y: number | null
   logo_url: string | null
   phone: string | null; abn: string | null
 }
+
+const FULL_COLUMNS =
+  'id, name, slug, status, description, website_url, hero_image_url, hero_image_position_y, hero_wide_image_url, hero_wide_image_position_y, logo_url, phone, abn'
+const BASE_COLUMNS =
+  'id, name, slug, status, description, website_url, hero_image_url, logo_url, phone, abn'
 
 async function getFullManufacturerProfile(manufacturerId: string): Promise<ManufacturerProfile | null> {
   try {
     const supabase = createStudioServerClient()
     const { data, error } = await supabase
       .from('data_studio_manufacturers')
-      .select('id, name, slug, status, description, website_url, hero_image_url, hero_image_position_y, logo_url, phone, abn')
+      .select(FULL_COLUMNS)
       .eq('id', manufacturerId)
       .single()
 
     if (!error) return data as ManufacturerProfile
 
-    // Migration 031 may not be applied yet — fall back to a query without the new column.
-    if (error.code === '42703' || error.message?.includes('hero_image_position_y')) {
+    // Migrations 031/034 may not be applied yet — fall back to a query without
+    // the hero-position / wide-image columns and default them to null.
+    if (error.code === '42703' || /hero_(image|wide_image)/.test(error.message ?? '')) {
       const { data: fallback, error: fbErr } = await supabase
         .from('data_studio_manufacturers')
-        .select('id, name, slug, status, description, website_url, hero_image_url, logo_url, phone, abn')
+        .select(BASE_COLUMNS)
         .eq('id', manufacturerId)
         .single()
       if (fbErr || !fallback) return null
-      return { ...(fallback as Omit<ManufacturerProfile, 'hero_image_position_y'>), hero_image_position_y: null }
+      return {
+        ...(fallback as Omit<ManufacturerProfile, 'hero_image_position_y' | 'hero_wide_image_url' | 'hero_wide_image_position_y'>),
+        hero_image_position_y: null,
+        hero_wide_image_url: null,
+        hero_wide_image_position_y: null,
+      }
     }
 
     return null
@@ -86,6 +98,8 @@ export default async function ManufacturerProfilePage() {
           website_url:    profile.website_url,
           hero_image_url: profile.hero_image_url,
           hero_image_position_y: profile.hero_image_position_y ?? 50,
+          hero_wide_image_url: profile.hero_wide_image_url,
+          hero_wide_image_position_y: profile.hero_wide_image_position_y ?? 50,
           logo_url:       profile.logo_url,
           phone:          profile.phone,
           abn:            profile.abn,
