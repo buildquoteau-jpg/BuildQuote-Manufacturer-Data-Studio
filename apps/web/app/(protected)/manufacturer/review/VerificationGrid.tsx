@@ -1268,6 +1268,7 @@ function ExpandedCardView({
     startVerifyTransition(async () => {
       const res = await reopenSystem(system.id, manufacturerId)
       if (!res.ok) { setVerifyErr(res.error); return }
+      setSystem(prev => ({ ...prev, verification_status: 'in_review', reviewer_notes: null }))
       onStatusChange(system.id, 'in_review', null)
     })
   }
