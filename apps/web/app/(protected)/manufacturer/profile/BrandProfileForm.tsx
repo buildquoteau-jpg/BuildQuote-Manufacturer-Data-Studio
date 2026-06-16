@@ -71,12 +71,21 @@ function ImagePreview({ url, alt }: { url: string | null; alt: string }) {
 }
 
 // Unified preview panel: slider + page-hero + grid-card, all live.
+//
+// Both previews are faithful 1:1 reproductions of the live components so the
+// vertical-position slider crops the image exactly as it will appear:
+//  • Page hero  → matches app/(protected)/studio/showroom/[id] ManufacturerHero
+//                 (and the public manufacturer-portal hero): same overlay
+//                 gradient, 14px radius, 56/32/52 padding and typography.
+//                 Rendered full-width so the wide-banner crop is accurate.
+//  • Grid card  → matches the showroom grid card: 110px-tall hero band.
 function HeroPreviewPanel({
   heroUrl,
   positionY,
   logoUrl,
   manufacturerName,
   description,
+  websiteUrl,
   onSliderChange,
 }: {
   heroUrl: string
@@ -84,13 +93,23 @@ function HeroPreviewPanel({
   logoUrl: string | null
   manufacturerName: string
   description: string | null
+  websiteUrl: string | null
   onSliderChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }) {
-  const bgStyle: React.CSSProperties = {
+  // Overlay + cover crop, identical to the live hero.
+  const heroBg: React.CSSProperties = {
+    backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${heroUrl})`,
+    backgroundSize: 'cover',
+    backgroundPosition: `center ${positionY}%`,
+  }
+  // Plain cover crop (no overlay) for the grid card hero band.
+  const cardBg: React.CSSProperties = {
     backgroundImage: `url(${heroUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: `center ${positionY}%`,
   }
+
+  const showLogo = !!logoUrl
 
   return (
     <div style={{
@@ -119,99 +138,74 @@ function HeroPreviewPanel({
           </span>
         </div>
         <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: 'var(--ds-text-faint)' }}>
-          Drag to choose which part of the image stays in frame. Both previews update live.
+          Drag to choose which part of the image stays in frame. Both previews below update live and match the published layout.
         </p>
       </div>
 
-      {/* Two previews */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 196px', gap: '0.9rem', padding: '0.9rem 1rem 0.8rem' }}>
+      <div style={{ padding: '0.9rem 1rem 0.85rem' }}>
 
-        {/* ── Page hero ── */}
-        <div>
-          <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
-            Manufacturer page
+        {/* ── Page hero (full width, faithful reproduction) ── */}
+        <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
+          Manufacturer page — full-width banner
+        </div>
+        <div style={{ ...heroBg, borderRadius: 14, padding: '56px 32px 52px', textAlign: 'center', overflow: 'hidden' }}>
+          {showLogo && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.93)', borderRadius: 10, padding: '8px 18px', marginBottom: 20 }}>
+              <img src={logoUrl!} alt="" style={{ height: 38, objectFit: 'contain', display: 'block' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            </div>
+          )}
+          <div style={{ fontSize: showLogo ? 22 : 34, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', marginBottom: 10, textShadow: '0 2px 12px rgba(0,0,0,0.4)', lineHeight: 1.1 }}>
+            {manufacturerName}
           </div>
-          <div style={{
-            ...bgStyle,
-            height: 180,
-            borderRadius: 8,
-            position: 'relative',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,30,50,0.42)' }} />
-            <div style={{ position: 'relative', textAlign: 'center', padding: '0 1rem', maxWidth: '90%' }}>
-              {logoUrl && (
-                <div style={{ marginBottom: '0.35rem' }}>
-                  <img
-                    src={logoUrl}
-                    alt=""
-                    style={{ maxWidth: 72, maxHeight: 30, objectFit: 'contain', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.4))' }}
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                  />
-                </div>
-              )}
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)', lineHeight: 1.2 }}>
-                {manufacturerName}
-              </div>
-              {description && (
-                <div style={{
-                  fontSize: '0.64rem', color: 'rgba(255,255,255,0.82)', marginTop: '0.3rem', lineHeight: 1.45,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-                }}>
-                  {description}
-                </div>
-              )}
+          {description && (
+            <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.65, maxWidth: 580, margin: '0 auto 24px', textShadow: '0 1px 6px rgba(0,0,0,0.35)' }}>
+              {description}
+            </p>
+          )}
+          {websiteUrl && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 22px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.45)', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              Visit {manufacturerName} ↗
+            </span>
+          )}
+        </div>
+        <p style={{ margin: '0.3rem 0 0.95rem', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
+          Exactly how the banner renders on the manufacturer page (shown here at preview width — on the live site it spans the full screen).
+        </p>
+
+        {/* ── Grid card (true proportions) ── */}
+        <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
+          Showroom grid card
+        </div>
+        <div style={{
+          width: 240,
+          background: '#fff',
+          border: '1.5px solid #e5e7eb',
+          borderRadius: 14,
+          overflow: 'hidden',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
+        }}>
+          {/* 110px band matches the live grid card hero height */}
+          <div style={{ ...cardBg, height: 101 }} />
+          <div style={{ padding: '12px 14px 14px' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', lineHeight: 1.3, marginBottom: 4 }}>
+              {manufacturerName}
+            </div>
+            {description && (
               <div style={{
-                marginTop: '0.5rem', display: 'inline-block',
-                border: '1px solid rgba(255,255,255,0.65)', borderRadius: 20,
-                padding: '2px 10px', fontSize: '0.58rem', color: 'rgba(255,255,255,0.9)', fontWeight: 600,
+                fontSize: 12, color: '#6b7280', lineHeight: 1.5,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
               }}>
-                Visit {manufacturerName} ↗
+                {description}
               </div>
+            )}
+            <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: '#185D7A' }}>
+              View products
             </div>
           </div>
-          <p style={{ margin: '0.3rem 0 0', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
-            Full-width banner on the manufacturer detail page
-          </p>
         </div>
-
-        {/* ── Grid card ── */}
-        <div>
-          <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
-            Showroom card
-          </div>
-          <div style={{
-            background: '#fff',
-            border: '1.5px solid #e5e7eb',
-            borderRadius: 12,
-            overflow: 'hidden',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-          }}>
-            <div style={{ ...bgStyle, height: 88 }} />
-            <div style={{ padding: '9px 11px 11px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '3px' }}>
-                {manufacturerName}
-              </div>
-              {description && (
-                <div style={{
-                  fontSize: '10.5px', color: '#6b7280', lineHeight: 1.4,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-                }}>
-                  {description}
-                </div>
-              )}
-              <div style={{ marginTop: '6px', fontSize: '11px', fontWeight: 600, color: '#185D7A' }}>
-                View products
-              </div>
-            </div>
-          </div>
-          <p style={{ margin: '0.3rem 0 0', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
-            As it appears in the showroom grid
-          </p>
-        </div>
+        <p style={{ margin: '0.3rem 0 0', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
+          As it appears in the showroom grid
+        </p>
       </div>
     </div>
   )
@@ -335,6 +329,7 @@ export function BrandProfileForm({
             logoUrl={fields.logo_url || null}
             manufacturerName={manufacturerName}
             description={fields.description || null}
+            websiteUrl={fields.website_url || null}
             onSliderChange={setPositionY}
           />
         )}
