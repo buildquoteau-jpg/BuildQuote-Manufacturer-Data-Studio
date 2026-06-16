@@ -68,50 +68,74 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
 
       updateItemInState(item.id, { status: 'uploading' })
 
-      // 1. Get presigned URL
-      const presignResult = await requestDocumentUploadUrl({
-        manufacturerId,
-        originalFilename: item.file.name,
-        contentType: item.file.type,
-        fileSizeBytes: item.file.size,
-        documentType: item.documentType,
-      })
+      try {
+        // 1. Get presigned URL
+        const presignResult = await requestDocumentUploadUrl({
+          manufacturerId,
+          originalFilename: item.file.name,
+          contentType: item.file.type,
+          fileSizeBytes: item.file.size,
+          documentType: item.documentType,
+        })
 
-      if (!presignResult.ok) {
-        updateItemInState(item.id, { status: 'error', error: presignResult.error })
-        continue
+        if (!presignResult.ok) {
+          updateItemInState(item.id, { status: 'error', error: presignResult.error })
+          continue
+        }
+
+        // 2. Upload to R2
+        let uploadRes: Response
+        try {
+          uploadRes = await fetch(presignResult.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': item.file.type },
+            body: item.file,
+          })
+        } catch (networkErr) {
+          const msg = networkErr instanceof TypeError
+            ? 'Network error — could not reach storage. Check your connection and try again.'
+            : `Upload failed: ${networkErr instanceof Error ? networkErr.message : String(networkErr)}`
+          updateItemInState(item.id, { status: 'error', error: msg })
+          continue
+        }
+
+        if (!uploadRes.ok) {
+          const statusMessages: Record<number, string> = {
+            400: 'Bad request — the file or upload URL is malformed.',
+            403: 'Storage permission denied (403) — the upload URL may have expired. Try again.',
+            413: 'File too large — maximum size is 50 MB.',
+            500: 'Storage server error (500). Please try again later.',
+            503: 'Storage unavailable (503). Please try again later.',
+          }
+          const msg = statusMessages[uploadRes.status] ?? `Upload failed with status ${uploadRes.status}.`
+          updateItemInState(item.id, { status: 'error', error: msg })
+          continue
+        }
+
+        // 3. Record in Supabase
+        const recordResult = await recordDocumentUpload({
+          manufacturerId,
+          originalFilename: item.file.name,
+          documentName: item.file.name.replace(/\.[^.]+$/, ''),
+          documentType: item.documentType,
+          storageKey: presignResult.storageKey,
+          contentType: item.file.type,
+          fileSizeBytes: item.file.size,
+        })
+
+        if (!recordResult.ok) {
+          updateItemInState(item.id, { status: 'error', error: `File uploaded but failed to save record: ${recordResult.error}` })
+          continue
+        }
+
+        updateItemInState(item.id, { status: 'done' })
+        uploadedCount++
+      } catch (unexpectedErr) {
+        updateItemInState(item.id, {
+          status: 'error',
+          error: `Unexpected error: ${unexpectedErr instanceof Error ? unexpectedErr.message : String(unexpectedErr)}`,
+        })
       }
-
-      // 2. Upload to R2
-      const uploadRes = await fetch(presignResult.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': item.file.type },
-        body: item.file,
-      })
-
-      if (!uploadRes.ok) {
-        updateItemInState(item.id, { status: 'error', error: `Upload failed (${uploadRes.status})` })
-        continue
-      }
-
-      // 3. Record in Supabase
-      const recordResult = await recordDocumentUpload({
-        manufacturerId,
-        originalFilename: item.file.name,
-        documentName: item.file.name.replace(/\.[^.]+$/, ''),
-        documentType: item.documentType,
-        storageKey: presignResult.storageKey,
-        contentType: item.file.type,
-        fileSizeBytes: item.file.size,
-      })
-
-      if (!recordResult.ok) {
-        updateItemInState(item.id, { status: 'error', error: recordResult.error })
-        continue
-      }
-
-      updateItemInState(item.id, { status: 'done' })
-      uploadedCount++
     }
 
     isProcessingRef.current = false
