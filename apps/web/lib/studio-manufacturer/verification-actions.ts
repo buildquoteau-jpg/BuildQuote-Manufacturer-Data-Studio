@@ -441,3 +441,57 @@ export async function reopenSystem(
   if (error) return { ok: false, error: error.message }
   return { ok: true }
 }
+
+// ─── submitForPublication ─────────────────────────────────────────────────────
+// Manufacturer tells BuildQuote they're ready to publish their verified systems.
+// Creates a publish_batches row (status 'submitted') with one publish_batch_item
+// per currently-verified staged_system. BuildQuote admin reviews and publishes
+// from there — that review/publish UI does not exist yet.
+
+export async function submitForPublication(
+  manufacturerId: string,
+  message: string | null,
+): Promise<ActionResult & { batchId?: string; systemCount?: number }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+
+  const { data: verifiedSystems, error: sysError } = await supabase
+    .from('staged_systems')
+    .select('id')
+    .eq('manufacturer_id', manufacturerId)
+    .eq('verification_status', 'manufacturer_verified')
+
+  if (sysError) return { ok: false, error: sysError.message }
+  if (!verifiedSystems || verifiedSystems.length === 0) {
+    return { ok: false, error: 'No verified systems to submit yet.' }
+  }
+
+  const { data: batch, error: batchError } = await supabase
+    .from('publish_batches')
+    .insert({
+      manufacturer_id: manufacturerId,
+      status: 'submitted',
+      created_by: auth.userId,
+      notes: message,
+    })
+    .select('id')
+    .single()
+
+  if (batchError || !batch) {
+    return { ok: false, error: batchError?.message ?? 'Could not create publish batch.' }
+  }
+
+  const items = verifiedSystems.map((s) => ({
+    publish_batch_id: batch.id,
+    entity_type: 'staged_system',
+    entity_id: s.id,
+    status: 'pending',
+  }))
+
+  const { error: itemsError } = await supabase.from('publish_batch_items').insert(items)
+  if (itemsError) return { ok: false, error: itemsError.message }
+
+  return { ok: true, batchId: batch.id, systemCount: verifiedSystems.length }
+}
