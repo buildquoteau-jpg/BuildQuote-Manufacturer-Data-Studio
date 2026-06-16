@@ -40,6 +40,10 @@ export default async function ManufacturerReviewPage() {
 
   return (
     <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Verify systems`}>
+      <style>{`
+        .studio-preview-cta { transition: background 0.15s, transform 0.15s; }
+        .studio-preview-cta:hover { background: #134a63 !important; transform: translateY(-1px); }
+      `}</style>
       {/* Header */}
       <div style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
@@ -47,6 +51,21 @@ export default async function ManufacturerReviewPage() {
           <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-faint)' }}>
             {systems.length} system{systems.length !== 1 ? 's' : ''}
           </span>
+          <a
+            href={`/studio/showroom/${ctx.manufacturerId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="studio-preview-cta"
+            style={{
+              marginLeft: 'auto', fontSize: '0.85rem', fontWeight: 700,
+              color: '#fff', textDecoration: 'none',
+              background: '#185D7A', padding: '0.5rem 1rem',
+              borderRadius: '8px', boxShadow: '0 2px 6px rgba(24,93,122,0.25)',
+              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+            }}
+          >
+            👁 Preview how your system cards will appear →
+          </a>
         </div>
         <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 0.9rem' }}>
           Review each product system card below — check every field, correct errors, and mark the card verified when you are happy with it.

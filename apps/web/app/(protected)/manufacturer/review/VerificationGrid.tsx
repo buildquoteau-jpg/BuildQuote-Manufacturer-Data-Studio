@@ -21,6 +21,7 @@ import {
   linkExistingComponent,
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
+import { SubmitForPublication } from './SubmitForPublication'
 
 // ─── Category colours ─────────────────────────────────────────────────────────
 
@@ -1713,6 +1714,12 @@ export function VerificationGrid({
           onSystemFieldUpdate={handleSystemFieldUpdate}
         />
       )}
+
+      <SubmitForPublication
+        manufacturerId={manufacturerId}
+        verifiedCount={verified.length}
+        totalCount={systems.length}
+      />
     </>
   )
 }
