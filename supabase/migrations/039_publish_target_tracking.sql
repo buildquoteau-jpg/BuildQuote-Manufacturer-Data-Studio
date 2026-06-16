@@ -1,4 +1,9 @@
--- BuildQuote Data Studio — Migration 038
+-- BuildQuote Data Studio — Migration 039
+-- (Originally numbered 038; renumbered after another session's
+-- 038_hero_wide_image.sql landed on master first — same collision pattern
+-- they themselves resolved for 034. Content unchanged, already applied to
+-- Data Studio production under the old "038_publish_target_tracking" label
+-- via the Supabase MCP apply_migration tool before this rename.)
 -- Production-id tracking for the remaining catalogue child tables.
 --
 -- data_studio_manufacturers.production_manufacturer_id, staged_systems.production_system_id,
