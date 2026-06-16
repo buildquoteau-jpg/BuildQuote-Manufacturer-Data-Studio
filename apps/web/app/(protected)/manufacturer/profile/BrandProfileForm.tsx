@@ -70,18 +70,150 @@ function ImagePreview({ url, alt }: { url: string | null; alt: string }) {
   )
 }
 
-function HeroPreview({ url, positionY }: { url: string | null; positionY: number }) {
-  if (!url) return null
+// Unified preview panel: slider + page-hero + grid-card, all live.
+function HeroPreviewPanel({
+  heroUrl,
+  positionY,
+  logoUrl,
+  manufacturerName,
+  description,
+  onSliderChange,
+}: {
+  heroUrl: string
+  positionY: number
+  logoUrl: string | null
+  manufacturerName: string
+  description: string | null
+  onSliderChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+}) {
+  const bgStyle: React.CSSProperties = {
+    backgroundImage: `url(${heroUrl})`,
+    backgroundSize: 'cover',
+    backgroundPosition: `center ${positionY}%`,
+  }
+
   return (
     <div style={{
-      marginTop: '0.5rem',
-      height: '120px',
-      borderRadius: '8px',
-      backgroundImage: `url(${url})`,
-      backgroundSize: 'cover',
-      backgroundPosition: `center ${positionY}%`,
-      border: '1px solid var(--ds-border)',
-    }} />
+      border: '1px solid var(--ds-border-soft)',
+      borderRadius: 10,
+      overflow: 'hidden',
+      background: '#f8fafc',
+      marginBottom: '1.1rem',
+    }}>
+      {/* Slider row */}
+      <div style={{ padding: '0.7rem 1rem 0.65rem', background: '#fff', borderBottom: '1px solid var(--ds-border-soft)' }}>
+        <div style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.45rem' }}>
+          Hero vertical position
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--ds-text-faint)', minWidth: '24px' }}>Top</span>
+          <input
+            type="range" min={0} max={100} step={1}
+            value={positionY} onChange={onSliderChange}
+            style={{ flex: 1, accentColor: '#185D7A', cursor: 'pointer' }}
+            aria-label="Hero image vertical position"
+          />
+          <span style={{ fontSize: '0.7rem', color: 'var(--ds-text-faint)', minWidth: '44px', textAlign: 'right' }}>Bottom</span>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--ds-text-sub)', minWidth: '34px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            {positionY}%
+          </span>
+        </div>
+        <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: 'var(--ds-text-faint)' }}>
+          Drag to choose which part of the image stays in frame. Both previews update live.
+        </p>
+      </div>
+
+      {/* Two previews */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 196px', gap: '0.9rem', padding: '0.9rem 1rem 0.8rem' }}>
+
+        {/* ── Page hero ── */}
+        <div>
+          <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
+            Manufacturer page
+          </div>
+          <div style={{
+            ...bgStyle,
+            height: 180,
+            borderRadius: 8,
+            position: 'relative',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,30,50,0.42)' }} />
+            <div style={{ position: 'relative', textAlign: 'center', padding: '0 1rem', maxWidth: '90%' }}>
+              {logoUrl && (
+                <div style={{ marginBottom: '0.35rem' }}>
+                  <img
+                    src={logoUrl}
+                    alt=""
+                    style={{ maxWidth: 72, maxHeight: 30, objectFit: 'contain', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.4))' }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+              )}
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)', lineHeight: 1.2 }}>
+                {manufacturerName}
+              </div>
+              {description && (
+                <div style={{
+                  fontSize: '0.64rem', color: 'rgba(255,255,255,0.82)', marginTop: '0.3rem', lineHeight: 1.45,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+                }}>
+                  {description}
+                </div>
+              )}
+              <div style={{
+                marginTop: '0.5rem', display: 'inline-block',
+                border: '1px solid rgba(255,255,255,0.65)', borderRadius: 20,
+                padding: '2px 10px', fontSize: '0.58rem', color: 'rgba(255,255,255,0.9)', fontWeight: 600,
+              }}>
+                Visit {manufacturerName} ↗
+              </div>
+            </div>
+          </div>
+          <p style={{ margin: '0.3rem 0 0', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
+            Full-width banner on the manufacturer detail page
+          </p>
+        </div>
+
+        {/* ── Grid card ── */}
+        <div>
+          <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
+            Showroom card
+          </div>
+          <div style={{
+            background: '#fff',
+            border: '1.5px solid #e5e7eb',
+            borderRadius: 12,
+            overflow: 'hidden',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ ...bgStyle, height: 88 }} />
+            <div style={{ padding: '9px 11px 11px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '3px' }}>
+                {manufacturerName}
+              </div>
+              {description && (
+                <div style={{
+                  fontSize: '10.5px', color: '#6b7280', lineHeight: 1.4,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+                }}>
+                  {description}
+                </div>
+              )}
+              <div style={{ marginTop: '6px', fontSize: '11px', fontWeight: 600, color: '#185D7A' }}>
+                View products
+              </div>
+            </div>
+          </div>
+          <p style={{ margin: '0.3rem 0 0', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
+            As it appears in the showroom grid
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -151,7 +283,7 @@ export function BrandProfileForm({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
 
-      {/* ── Brand identity card ── */}
+      {/* ── Brand identity ── */}
       <section style={{
         background: '#fff',
         border: '1px solid var(--ds-border-soft)',
@@ -166,7 +298,6 @@ export function BrandProfileForm({
           Brand identity
         </div>
 
-        {/* Logo */}
         <Field
           label="Logo"
           hint="Paste the URL of your logo PNG. Ideally transparent background, horizontal orientation."
@@ -182,7 +313,6 @@ export function BrandProfileForm({
           <ImagePreview url={fields.logo_url || null} alt={`${manufacturerName} logo`} />
         </Field>
 
-        {/* Hero image */}
         <Field
           label="Hero image"
           hint="A high-quality lifestyle or product image shown at the top of your manufacturer page. Landscape, at least 1200px wide."
@@ -195,39 +325,20 @@ export function BrandProfileForm({
             placeholder="https://cdn.yourbrand.com.au/hero.jpg"
             style={inputStyle}
           />
-          <HeroPreview url={fields.hero_image_url || null} positionY={fields.hero_image_position_y} />
         </Field>
 
-        {/* Hero vertical position */}
+        {/* Live dual preview — only shown when a hero URL is set */}
         {fields.hero_image_url && (
-          <Field
-            label="Hero vertical position"
-            hint="Slide to choose which part of the image stays in frame. The hero is cropped to a wide band, so tall images may need adjusting."
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', minWidth: '28px' }}>Top</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={fields.hero_image_position_y}
-                onChange={setPositionY}
-                style={{ flex: 1, accentColor: '#185D7A', cursor: 'pointer' }}
-                aria-label="Hero image vertical position"
-              />
-              <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-faint)', minWidth: '44px', textAlign: 'right' }}>Bottom</span>
-              <span style={{
-                fontSize: '0.72rem', fontWeight: 700, color: 'var(--ds-text-sub)',
-                minWidth: '38px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-              }}>
-                {fields.hero_image_position_y}%
-              </span>
-            </div>
-          </Field>
+          <HeroPreviewPanel
+            heroUrl={fields.hero_image_url}
+            positionY={fields.hero_image_position_y}
+            logoUrl={fields.logo_url || null}
+            manufacturerName={manufacturerName}
+            description={fields.description || null}
+            onSliderChange={setPositionY}
+          />
         )}
 
-        {/* Description */}
         <Field
           label="Brand description"
           hint="1–3 sentences. Shown on your manufacturer card and page. Keep it clear and factual."
@@ -295,71 +406,6 @@ export function BrandProfileForm({
             style={{ ...inputStyle, maxWidth: '220px' }}
           />
         </Field>
-      </section>
-
-      {/* ── Preview strip ── */}
-      <section style={{
-        background: '#f8fafc',
-        border: '1px solid var(--ds-border-soft)',
-        borderRadius: 10,
-        padding: '1.25rem 1.5rem',
-      }}>
-        <div style={{
-          fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.08em',
-          textTransform: 'uppercase', color: 'var(--ds-text-faint)',
-          marginBottom: '0.9rem',
-        }}>
-          Showroom card preview
-        </div>
-
-        {/* Manufacturer card as it will appear in the showroom grid */}
-        <div style={{
-          background: '#fff',
-          border: '1.5px solid #e5e7eb',
-          borderRadius: '14px',
-          overflow: 'hidden',
-          maxWidth: '280px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        }}>
-          {/* Hero area */}
-          <div style={{
-            height: '110px',
-            ...(fields.hero_image_url
-              ? {
-                  backgroundImage: `url(${fields.hero_image_url})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: `center ${fields.hero_image_position_y}%`,
-                }
-              : { background: '#f0f4f8' }),
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            {!fields.hero_image_url && (
-              fields.logo_url
-                ? <img src={fields.logo_url} alt={manufacturerName} style={{ maxWidth: '75%', maxHeight: '65%', objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                : <span style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.02em', textAlign: 'center', padding: '0 12px' }}>{manufacturerName}</span>
-            )}
-          </div>
-          {/* Content */}
-          <div style={{ padding: '12px 14px 14px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>
-              {manufacturerName}
-            </div>
-            {fields.description && (
-              <div style={{
-                fontSize: '12px', color: '#6b7280', lineHeight: 1.5,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-              }}>
-                {fields.description}
-              </div>
-            )}
-            <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 600, color: '#185D7A' }}>
-              View products
-            </div>
-          </div>
-        </div>
-        <p style={{ margin: '0.75rem 0 0', fontSize: '0.75rem', color: 'var(--ds-text-faint)' }}>
-          This is how your brand appears in the showroom grid. Save to update.
-        </p>
       </section>
 
       {/* ── Save button ── */}
