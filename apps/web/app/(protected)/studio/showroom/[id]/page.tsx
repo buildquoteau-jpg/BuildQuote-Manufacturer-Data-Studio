@@ -53,6 +53,8 @@ export type ShowroomManufacturer = {
   logo_url: string | null
   hero_image_url: string | null
   hero_image_position_y: number | null
+  hero_wide_image_url: string | null
+  hero_wide_image_position_y: number | null
   website_url: string | null
 }
 
@@ -66,20 +68,20 @@ async function getData(id: string): Promise<{ manufacturer: ShowroomManufacturer
 
   let { data: mfr, error: mfrError } = await supabase
     .from('data_studio_manufacturers')
-    .select('id, name, slug, description, logo_url, hero_image_url, hero_image_position_y, website_url')
+    .select('id, name, slug, description, logo_url, hero_image_url, hero_image_position_y, hero_wide_image_url, hero_wide_image_position_y, website_url')
     .eq('id', id)
     .single()
 
   if (mfrError) {
-    // Migration 031 may not be applied yet — fall back without the new column.
-    if (mfrError.code === '42703' || mfrError.message?.includes('hero_image_position_y')) {
+    // Migrations 031/034 may not be applied yet — fall back without the new columns.
+    if (mfrError.code === '42703' || /hero_(image|wide_image)/.test(mfrError.message ?? '')) {
       const { data: fb, error: fbErr } = await supabase
         .from('data_studio_manufacturers')
         .select('id, name, slug, description, logo_url, hero_image_url, website_url')
         .eq('id', id)
         .single()
       if (fbErr || !fb) return null
-      mfr = { ...(fb as any), hero_image_position_y: null }
+      mfr = { ...(fb as any), hero_image_position_y: null, hero_wide_image_url: null, hero_wide_image_position_y: null }
       mfrError = null
     } else {
       return null

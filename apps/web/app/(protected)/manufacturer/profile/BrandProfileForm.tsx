@@ -70,142 +70,124 @@ function ImagePreview({ url, alt }: { url: string | null; alt: string }) {
   )
 }
 
-// Unified preview panel: slider + page-hero + grid-card, all live.
-//
-// Both previews are faithful 1:1 reproductions of the live components so the
-// vertical-position slider crops the image exactly as it will appear:
-//  • Page hero  → matches app/(protected)/studio/showroom/[id] ManufacturerHero
-//                 (and the public manufacturer-portal hero): same overlay
-//                 gradient, 14px radius, 56/32/52 padding and typography.
-//                 Rendered full-width so the wide-banner crop is accurate.
-//  • Grid card  → matches the showroom grid card: 110px-tall hero band.
-function HeroPreviewPanel({
-  heroUrl,
-  positionY,
-  logoUrl,
-  manufacturerName,
-  description,
-  websiteUrl,
-  onSliderChange,
-}: {
-  heroUrl: string
+// A framed preview block with a label and an optional caption.
+function PreviewFrame({ title, caption, children }: { title: string; caption?: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      border: '1px solid var(--ds-border-soft)',
+      borderRadius: 10,
+      background: '#f8fafc',
+      padding: '0.9rem 1rem 0.85rem',
+      marginBottom: '1.1rem',
+    }}>
+      <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.6rem' }}>
+        {title}
+      </div>
+      {children}
+      {caption && (
+        <p style={{ margin: '0.45rem 0 0', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>{caption}</p>
+      )}
+    </div>
+  )
+}
+
+// Top↔Bottom crop slider used by both images.
+function CropSlider({ value, onChange }: { value: number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.7rem' }}>
+      <span style={{ fontSize: '0.7rem', color: 'var(--ds-text-faint)', minWidth: '24px' }}>Top</span>
+      <input
+        type="range" min={0} max={100} step={1}
+        value={value} onChange={onChange}
+        style={{ flex: 1, accentColor: '#185D7A', cursor: 'pointer' }}
+        aria-label="Image vertical position"
+      />
+      <span style={{ fontSize: '0.7rem', color: 'var(--ds-text-faint)', minWidth: '44px', textAlign: 'right' }}>Bottom</span>
+      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--ds-text-sub)', minWidth: '34px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+        {value}%
+      </span>
+    </div>
+  )
+}
+
+// Full-width banner, a faithful 1:1 reproduction of the live ManufacturerHero
+// (app/(protected)/studio/showroom/[id] + the public manufacturer-portal hero):
+// same overlay gradient, 14px radius, 56/32/52 padding and typography.
+function BannerPreview({ url, positionY, logoUrl, manufacturerName, description, websiteUrl }: {
+  url: string
   positionY: number
   logoUrl: string | null
   manufacturerName: string
   description: string | null
   websiteUrl: string | null
-  onSliderChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }) {
-  // Overlay + cover crop, identical to the live hero.
-  const heroBg: React.CSSProperties = {
-    backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${heroUrl})`,
-    backgroundSize: 'cover',
-    backgroundPosition: `center ${positionY}%`,
-  }
-  // Plain cover crop (no overlay) for the grid card hero band.
-  const cardBg: React.CSSProperties = {
-    backgroundImage: `url(${heroUrl})`,
-    backgroundSize: 'cover',
-    backgroundPosition: `center ${positionY}%`,
-  }
-
   const showLogo = !!logoUrl
+  const heroBg: React.CSSProperties = {
+    backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${url})`,
+    backgroundSize: 'cover',
+    backgroundPosition: `center ${positionY}%`,
+  }
+  return (
+    <div style={{ ...heroBg, borderRadius: 14, padding: '56px 32px 52px', textAlign: 'center', overflow: 'hidden' }}>
+      {showLogo && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.93)', borderRadius: 10, padding: '8px 18px', marginBottom: 20 }}>
+          <img src={logoUrl!} alt="" style={{ height: 38, objectFit: 'contain', display: 'block' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+        </div>
+      )}
+      <div style={{ fontSize: showLogo ? 22 : 34, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', marginBottom: 10, textShadow: '0 2px 12px rgba(0,0,0,0.4)', lineHeight: 1.1 }}>
+        {manufacturerName}
+      </div>
+      {description && (
+        <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.65, maxWidth: 580, margin: '0 auto 24px', textShadow: '0 1px 6px rgba(0,0,0,0.35)' }}>
+          {description}
+        </p>
+      )}
+      {websiteUrl && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 22px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.45)', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600 }}>
+          Visit {manufacturerName} ↗
+        </span>
+      )}
+    </div>
+  )
+}
 
+// Showroom grid card, matching the live card's 110px-tall hero band.
+function CardPreview({ url, positionY, manufacturerName, description }: {
+  url: string
+  positionY: number
+  manufacturerName: string
+  description: string | null
+}) {
+  const cardBg: React.CSSProperties = {
+    backgroundImage: `url(${url})`,
+    backgroundSize: 'cover',
+    backgroundPosition: `center ${positionY}%`,
+  }
   return (
     <div style={{
-      border: '1px solid var(--ds-border-soft)',
-      borderRadius: 10,
+      width: 240,
+      background: '#fff',
+      border: '1.5px solid #e5e7eb',
+      borderRadius: 14,
       overflow: 'hidden',
-      background: '#f8fafc',
-      marginBottom: '1.1rem',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
     }}>
-      {/* Slider row */}
-      <div style={{ padding: '0.7rem 1rem 0.65rem', background: '#fff', borderBottom: '1px solid var(--ds-border-soft)' }}>
-        <div style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.45rem' }}>
-          Hero vertical position
+      <div style={{ ...cardBg, height: 101 }} />
+      <div style={{ padding: '12px 14px 14px' }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', lineHeight: 1.3, marginBottom: 4 }}>
+          {manufacturerName}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <span style={{ fontSize: '0.7rem', color: 'var(--ds-text-faint)', minWidth: '24px' }}>Top</span>
-          <input
-            type="range" min={0} max={100} step={1}
-            value={positionY} onChange={onSliderChange}
-            style={{ flex: 1, accentColor: '#185D7A', cursor: 'pointer' }}
-            aria-label="Hero image vertical position"
-          />
-          <span style={{ fontSize: '0.7rem', color: 'var(--ds-text-faint)', minWidth: '44px', textAlign: 'right' }}>Bottom</span>
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--ds-text-sub)', minWidth: '34px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-            {positionY}%
-          </span>
-        </div>
-        <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: 'var(--ds-text-faint)' }}>
-          Drag to choose which part of the image stays in frame. Both previews below update live and match the published layout.
-        </p>
-      </div>
-
-      <div style={{ padding: '0.9rem 1rem 0.85rem' }}>
-
-        {/* ── Page hero (full width, faithful reproduction) ── */}
-        <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
-          Manufacturer page — full-width banner
-        </div>
-        <div style={{ ...heroBg, borderRadius: 14, padding: '56px 32px 52px', textAlign: 'center', overflow: 'hidden' }}>
-          {showLogo && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.93)', borderRadius: 10, padding: '8px 18px', marginBottom: 20 }}>
-              <img src={logoUrl!} alt="" style={{ height: 38, objectFit: 'contain', display: 'block' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-            </div>
-          )}
-          <div style={{ fontSize: showLogo ? 22 : 34, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', marginBottom: 10, textShadow: '0 2px 12px rgba(0,0,0,0.4)', lineHeight: 1.1 }}>
-            {manufacturerName}
+        {description && (
+          <div style={{
+            fontSize: 12, color: '#6b7280', lineHeight: 1.5,
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+          }}>
+            {description}
           </div>
-          {description && (
-            <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.65, maxWidth: 580, margin: '0 auto 24px', textShadow: '0 1px 6px rgba(0,0,0,0.35)' }}>
-              {description}
-            </p>
-          )}
-          {websiteUrl && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 22px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.45)', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600 }}>
-              Visit {manufacturerName} ↗
-            </span>
-          )}
+        )}
+        <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: '#185D7A' }}>
+          View products
         </div>
-        <p style={{ margin: '0.3rem 0 0.95rem', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
-          Exactly how the banner renders on the manufacturer page (shown here at preview width — on the live site it spans the full screen).
-        </p>
-
-        {/* ── Grid card (true proportions) ── */}
-        <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--ds-text-faint)', marginBottom: '0.4rem' }}>
-          Showroom grid card
-        </div>
-        <div style={{
-          width: 240,
-          background: '#fff',
-          border: '1.5px solid #e5e7eb',
-          borderRadius: 14,
-          overflow: 'hidden',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
-        }}>
-          {/* 110px band matches the live grid card hero height */}
-          <div style={{ ...cardBg, height: 101 }} />
-          <div style={{ padding: '12px 14px 14px' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', lineHeight: 1.3, marginBottom: 4 }}>
-              {manufacturerName}
-            </div>
-            {description && (
-              <div style={{
-                fontSize: 12, color: '#6b7280', lineHeight: 1.5,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-              }}>
-                {description}
-              </div>
-            )}
-            <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: '#185D7A' }}>
-              View products
-            </div>
-          </div>
-        </div>
-        <p style={{ margin: '0.3rem 0 0', fontSize: '0.67rem', color: 'var(--ds-text-faint)' }}>
-          As it appears in the showroom grid
-        </p>
       </div>
     </div>
   )
@@ -227,6 +209,8 @@ export function BrandProfileForm({
     website_url:    initialValues.website_url    ?? '',
     hero_image_url: initialValues.hero_image_url ?? '',
     hero_image_position_y: initialValues.hero_image_position_y ?? 50,
+    hero_wide_image_url: initialValues.hero_wide_image_url ?? '',
+    hero_wide_image_position_y: initialValues.hero_wide_image_position_y ?? 50,
     logo_url:       initialValues.logo_url       ?? '',
     phone:          initialValues.phone          ?? '',
     abn:            initialValues.abn            ?? '',
@@ -243,9 +227,11 @@ export function BrandProfileForm({
     }
   }
 
-  function setPositionY(e: React.ChangeEvent<HTMLInputElement>) {
-    setFields(prev => ({ ...prev, hero_image_position_y: Number(e.target.value) }))
-    setSaved(false)
+  function setPosition(key: 'hero_image_position_y' | 'hero_wide_image_position_y') {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFields(prev => ({ ...prev, [key]: Number(e.target.value) }))
+      setSaved(false)
+    }
   }
 
   function onFocus(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -263,6 +249,8 @@ export function BrandProfileForm({
         website_url:    fields.website_url    || null,
         hero_image_url: fields.hero_image_url || null,
         hero_image_position_y: fields.hero_image_position_y,
+        hero_wide_image_url: fields.hero_wide_image_url || null,
+        hero_wide_image_position_y: fields.hero_wide_image_position_y,
         logo_url:       fields.logo_url       || null,
         phone:          fields.phone          || null,
         abn:            fields.abn            || null,
@@ -273,6 +261,12 @@ export function BrandProfileForm({
       setTimeout(() => setSaved(false), 3000)
     })
   }
+
+  // The full-width banner uses the dedicated wide image when set, otherwise it
+  // falls back to the hero image (and its crop position) — matching the live page.
+  const bannerUsesWide = !!fields.hero_wide_image_url
+  const bannerUrl = fields.hero_wide_image_url || fields.hero_image_url
+  const bannerPositionY = bannerUsesWide ? fields.hero_wide_image_position_y : fields.hero_image_position_y
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
@@ -309,7 +303,7 @@ export function BrandProfileForm({
 
         <Field
           label="Hero image"
-          hint="A high-quality lifestyle or product image shown at the top of your manufacturer page. Landscape, at least 1200px wide."
+          hint="Your main brand image. Shown on the showroom grid card, and on the full-width page banner unless you add a separate banner image below. Landscape, at least 1200px wide."
         >
           <input
             type="url"
@@ -321,17 +315,59 @@ export function BrandProfileForm({
           />
         </Field>
 
-        {/* Live dual preview — only shown when a hero URL is set */}
+        {/* Grid card preview + crop (driven by the hero image) */}
         {fields.hero_image_url && (
-          <HeroPreviewPanel
-            heroUrl={fields.hero_image_url}
-            positionY={fields.hero_image_position_y}
-            logoUrl={fields.logo_url || null}
-            manufacturerName={manufacturerName}
-            description={fields.description || null}
-            websiteUrl={fields.website_url || null}
-            onSliderChange={setPositionY}
+          <PreviewFrame
+            title="Showroom grid card"
+            caption="As it appears in the showroom grid. Drag to set which part of the hero image stays in frame."
+          >
+            <CropSlider value={fields.hero_image_position_y} onChange={setPosition('hero_image_position_y')} />
+            <CardPreview
+              url={fields.hero_image_url}
+              positionY={fields.hero_image_position_y}
+              manufacturerName={manufacturerName}
+              description={fields.description || null}
+            />
+          </PreviewFrame>
+        )}
+
+        {/* Optional dedicated banner image */}
+        <Field
+          label="Full-width banner image (optional)"
+          hint="Use a wider or different image for the full-width banner at the top of your manufacturer page — handy when your hero image is too tall to crop well. Leave blank to reuse the hero image above."
+        >
+          <input
+            type="url"
+            value={fields.hero_wide_image_url ?? ''}
+            onChange={set('hero_wide_image_url')}
+            onFocus={onFocus} onBlur={onBlur}
+            placeholder="https://cdn.yourbrand.com.au/banner.jpg"
+            style={inputStyle}
           />
+        </Field>
+
+        {/* Banner preview + crop (wide image when set, else hero fallback) */}
+        {bannerUrl && (
+          <PreviewFrame
+            title="Manufacturer page — full-width banner"
+            caption={
+              bannerUsesWide
+                ? 'Exactly how the banner renders on the manufacturer page (shown at preview width — on the live site it spans the full screen).'
+                : 'Currently using your hero image. Add a banner image above to give the full-width banner its own picture and crop.'
+            }
+          >
+            {bannerUsesWide && (
+              <CropSlider value={fields.hero_wide_image_position_y} onChange={setPosition('hero_wide_image_position_y')} />
+            )}
+            <BannerPreview
+              url={bannerUrl}
+              positionY={bannerPositionY}
+              logoUrl={fields.logo_url || null}
+              manufacturerName={manufacturerName}
+              description={fields.description || null}
+              websiteUrl={fields.website_url || null}
+            />
+          </PreviewFrame>
         )}
 
         <Field

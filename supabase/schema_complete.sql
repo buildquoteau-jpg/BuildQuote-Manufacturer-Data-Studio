@@ -19,6 +19,8 @@ CREATE TABLE public.data_studio_manufacturers (
     logo_url                   TEXT,
     hero_image_url             TEXT,
     hero_image_position_y      SMALLINT    NOT NULL DEFAULT 50,
+    hero_wide_image_url        TEXT,
+    hero_wide_image_position_y SMALLINT    NOT NULL DEFAULT 50,
     description                TEXT,
     abn                        TEXT,
     phone                      TEXT,

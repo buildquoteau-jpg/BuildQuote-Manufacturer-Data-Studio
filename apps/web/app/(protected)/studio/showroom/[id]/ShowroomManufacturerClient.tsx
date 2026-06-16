@@ -43,14 +43,21 @@ function fmtUom(uom: string | null): string {
 function ManufacturerHero({ manufacturer }: { manufacturer: ShowroomManufacturer }) {
   const [logoError, setLogoError] = useState(false)
 
+  // The full-width banner uses the dedicated wide image when set, otherwise it
+  // falls back to the hero image (and its crop position).
+  const bannerUrl = manufacturer.hero_wide_image_url || manufacturer.hero_image_url
+  const bannerPositionY = manufacturer.hero_wide_image_url
+    ? (manufacturer.hero_wide_image_position_y ?? 50)
+    : (manufacturer.hero_image_position_y ?? 50)
+
   // Styles kept identical to the public manufacturer-portal hero
   // (app/widget/[token]/ManufacturerHero.tsx) so the studio preview matches
   // exactly — the only addition is the vertical-position control.
-  const bgStyle = manufacturer.hero_image_url
+  const bgStyle = bannerUrl
     ? {
-        backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${manufacturer.hero_image_url})`,
+        backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${bannerUrl})`,
         backgroundSize: 'cover',
-        backgroundPosition: `center ${manufacturer.hero_image_position_y ?? 50}%`,
+        backgroundPosition: `center ${bannerPositionY}%`,
       }
     : { background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 60%, #1e3a5f 100%)' }
 
