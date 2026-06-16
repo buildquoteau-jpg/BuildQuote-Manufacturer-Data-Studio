@@ -2,7 +2,17 @@
 
 This document tracks how Data Studio staged records map to production Supabase tables.
 
-**Status: updated — aligned with `001_initial_extraction_schema.sql`, `002_field_verification_state.sql`, and parser contracts.**
+**Status: verified live — cross-checked directly against the production schema (`oxvhmulxuvlfjyjzleki`) on 2026-06-16, not just inferred from migration files.** Previous "updated" status (2026-05-11) was aspirational/hand-authored and had drifted from the actual production tables — see fixes below. Re-verify before trusting this doc again if it's been more than a few weeks since the date above.
+
+### Drift found and fixed on 2026-06-16
+
+| Field | Was | Fixed to |
+|---|---|---|
+| `systems.install_guide_url` | Singular `TEXT`, stale — Data Studio moved to a JSONB array in migration 026 (2026-06-xx) but production was never updated | Production `install_guide_url` data migrated into a new `install_guide_urls JSONB` column (same `[{label, url}]` shape as Data Studio), then the old column was dropped |
+| `systems.design_guide_url` | Missing entirely | Added (`TEXT`) |
+| `system_profiles.procurement_route` | Missing (existed on `components` but not `system_profiles`) | Added (`TEXT`) |
+
+If you're reading this later and these fields look wrong again, the export step has probably grown a new staged field without a matching production column — repeat the verification process: pull `information_schema.columns` for both projects' relevant tables and diff them directly, don't trust this doc or the migration history alone.
 
 ## Parser Output and Production Names
 
@@ -95,10 +105,15 @@ Every exported system, component, or colour must carry a `catalogue_sources` ref
 | `acoustic_rating` | `acoustic_rating` | |
 | `moisture_resistant` | `moisture_resistant` | |
 | `structural_grade` | `structural_grade` | |
-| `install_guide_url` | `install_guide_url` | |
+| `install_guide_urls` | `install_guide_urls` | JSONB array of `{label, url}`. Production's old singular `install_guide_url TEXT` column was dropped 2026-06-16 — do not resurrect it. |
+| `design_guide_url` | `design_guide_url` | Added to production 2026-06-16 |
 | `tech_data_url` | `tech_data_url` | |
+| `bal_rating` | `bal_rating` | |
+| `australian_made` | `australian_made` | |
 | `sort_order` | `sort_order` | |
 | `source_document_id` | `catalogue_sources.id` | Traceability linkage |
+
+Production `systems` also has `verified_by`, `verified_at`, `change_notes`, and `verification_status` columns with no Data Studio equivalent — these belong to a separate, older verification mechanism inside the RFQ app itself and are not written by the Data Studio export. Leave them alone; don't assume they need a staged-table counterpart. (`source_document_id` is not in that list — it's the traceability FK described above.)
 
 ---
 
@@ -129,6 +144,7 @@ Every exported system, component, or colour must carry a `catalogue_sources` ref
 | `profile` | `profile` | |
 | `texture` | `texture` | |
 | `coverage_m2` | `coverage_m2` | |
+| `procurement_route` | `procurement_route` | `specialist_supplier` \| `trade_merchant` — drives the split-RFQ feature |
 | `sort_order` | `sort_order` | |
 
 ---
@@ -167,6 +183,7 @@ Every exported system, component, or colour must carry a `catalogue_sources` ref
 | `dimensions` | `dimensions` | |
 | `length_m` | `length_m` | |
 | `sheet_format` | `sheet_format` | |
+| `procurement_route` | `procurement_route` | `specialist_supplier` \| `trade_merchant` — added to production 2026-06-16, was previously only on `components` |
 | `sort_order` | `sort_order` | |
 
 ---
