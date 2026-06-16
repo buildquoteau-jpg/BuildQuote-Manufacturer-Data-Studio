@@ -10,6 +10,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Home', href: '/dashboard' },
   { label: 'Manufacturers', href: '/admin/manufacturers' },
   { label: 'Showroom', href: '/studio/showroom' },
+  { label: 'User profile', href: '/manufacturer/account' },
 ]
 
 const REVIEWER_NAV: NavItem[] = [
