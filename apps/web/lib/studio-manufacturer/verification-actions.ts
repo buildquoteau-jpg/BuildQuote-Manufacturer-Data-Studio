@@ -2,12 +2,13 @@
 
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { postSubmissionMessage } from './messages-actions'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
 // Manufacturers can only write to their own workspace.
 // buildquote_admin can access any workspace.
 
-async function assertManufacturerAccess(
+export async function assertManufacturerAccess(
   manufacturerId: string,
 ): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
   const session = await getStudioSession()
@@ -492,6 +493,18 @@ export async function submitForPublication(
 
   const { error: itemsError } = await supabase.from('publish_batch_items').insert(items)
   if (itemsError) return { ok: false, error: itemsError.message }
+
+  // Post to the BuildQuote message board so the submission is actually visible
+  // somewhere — the publish_batches row alone is silent otherwise. Best-effort:
+  // a failure here shouldn't undo the submission itself.
+  const session = await getStudioSession()
+  await postSubmissionMessage(
+    manufacturerId,
+    auth.userId,
+    session.profile?.email ?? 'Manufacturer',
+    message ?? `We have verified ${verifiedSystems.length} system${verifiedSystems.length !== 1 ? 's' : ''} and would like to publish them.`,
+    batch.id,
+  )
 
   return { ok: true, batchId: batch.id, systemCount: verifiedSystems.length }
 }

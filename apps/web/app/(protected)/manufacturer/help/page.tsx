@@ -3,7 +3,9 @@ import {
   resolveWorkspaceContextFromRequest,
   getManufacturerInfo,
 } from '@/lib/studio-manufacturer/workspace'
+import { getManufacturerMessages, sendManufacturerMessage, type ManufacturerMessage } from '@/lib/studio-manufacturer/messages-actions'
 import { StudioShell } from '@/components/studio/StudioShell'
+import { MessageThread } from '@/components/studio/MessageThread'
 
 const HELP_SECTIONS = [
   {
@@ -29,9 +31,13 @@ export default async function ManufacturerHelpPage() {
   const ctx = await resolveWorkspaceContextFromRequest(session)
 
   let workspaceName: string | null = null
+  let initialMessages: ManufacturerMessage[] = []
   if (ctx.found) {
     const mfrResult = await getManufacturerInfo(ctx.manufacturerId)
     workspaceName = mfrResult.ok ? mfrResult.manufacturer.name : null
+
+    const messagesResult = await getManufacturerMessages(ctx.manufacturerId)
+    if (messagesResult.ok) initialMessages = messagesResult.messages
   }
 
   return (
@@ -99,6 +105,24 @@ export default async function ManufacturerHelpPage() {
           </div>
         </div>
       </div>
+
+      {/* Message board */}
+      {ctx.found && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Message BuildQuote</h2>
+          <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', marginBottom: '0.75rem' }}>
+            Ask a question, flag an issue, or just say hi — BuildQuote sees this on their end too.
+            Submitting verified systems from the Review page also posts a message here automatically.
+          </p>
+          <MessageThread
+            manufacturerId={ctx.manufacturerId}
+            initialMessages={initialMessages}
+            viewerRole="manufacturer"
+            sendMessage={sendManufacturerMessage}
+            placeholder="Ask BuildQuote a question…"
+          />
+        </div>
+      )}
 
       {/* Help sections */}
       <h2 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Guides</h2>

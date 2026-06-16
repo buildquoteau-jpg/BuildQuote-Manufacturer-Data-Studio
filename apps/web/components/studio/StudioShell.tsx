@@ -9,6 +9,7 @@ type NavItem = { label: string; href: string }
 const ADMIN_NAV: NavItem[] = [
   { label: 'Home', href: '/dashboard' },
   { label: 'Manufacturers', href: '/admin/manufacturers' },
+  { label: 'Messages', href: '/admin/messages' },
   { label: 'Showroom', href: '/studio/showroom' },
   { label: 'User profile', href: '/manufacturer/account' },
 ]
