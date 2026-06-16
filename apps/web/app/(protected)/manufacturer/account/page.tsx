@@ -1,7 +1,10 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { createStudioServerClient } from '@/lib/supabase/server'
+import { getAdminImpersonatedManufacturerId, getManufacturerInfo } from '@/lib/studio-manufacturer/workspace'
+import { getPendingContact } from '@/lib/studio-admin/pending-contact-actions'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { AccountProfileForm } from './AccountProfileForm'
+import { AdminPendingContactForm } from './AdminPendingContactForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +40,51 @@ export default async function ManufacturerAccountPage() {
     )
   }
 
+  // Admin browsing a manufacturer workspace via the gate (impersonation):
+  // this page must NOT edit the admin's own data_studio_user_profiles row —
+  // that row is shared across every workspace the admin views, which is
+  // exactly what caused the cross-manufacturer data leak. Instead, show a
+  // manufacturer-scoped "pending contact" pre-fill form. No sign-in email or
+  // password fields — there's no real account to change yet.
+  if (session.globalRole === 'buildquote_admin') {
+    const manufacturerId = await getAdminImpersonatedManufacturerId()
+    if (manufacturerId) {
+      const [mfrResult, contactResult] = await Promise.all([
+        getManufacturerInfo(manufacturerId),
+        getPendingContact(manufacturerId),
+      ])
+
+      if (!mfrResult.ok || !contactResult.ok) {
+        return (
+          <StudioShell role="manufacturer" subtitle="User profile">
+            <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>User profile</h1>
+            <div className="studio-info">
+              {!mfrResult.ok ? mfrResult.error : !contactResult.ok ? contactResult.error : 'Could not load.'}
+            </div>
+          </StudioShell>
+        )
+      }
+
+      return (
+        <StudioShell role="manufacturer" subtitle="User profile">
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h1 style={{ fontSize: '1.25rem', marginBottom: '0.3rem' }}>User profile</h1>
+            <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: 0 }}>
+              Pre-fill {mfrResult.manufacturer.name}&rsquo;s authorised verifier details ahead of their first login.
+            </p>
+          </div>
+
+          <AdminPendingContactForm
+            manufacturerId={manufacturerId}
+            manufacturerName={mfrResult.manufacturer.name}
+            initialValues={contactResult.fields}
+          />
+        </StudioShell>
+      )
+    }
+  }
+
+  // Real manufacturer_user (or admin with no active impersonation) — own profile.
   const fields = await getAccountFields(session.user.id)
 
   return (

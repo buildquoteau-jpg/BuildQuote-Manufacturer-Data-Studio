@@ -23,6 +23,10 @@ CREATE TABLE public.data_studio_manufacturers (
     abn                        TEXT,
     phone                      TEXT,
     status                     TEXT        NOT NULL DEFAULT 'draft',
+    pending_contact_full_name        TEXT,
+    pending_contact_email_primary    TEXT,
+    pending_contact_email_secondary  TEXT,
+    pending_contact_login_preference TEXT NOT NULL DEFAULT 'primary',
     created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
 );
