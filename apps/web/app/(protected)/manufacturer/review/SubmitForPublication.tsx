@@ -16,7 +16,9 @@ export function SubmitForPublication({
     `Hi BuildQuote, we have verified ${verifiedCount} out of ${totalCount} systems and would like to publish the verified system cards please. Go.`,
   )
   const [pending, startTransition] = useTransition()
-  const [result, setResult] = useState<{ ok: true; systemCount: number } | { ok: false; error: string } | null>(null)
+  const [result, setResult] = useState<
+    { ok: true; systemCount: number; newCount?: number; updateCount?: number } | { ok: false; error: string } | null
+  >(null)
 
   if (verifiedCount === 0) return null
 
@@ -25,11 +27,21 @@ export function SubmitForPublication({
     startTransition(async () => {
       const res = await submitForPublication(manufacturerId, message.trim() || null)
       if (!res.ok) { setResult({ ok: false, error: res.error }); return }
-      setResult({ ok: true, systemCount: res.systemCount ?? verifiedCount })
+      setResult({
+        ok: true,
+        systemCount: res.systemCount ?? verifiedCount,
+        newCount: res.newCount,
+        updateCount: res.updateCount,
+      })
     })
   }
 
   if (result?.ok) {
+    const breakdown = [
+      result.newCount ? `${result.newCount} new` : null,
+      result.updateCount ? `${result.updateCount} update${result.updateCount !== 1 ? 's' : ''} to live system${result.updateCount !== 1 ? 's' : ''}` : null,
+    ].filter(Boolean).join(' and ')
+
     return (
       <div style={{
         marginTop: '1.5rem', padding: '16px', borderRadius: '10px',
@@ -39,8 +51,9 @@ export function SubmitForPublication({
           Submitted to BuildQuote
         </div>
         <div style={{ fontSize: '12px', color: '#374151' }}>
-          {result.systemCount} verified system{result.systemCount !== 1 ? 's' : ''} sent for publication review.
-          BuildQuote will check and publish them — you'll be notified once they go live.
+          {result.systemCount} system{result.systemCount !== 1 ? 's' : ''} sent for publication review
+          {breakdown ? ` (${breakdown})` : ''}. BuildQuote will check and publish them — you'll be
+          notified once they go live.
         </div>
       </div>
     )

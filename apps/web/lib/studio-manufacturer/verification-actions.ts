@@ -446,27 +446,43 @@ export async function reopenSystem(
 // ─── submitForPublication ─────────────────────────────────────────────────────
 // Manufacturer tells BuildQuote they're ready to publish their verified systems.
 // Creates a publish_batches row (status 'submitted') with one publish_batch_item
-// per currently-verified staged_system. BuildQuote admin reviews and publishes
-// from there — that review/publish UI does not exist yet.
+// per system that is new or has changed since it was last submitted — systems
+// already submitted with no edits since are skipped, so re-submitting after
+// fixing one card doesn't re-bundle everything already sent.
+//
+// Each item is tagged change_type: 'new' (no production_system_id yet) or
+// 'update' (already live, this is a re-publish) — see migration 037. BuildQuote
+// admin reviews and publishes from there — that review/publish UI does not
+// exist yet.
 
 export async function submitForPublication(
   manufacturerId: string,
   message: string | null,
-): Promise<ActionResult & { batchId?: string; systemCount?: number }> {
+): Promise<ActionResult & { batchId?: string; systemCount?: number; newCount?: number; updateCount?: number }> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
 
-  const { data: verifiedSystems, error: sysError } = await supabase
+  const { data: verified, error: sysError } = await supabase
     .from('staged_systems')
-    .select('id')
+    .select('id, production_system_id, updated_at, last_submitted_at')
     .eq('manufacturer_id', manufacturerId)
     .eq('verification_status', 'manufacturer_verified')
 
   if (sysError) return { ok: false, error: sysError.message }
-  if (!verifiedSystems || verifiedSystems.length === 0) {
+  if (!verified || verified.length === 0) {
     return { ok: false, error: 'No verified systems to submit yet.' }
+  }
+
+  // Column-to-column comparison isn't expressible through PostgREST filters,
+  // and the verified set per manufacturer is small, so filter in JS.
+  const toSubmit = verified.filter(
+    (s) => !s.last_submitted_at || new Date(s.updated_at) > new Date(s.last_submitted_at),
+  )
+
+  if (toSubmit.length === 0) {
+    return { ok: false, error: 'Nothing new to submit — every verified system was already sent to BuildQuote.' }
   }
 
   const { data: batch, error: batchError } = await supabase
@@ -484,15 +500,30 @@ export async function submitForPublication(
     return { ok: false, error: batchError?.message ?? 'Could not create publish batch.' }
   }
 
-  const items = verifiedSystems.map((s) => ({
+  const items = toSubmit.map((s) => ({
     publish_batch_id: batch.id,
     entity_type: 'staged_system',
     entity_id: s.id,
     status: 'pending',
+    change_type: s.production_system_id ? ('update' as const) : ('new' as const),
   }))
 
   const { error: itemsError } = await supabase.from('publish_batch_items').insert(items)
   if (itemsError) return { ok: false, error: itemsError.message }
+
+  const now = new Date().toISOString()
+  const { error: stampError } = await supabase
+    .from('staged_systems')
+    .update({ last_submitted_at: now })
+    .in('id', toSubmit.map((s) => s.id))
+  if (stampError) return { ok: false, error: stampError.message }
+
+  const newCount = items.filter((i) => i.change_type === 'new').length
+  const updateCount = items.length - newCount
+  const summary = [
+    newCount > 0 ? `${newCount} new system${newCount !== 1 ? 's' : ''}` : null,
+    updateCount > 0 ? `${updateCount} update${updateCount !== 1 ? 's' : ''} to live system${updateCount !== 1 ? 's' : ''}` : null,
+  ].filter(Boolean).join(' and ')
 
   // Post to the BuildQuote message board so the submission is actually visible
   // somewhere — the publish_batches row alone is silent otherwise. Best-effort:
@@ -502,9 +533,9 @@ export async function submitForPublication(
     manufacturerId,
     auth.userId,
     session.profile?.email ?? 'Manufacturer',
-    message ?? `We have verified ${verifiedSystems.length} system${verifiedSystems.length !== 1 ? 's' : ''} and would like to publish them.`,
+    message ?? `We have ${summary} ready to publish.`,
     batch.id,
   )
 
-  return { ok: true, batchId: batch.id, systemCount: verifiedSystems.length }
+  return { ok: true, batchId: batch.id, systemCount: toSubmit.length, newCount, updateCount }
 }
