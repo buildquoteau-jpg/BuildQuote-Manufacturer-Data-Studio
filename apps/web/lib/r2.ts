@@ -14,6 +14,10 @@ function makeR2Client(): S3Client {
     region: 'auto',
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId, secretAccessKey },
+    // Disable automatic CRC32 checksums — AWS SDK v3 adds them by default but
+    // R2 rejects browser PUT requests that don't include the matching header.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   })
 }
 
