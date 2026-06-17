@@ -43,6 +43,16 @@ export default async function ManufacturerReviewPage() {
     s.verification_status === 'manufacturer_verified' &&
     (!s.last_submitted_at || new Date(s.updated_at) > new Date(s.last_submitted_at))
   ).length
+  const submittedCount = systems.filter(s => {
+    if (!s.last_submitted_at || s.verification_status !== 'manufacturer_verified') return false
+    const updateReady = !!s.production_system_id && !!s.last_published_at &&
+      new Date(s.updated_at) > new Date(s.last_submitted_at)
+    if (updateReady) return false
+    return (
+      (!!s.production_system_id && !!s.last_published_at && new Date(s.last_submitted_at) > new Date(s.last_published_at)) ||
+      (!s.production_system_id)
+    )
+  }).length
 
   return (
     <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Verify systems`}>
@@ -116,6 +126,11 @@ export default async function ManufacturerReviewPage() {
               {publishedCount > 0 && (
                 <span style={{ color: '#0d9488', fontWeight: 600 }}>
                   {publishedCount} live
+                </span>
+              )}
+              {submittedCount > 0 && (
+                <span style={{ color: '#2563eb', fontWeight: 600 }}>
+                  {submittedCount} submitted
                 </span>
               )}
               {updateReadyCount > 0 && (

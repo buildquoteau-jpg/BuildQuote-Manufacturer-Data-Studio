@@ -9,12 +9,14 @@ export function SubmitForPublication({
   totalCount,
   liveCount,
   updateReadyCount,
+  onSubmitted,
 }: {
   manufacturerId: string
   verifiedCount: number
   totalCount: number
   liveCount: number
   updateReadyCount: number
+  onSubmitted?: () => void
 }) {
   const newCount = verifiedCount - liveCount
   const defaultMessage = updateReadyCount > 0 && newCount === 0
@@ -35,6 +37,7 @@ export function SubmitForPublication({
     startTransition(async () => {
       const res = await submitForPublication(manufacturerId, message.trim() || null)
       if (!res.ok) { setResult({ ok: false, error: res.error }); return }
+      onSubmitted?.()
       setResult({
         ok: true,
         systemCount: res.systemCount ?? verifiedCount,

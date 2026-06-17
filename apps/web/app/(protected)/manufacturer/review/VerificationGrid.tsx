@@ -61,14 +61,39 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
   const isVerified = system.verification_status === 'manufacturer_verified'
   const isInReview = system.verification_status === 'in_review'
   const isLive = !!system.production_system_id && !!system.last_published_at
+
+  // Unsent edits — verified but updated_at is newer than last_submitted_at
   const hasUpdateReady = isLive && isVerified && (
     !system.last_submitted_at || new Date(system.updated_at) > new Date(system.last_submitted_at)
   )
+  // Submitted to BuildQuote, awaiting admin re-publish (last_submitted_at > last_published_at)
+  const isSubmittedForUpdate = !hasUpdateReady && isLive && isVerified &&
+    !!system.last_submitted_at &&
+    new Date(system.last_submitted_at) > new Date(system.last_published_at!)
+  // First-time submit (never been live yet)
+  const isSubmittedNew = !isLive && isVerified && !!system.last_submitted_at
+  const isSubmitted = isSubmittedForUpdate || isSubmittedNew
 
-  const statusLabel = hasUpdateReady ? 'Update ready' : isVerified ? 'Verified' : isInReview ? 'In review' : 'Not started'
-  const statusColor = hasUpdateReady ? '#b45309' : isVerified ? '#16a34a' : isInReview ? '#d97706' : '#9ca3af'
-  const statusBg    = hasUpdateReady ? '#fffbeb' : isVerified ? '#f0fdf4' : isInReview ? '#fffbeb' : '#f9fafb'
-  const statusBorder= hasUpdateReady ? '#fde68a' : isVerified ? '#bbf7d0' : isInReview ? '#fde68a' : '#e5e7eb'
+  const statusLabel = hasUpdateReady ? 'Update ready'
+    : isSubmitted ? 'Submitted'
+    : isVerified ? 'Verified'
+    : isInReview ? 'In review'
+    : 'Not started'
+  const statusColor = hasUpdateReady ? '#b45309'
+    : isSubmitted ? '#2563eb'
+    : isVerified ? '#16a34a'
+    : isInReview ? '#d97706'
+    : '#9ca3af'
+  const statusBg    = hasUpdateReady ? '#fffbeb'
+    : isSubmitted ? '#eff6ff'
+    : isVerified ? '#f0fdf4'
+    : isInReview ? '#fffbeb'
+    : '#f9fafb'
+  const statusBorder = hasUpdateReady ? '#fde68a'
+    : isSubmitted ? '#bfdbfe'
+    : isVerified ? '#bbf7d0'
+    : isInReview ? '#fde68a'
+    : '#e5e7eb'
 
   return (
     <button
@@ -79,7 +104,7 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
       style={{
         display: 'flex', flexDirection: 'column', textAlign: 'left', width: '100%',
         background: '#ffffff',
-        border: hasUpdateReady ? '1.5px solid #f59e0b' : isVerified ? '1.5px solid #16a34a' : hovered ? '1.5px solid #185D7A' : '1px solid #d1d5db',
+        border: hasUpdateReady ? '1.5px solid #f59e0b' : isSubmitted ? '1.5px solid #3b82f6' : isVerified ? '1.5px solid #16a34a' : hovered ? '1.5px solid #185D7A' : '1px solid #d1d5db',
         borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
         boxShadow: hovered ? '0 8px 28px rgba(24,93,122,0.15)' : '0 2px 8px rgba(0,0,0,0.06)',
         transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
@@ -111,11 +136,11 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
           <span style={{
             position: 'absolute', top: '10px', right: '10px',
             fontSize: '10px', fontWeight: 700,
-            background: hasUpdateReady ? '#f59e0b' : isLive ? '#0d9488' : '#16a34a',
+            background: hasUpdateReady ? '#f59e0b' : isSubmitted ? '#3b82f6' : isLive ? '#0d9488' : '#16a34a',
             color: '#fff',
             padding: '3px 8px', borderRadius: '20px',
           }}>
-            {hasUpdateReady ? '↑ Update ready' : isLive ? '● Live' : 'Verified'}
+            {hasUpdateReady ? '↑ Update ready' : isSubmitted ? '● Submitted' : isLive ? '● Live' : 'Verified'}
           </span>
         )}
       </div>
@@ -1775,11 +1800,28 @@ export function VerificationGrid({
   const unverified = sorted.filter(s => s.verification_status !== 'manufacturer_verified')
   const verified   = sorted.filter(s => s.verification_status === 'manufacturer_verified')
 
-  const liveCount = verified.filter(s => !!s.production_system_id && !!s.last_published_at).length
   const updateReadyCount = verified.filter(s =>
     !!s.production_system_id && !!s.last_published_at &&
     (!s.last_submitted_at || new Date(s.updated_at) > new Date(s.last_submitted_at))
   ).length
+  const submittedCount = verified.filter(s => {
+    if (!s.last_submitted_at) return false
+    const updateReady = !!s.production_system_id && !!s.last_published_at &&
+      new Date(s.updated_at) > new Date(s.last_submitted_at)
+    if (updateReady) return false
+    return (
+      (!!s.production_system_id && !!s.last_published_at && new Date(s.last_submitted_at) > new Date(s.last_published_at!)) ||
+      (!s.production_system_id)
+    )
+  }).length
+  const liveCount = verified.filter(s => !!s.production_system_id && !!s.last_published_at).length
+
+  function handleSubmitted() {
+    const now = new Date().toISOString()
+    setSystems(prev => prev.map(s =>
+      s.verification_status === 'manufacturer_verified' ? { ...s, last_submitted_at: now } : s,
+    ))
+  }
 
   return (
     <>
@@ -1833,6 +1875,7 @@ export function VerificationGrid({
         totalCount={systems.length}
         liveCount={liveCount}
         updateReadyCount={updateReadyCount}
+        onSubmitted={handleSubmitted}
       />
     </>
   )
