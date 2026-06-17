@@ -47,35 +47,40 @@ export default async function ManufacturerReviewPage() {
   return (
     <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Verify systems`}>
       <style>{`
-        .studio-preview-cta { transition: background 0.15s, transform 0.15s; }
-        .studio-preview-cta:hover { background: #134a63 !important; transform: translateY(-1px); }
+        .studio-preview-cta { transition: background 0.15s, color 0.15s; }
+        .studio-preview-cta:hover { background: #185D7A !important; color: #fff !important; }
       `}</style>
       {/* Header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-          <h1 style={{ fontSize: '1.25rem' }}>Verify your systems</h1>
-          <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-faint)' }}>
-            {systems.length} system{systems.length !== 1 ? 's' : ''}
-          </span>
+      <div style={{ marginBottom: '1.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem' }}>
+            <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Verify your systems</h1>
+            <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-faint)' }}>
+              {systems.length} system{systems.length !== 1 ? 's' : ''}
+            </span>
+          </div>
           <a
             href={`/studio/showroom/${ctx.manufacturerId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="studio-preview-cta"
             style={{
-              marginLeft: 'auto', fontSize: '0.85rem', fontWeight: 700,
-              color: '#fff', textDecoration: 'none',
-              background: '#185D7A', padding: '0.5rem 1rem',
-              borderRadius: '8px', boxShadow: '0 2px 6px rgba(24,93,122,0.25)',
-              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+              fontSize: '0.8rem', fontWeight: 600,
+              color: '#185D7A', textDecoration: 'none',
+              border: '1.5px solid #185D7A', background: 'transparent',
+              padding: '0.4rem 0.9rem', borderRadius: '7px',
+              display: 'inline-flex', alignItems: 'center',
+              letterSpacing: '0.01em',
             }}
           >
-            👁 Preview how your system cards will appear →
+            Preview system cards →
           </a>
         </div>
-        <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 0.9rem' }}>
+
+        <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 1rem', lineHeight: 1.65 }}>
           Review each product system card below — check every field, correct errors, and mark the card verified when you are happy with it.
-          Verified cards are reviewed by BuildQuote before publishing.
+          Verified cards are reviewed by BuildQuote before publishing.{' '}
+          <span style={{ color: 'var(--ds-text-faint)' }}>For best results, use a desktop or laptop — the detail on these cards is easy to overlook on a small screen.</span>
         </p>
 
         {/* Progress bar */}
@@ -121,19 +126,6 @@ export default async function ManufacturerReviewPage() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Desktop recommendation */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: '0.6rem',
-        padding: '0.65rem 0.9rem', marginBottom: '1.25rem',
-        background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px',
-        fontSize: '0.8rem', color: '#92400e', lineHeight: 1.5,
-      }}>
-        <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: '0.05rem' }}>💻</span>
-        <span>
-          <strong>Best done on a desktop or laptop.</strong> The verification cards contain a lot of detail — reviewing on a phone makes it easy to miss errors or tap the wrong action. We recommend completing verification on a larger screen.
-        </span>
       </div>
 
       {systems.length === 0 ? (
