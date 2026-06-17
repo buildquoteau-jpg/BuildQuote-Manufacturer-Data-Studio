@@ -65,17 +65,16 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
       updateItemInState(item.id, { status: 'uploading' })
 
       try {
-        let res: Response
+        // Step 1: get presigned PUT URL
+        let presignRes: Response
         try {
-          res = await fetch('/api/manufacturer/upload-document', {
+          presignRes = await fetch('/api/manufacturer/presign-upload', {
             method: 'POST',
-            headers: {
-              'Content-Type': item.file.type,
-              'x-manufacturer-id': manufacturerId,
-              'x-document-type': item.documentType,
-              'x-original-filename': item.file.name,
-            },
-            body: item.file,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              manufacturerId,
+              mimeType: item.file.type,
+            }),
           })
         } catch (networkErr) {
           const detail = networkErr instanceof Error ? networkErr.message : String(networkErr)
@@ -83,10 +82,63 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
           continue
         }
 
-        if (!res.ok) {
-          let errorMsg = `Upload failed (${res.status})`
+        if (!presignRes.ok) {
+          let errorMsg = `Presign failed (${presignRes.status})`
           try {
-            const body = await res.json()
+            const body = await presignRes.json()
+            if (body?.error) errorMsg = body.error
+          } catch { /* ignore */ }
+          updateItemInState(item.id, { status: 'error', error: errorMsg })
+          continue
+        }
+
+        const { uploadUrl, storageKey } = await presignRes.json() as {
+          uploadUrl: string
+          storageKey: string
+        }
+
+        // Step 2: PUT file directly to R2 (no Vercel body limit)
+        try {
+          const r2Res = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': item.file.type },
+            body: item.file,
+          })
+          if (!r2Res.ok) {
+            updateItemInState(item.id, { status: 'error', error: `R2 upload failed (${r2Res.status})` })
+            continue
+          }
+        } catch (networkErr) {
+          const detail = networkErr instanceof Error ? networkErr.message : String(networkErr)
+          updateItemInState(item.id, { status: 'error', error: `R2 network error: ${detail}` })
+          continue
+        }
+
+        // Step 3: register the document row in Supabase
+        let regRes: Response
+        try {
+          regRes = await fetch('/api/manufacturer/register-document', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              manufacturerId,
+              storageKey,
+              mimeType: item.file.type,
+              originalFilename: item.file.name,
+              documentType: item.documentType,
+              fileSizeBytes: item.file.size,
+            }),
+          })
+        } catch (networkErr) {
+          const detail = networkErr instanceof Error ? networkErr.message : String(networkErr)
+          updateItemInState(item.id, { status: 'error', error: `Register error: ${detail}` })
+          continue
+        }
+
+        if (!regRes.ok) {
+          let errorMsg = `Register failed (${regRes.status})`
+          try {
+            const body = await regRes.json()
             if (body?.error) errorMsg = body.error
           } catch { /* ignore */ }
           updateItemInState(item.id, { status: 'error', error: errorMsg })
