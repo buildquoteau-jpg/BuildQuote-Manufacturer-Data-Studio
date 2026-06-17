@@ -541,27 +541,45 @@ function CropAdjuster({
 }) {
   const [x, setX] = useState(positionX)
   const [y, setY] = useState(positionY)
+  const [savedX, setSavedX] = useState(positionX)
+  const [savedY, setSavedY] = useState(positionY)
   const [saving, setSaving] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
 
   if (!imageUrl) return null
+
+  const dirty = x !== savedX || y !== savedY
 
   function handleChange(newX: number, newY: number) {
     setX(newX); setY(newY)
     onChange(newX, newY)
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(async () => {
-      setSaving(true)
-      await updateSystemImageCrop(systemId, manufacturerId, newX, newY)
-      setSaving(false)
-    }, 600)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    await updateSystemImageCrop(systemId, manufacturerId, x, y)
+    setSaving(false)
+    setSavedX(x); setSavedY(y)
+    setJustSaved(true)
+    setTimeout(() => setJustSaved(false), 1500)
   }
 
   return (
     <div style={{ borderRadius: '8px', border: '1px solid #d1d5db', padding: '10px 12px' }}>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Image crop position</span>
-        {saving && <span style={{ fontWeight: 400, color: '#9ca3af' }}>saving…</span>}
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          style={{
+            fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '4px', border: 'none', cursor: dirty && !saving ? 'pointer' : 'default',
+            background: justSaved ? '#16a34a' : dirty ? '#185D7A' : '#e5e7eb',
+            color: dirty || justSaved ? '#fff' : '#9ca3af',
+            transition: 'background 0.2s',
+          }}
+        >
+          {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save position'}
+        </button>
       </div>
       {/* Preview — matches system card dimensions: 220px tall × ~360px wide */}
       <div style={{ width: '100%', maxWidth: '360px', height: '220px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
