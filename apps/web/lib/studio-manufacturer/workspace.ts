@@ -670,7 +670,8 @@ export async function getManufacturerVerificationData(
   type SysRow = {
     id: string; name: string; product_code: string | null
     category: string | null; subcategory: string | null; description: string | null
-    hero_image_url: string | null; australian_made: boolean | null
+    hero_image_url: string | null; hero_image_position_x: number | null; hero_image_position_y: number | null
+    australian_made: boolean | null
     bal_rating: string | null; fire_rating: string | null
     acoustic_rating: string | null; moisture_resistant: boolean | null
     structural_grade: string | null; website_url: string | null
