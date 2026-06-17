@@ -35,8 +35,8 @@ function resolveStages(
   productionSystemId: string | null,
 ): ('lit' | 'dim' | 'warning')[] {
   const needsAttention = status === 'rejected' || status === 'needs_source_check'
-  const inReview = status === 'in_review' || status === 'approved' || needsAttention
-  const verified = status === 'approved'
+  const inReview = status === 'in_review' || status === 'manufacturer_verified' || needsAttention
+  const verified = status === 'manufacturer_verified'
   const published = productionSystemId !== null
 
   return [
