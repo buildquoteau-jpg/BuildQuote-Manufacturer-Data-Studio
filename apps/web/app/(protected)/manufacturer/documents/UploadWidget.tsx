@@ -1,10 +1,6 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import {
-  requestDocumentUploadUrl,
-  recordDocumentUpload,
-} from '@/lib/studio-manufacturer/document-actions'
 
 const DOCUMENT_TYPES = [
   { id: 'product_guide',        label: 'Product Guide' },
@@ -69,26 +65,16 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
       updateItemInState(item.id, { status: 'uploading' })
 
       try {
-        // 1. Get presigned URL
-        const presignResult = await requestDocumentUploadUrl({
-          manufacturerId,
-          originalFilename: item.file.name,
-          contentType: item.file.type,
-          fileSizeBytes: item.file.size,
-          documentType: item.documentType,
-        })
-
-        if (!presignResult.ok) {
-          updateItemInState(item.id, { status: 'error', error: presignResult.error })
-          continue
-        }
-
-        // 2. Upload to R2
-        let uploadRes: Response
+        let res: Response
         try {
-          uploadRes = await fetch(presignResult.uploadUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': item.file.type },
+          res = await fetch('/api/manufacturer/upload-document', {
+            method: 'POST',
+            headers: {
+              'Content-Type': item.file.type,
+              'x-manufacturer-id': manufacturerId,
+              'x-document-type': item.documentType,
+              'x-original-filename': item.file.name,
+            },
             body: item.file,
           })
         } catch (networkErr) {
@@ -97,32 +83,13 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
           continue
         }
 
-        if (!uploadRes.ok) {
-          const statusMessages: Record<number, string> = {
-            400: 'Bad request — the file or upload URL is malformed.',
-            403: 'Storage permission denied (403) — the upload URL may have expired. Try again.',
-            413: 'File too large — maximum size is 50 MB.',
-            500: 'Storage server error (500). Please try again later.',
-            503: 'Storage unavailable (503). Please try again later.',
-          }
-          const msg = statusMessages[uploadRes.status] ?? `Upload failed with status ${uploadRes.status}.`
-          updateItemInState(item.id, { status: 'error', error: msg })
-          continue
-        }
-
-        // 3. Record in Supabase
-        const recordResult = await recordDocumentUpload({
-          manufacturerId,
-          originalFilename: item.file.name,
-          documentName: item.file.name.replace(/\.[^.]+$/, ''),
-          documentType: item.documentType,
-          storageKey: presignResult.storageKey,
-          contentType: item.file.type,
-          fileSizeBytes: item.file.size,
-        })
-
-        if (!recordResult.ok) {
-          updateItemInState(item.id, { status: 'error', error: `File uploaded but failed to save record: ${recordResult.error}` })
+        if (!res.ok) {
+          let errorMsg = `Upload failed (${res.status})`
+          try {
+            const body = await res.json()
+            if (body?.error) errorMsg = body.error
+          } catch { /* ignore */ }
+          updateItemInState(item.id, { status: 'error', error: errorMsg })
           continue
         }
 
