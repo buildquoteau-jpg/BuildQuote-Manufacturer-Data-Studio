@@ -47,7 +47,10 @@ export async function createPresignedUploadUrl(opts: {
       Bucket: bucket,
       Key: opts.storageKey,
       ContentType: opts.contentType,
-      ContentLength: opts.fileSizeBytes,
+      // ContentLength intentionally omitted: including it adds content-length to
+      // X-Amz-SignedHeaders, which browsers treat as a forbidden header and can't
+      // set explicitly — R2 then returns 403 on the actual PUT without CORS headers.
+      // Size is validated above before the presigned URL is issued.
     })
     const uploadUrl = await getSignedUrl(client, command, {
       expiresIn: opts.expiresInSeconds ?? 300,
