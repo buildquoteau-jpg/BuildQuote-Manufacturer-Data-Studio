@@ -92,10 +92,8 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
             body: item.file,
           })
         } catch (networkErr) {
-          const msg = networkErr instanceof TypeError
-            ? 'Network error — could not reach storage. Check your connection and try again.'
-            : `Upload failed: ${networkErr instanceof Error ? networkErr.message : String(networkErr)}`
-          updateItemInState(item.id, { status: 'error', error: msg })
+          const detail = networkErr instanceof Error ? networkErr.message : String(networkErr)
+          updateItemInState(item.id, { status: 'error', error: `Network error: ${detail}` })
           continue
         }
 
@@ -315,7 +313,7 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
                   </span>
                 )}
                 {item.status === 'error' && item.error && (
-                  <span style={{ fontSize: '0.75rem', color: '#ef4444', flexShrink: 0, maxWidth: 160, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#ef4444', flexShrink: 0, maxWidth: 320, wordBreak: 'break-word' }}>
                     {item.error}
                   </span>
                 )}
