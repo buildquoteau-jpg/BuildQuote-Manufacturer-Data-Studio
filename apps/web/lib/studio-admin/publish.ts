@@ -73,7 +73,7 @@ async function publishManufacturer(
 ): Promise<{ productionManufacturerId: string; action: EntityAction }> {
   const { data: mfr, error } = await ds
     .from('data_studio_manufacturers')
-    .select('id, production_manufacturer_id, name, slug, website_url, logo_url, hero_image_url, description, abn, phone')
+    .select('id, production_manufacturer_id, name, slug, website_url, logo_url, hero_image_url, hero_image_position_y, hero_wide_image_url, hero_wide_image_position_y, description, abn, phone')
     .eq('id', manufacturerId)
     .single()
   if (error || !mfr) throw new Error(`Could not load manufacturer: ${error?.message ?? 'not found'}`)
@@ -83,6 +83,9 @@ async function publishManufacturer(
     website_url: mfr.website_url,
     logo_url: mfr.logo_url,
     hero_image_url: mfr.hero_image_url,
+    hero_image_position_y: mfr.hero_image_position_y ?? 50,
+    hero_wide_image_url: mfr.hero_wide_image_url ?? null,
+    hero_wide_image_position_y: mfr.hero_wide_image_position_y ?? 50,
     description: mfr.description,
     abn: mfr.abn,
     phone: mfr.phone,
