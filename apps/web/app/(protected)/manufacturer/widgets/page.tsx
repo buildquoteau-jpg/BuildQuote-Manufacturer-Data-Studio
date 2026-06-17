@@ -15,11 +15,12 @@ export default async function ManufacturerWidgetsPage() {
   // Manufacturer info
   const { data: mfrRow } = await sb
     .from('data_studio_manufacturers')
-    .select('name, logo_url')
+    .select('name, logo_url, widget_button_config')
     .eq('id', ctx.manufacturerId)
     .single()
   const manufacturerName = (mfrRow as any)?.name ?? 'Your brand'
   const logoUrl          = (mfrRow as any)?.logo_url ?? null
+  const buttonConfig     = (mfrRow as any)?.widget_button_config ?? null
 
   // All staged systems for this manufacturer
   const { data: allSystems } = await sb
@@ -58,6 +59,7 @@ export default async function ManufacturerWidgetsPage() {
         widget={widgetRow as any}
         selectedSystemIds={selectedSystemIds}
         origin={origin}
+        buttonConfig={buttonConfig}
       />
     </StudioShell>
   )

@@ -19,6 +19,18 @@ type EmbedWidget = {
   created_at: string
 } | null
 
+type ButtonConfig = {
+  show_request_quote: boolean
+  show_find_stockist: boolean
+  show_general_enquiry: boolean
+}
+
+const DEFAULT_BUTTON_CONFIG: ButtonConfig = {
+  show_request_quote: true,
+  show_find_stockist: true,
+  show_general_enquiry: true,
+}
+
 type Props = {
   manufacturerId: string
   manufacturerName: string
@@ -27,6 +39,7 @@ type Props = {
   widget: EmbedWidget
   selectedSystemIds: string[]
   origin: string
+  buttonConfig: ButtonConfig | null
 }
 
 function isSelectable(s: StagedSystem): boolean {
@@ -35,13 +48,18 @@ function isSelectable(s: StagedSystem): boolean {
 
 export function WidgetManager({
   manufacturerId, manufacturerName, allSystems,
-  widget, selectedSystemIds: initialSelected, origin,
+  widget, selectedSystemIds: initialSelected, origin, buttonConfig: initialButtonConfig,
 }: Props) {
-  const [selected,   setSelected]   = useState<Set<string>>(new Set(initialSelected))
-  const [copied,     setCopied]     = useState(false)
-  const [saving,     setSaving]     = useState(false)
-  const [saveMsg,    setSaveMsg]    = useState<string | null>(null)
+  const [selected,      setSelected]      = useState<Set<string>>(new Set(initialSelected))
+  const [btnConfig,     setBtnConfig]     = useState<ButtonConfig>(initialButtonConfig ?? DEFAULT_BUTTON_CONFIG)
+  const [copied,        setCopied]        = useState(false)
+  const [saving,        setSaving]        = useState(false)
+  const [saveMsg,       setSaveMsg]       = useState<string | null>(null)
   const [, startTransition] = useTransition()
+
+  function toggleBtn(key: keyof ButtonConfig) {
+    setBtnConfig(prev => ({ ...prev, [key]: !prev[key] }))
+  }
 
   const token   = widget?.public_token ?? null
   const widgetId = widget?.id ?? null
@@ -73,6 +91,7 @@ export function WidgetManager({
           manufacturer_id: manufacturerId,
           widget_id:       widgetId,
           system_ids:      Array.from(selected),
+          button_config:   btnConfig,
         }),
       })
       if (!res.ok) throw new Error('Save failed')
@@ -205,6 +224,59 @@ export function WidgetManager({
             ))}
           </div>
         )}
+      </div>
+
+      {/* Button visibility */}
+      <div style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', marginBottom: '24px' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Widget buttons</div>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Choose which action buttons appear on each product card</div>
+        </div>
+        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {([
+            { key: 'show_request_quote',   label: 'Request a Quote',  desc: 'Opens a quote request form' },
+            { key: 'show_find_stockist',   label: 'Find a Stockist',  desc: 'Lets visitors search local stockists' },
+            { key: 'show_general_enquiry', label: 'General Enquiry',  desc: 'Opens a general contact form' },
+          ] as { key: keyof ButtonConfig; label: string; desc: string }[]).map(({ key, label, desc }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggleBtn(key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '12px 12px', borderRadius: '10px', border: 'none',
+                background: btnConfig[key] ? '#eef6fa' : '#fff',
+                cursor: 'pointer', textAlign: 'left', width: '100%',
+              }}
+            >
+              {/* Toggle pill */}
+              <div style={{
+                flexShrink: 0, width: '40px', height: '22px', borderRadius: '11px',
+                background: btnConfig[key] ? '#185D7A' : '#d1d5db',
+                position: 'relative', transition: 'background 0.15s',
+              }}>
+                <div style={{
+                  position: 'absolute', top: '3px',
+                  left: btnConfig[key] ? '21px' : '3px',
+                  width: '16px', height: '16px', borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.15s',
+                }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{label}</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '1px' }}>{desc}</div>
+              </div>
+              <span style={{
+                fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em',
+                color: btnConfig[key] ? '#185D7A' : '#94a3b8',
+                background: btnConfig[key] ? '#dbeafe' : '#f1f5f9',
+                padding: '3px 9px', borderRadius: '6px',
+              }}>
+                {btnConfig[key] ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Save button */}

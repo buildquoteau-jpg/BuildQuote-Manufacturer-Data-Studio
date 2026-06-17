@@ -7,13 +7,28 @@ function getDataStudioClient() {
   return createClient(url, key)
 }
 
+export type WidgetButtonConfig = {
+  show_request_quote: boolean
+  show_find_stockist: boolean
+  show_general_enquiry: boolean
+}
+
+export const DEFAULT_BUTTON_CONFIG: WidgetButtonConfig = {
+  show_request_quote: true,
+  show_find_stockist: true,
+  show_general_enquiry: true,
+}
+
 export type WidgetManufacturer = {
   name: string
   slug: string
   logo_url: string | null
   hero_image_url: string | null
+  hero_wide_image_url: string | null
+  hero_wide_image_position_y: number | null
   website_url: string | null
   description: string | null
+  widget_button_config: WidgetButtonConfig | null
 }
 
 export type WidgetColour = {
@@ -106,7 +121,7 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
   const [mfrResult, widgetSystemsResult] = await Promise.all([
     supabase
       .from('data_studio_manufacturers')
-      .select('name, slug, logo_url, hero_image_url, website_url, description')
+      .select('name, slug, logo_url, hero_image_url, hero_wide_image_url, hero_wide_image_position_y, website_url, description, widget_button_config')
       .eq('id', w.manufacturer_id)
       .single(),
     supabase

@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const ctx     = await resolveWorkspaceContextFromRequest(session)
     if (!ctx.found) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-    const { manufacturer_id, widget_id, system_ids } = await req.json()
+    const { manufacturer_id, widget_id, system_ids, button_config } = await req.json()
 
     // Guard: ensure the manufacturer_id matches the session
     if (manufacturer_id !== ctx.manufacturerId) {
@@ -81,6 +81,14 @@ export async function POST(req: NextRequest) {
         console.error('Widget systems insert error:', insertErr)
         return NextResponse.json({ error: 'Failed to save systems' }, { status: 500 })
       }
+    }
+
+    // Save button config to manufacturer (global setting)
+    if (button_config && typeof button_config === 'object') {
+      await sb
+        .from('data_studio_manufacturers')
+        .update({ widget_button_config: button_config })
+        .eq('id', manufacturer_id)
     }
 
     return NextResponse.json({ ok: true, widget_id: resolvedWidgetId })

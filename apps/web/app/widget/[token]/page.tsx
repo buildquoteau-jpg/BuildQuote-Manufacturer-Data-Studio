@@ -33,6 +33,7 @@ export default async function WidgetPage({
         systems={widget.systems}
         widgetToken={token}
         manufacturerName={widget.manufacturer?.name}
+        buttonConfig={widget.manufacturer?.widget_button_config}
       />
 
       <div style={{ marginTop: '32px', textAlign: 'center', fontSize: '11px', color: '#d1d5db' }}>

@@ -7,11 +7,16 @@ export function ManufacturerHero({ manufacturer }: {
 }) {
   if (!manufacturer) return null
 
-  const bgStyle = manufacturer.hero_image_url
+  const bannerUrl = manufacturer.hero_wide_image_url || manufacturer.hero_image_url
+  const bannerPositionY = manufacturer.hero_wide_image_url
+    ? (manufacturer.hero_wide_image_position_y ?? 50)
+    : 50
+
+  const bgStyle = bannerUrl
     ? {
-        backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${manufacturer.hero_image_url})`,
+        backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.55)), url(${bannerUrl})`,
         backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        backgroundPosition: `center ${bannerPositionY}%`,
       }
     : { background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 60%, #1e3a5f 100%)' }
 

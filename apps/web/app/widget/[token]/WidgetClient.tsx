@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { WidgetSystem, WidgetComponent, WidgetProfile, WidgetColour } from '@/lib/data/getWidgetData'
+import type { WidgetSystem, WidgetComponent, WidgetProfile, WidgetColour, WidgetButtonConfig } from '@/lib/data/getWidgetData'
+import { DEFAULT_BUTTON_CONFIG } from '@/lib/data/getWidgetData'
 import { SystemCardTile, CATEGORY_COLOURS } from '@/components/ui/SystemCardTile'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -375,13 +376,14 @@ function ComponentsAccordion({ components }: { components: WidgetComponent[] }) 
 
 // ── System Detail Modal ────────────────────────────────────────────────────
 
-function SystemDetailModal({ system, onClose, manufacturerName, onEnquiry, onQuote, onStockist }: {
+function SystemDetailModal({ system, onClose, manufacturerName, onEnquiry, onQuote, onStockist, buttonConfig }: {
   system: WidgetSystem
   onClose: () => void
   manufacturerName?: string
   onEnquiry: () => void
   onQuote: () => void
   onStockist: () => void
+  buttonConfig: WidgetButtonConfig
 }) {
   const _catRaw = CATEGORY_COLOURS[system.category] ?? { bg: '#f3f4f6', color: '#374151' }
 
@@ -473,26 +475,34 @@ function SystemDetailModal({ system, onClose, manufacturerName, onEnquiry, onQuo
             )}
 
             {/* Action buttons */}
-            <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {(buttonConfig.show_request_quote || buttonConfig.show_find_stockist) && (
+              <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: buttonConfig.show_request_quote && buttonConfig.show_find_stockist ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                {buttonConfig.show_request_quote && (
+                  <button
+                    onClick={onQuote}
+                    style={{ padding: '13px 10px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
+                  >
+                    Request a Quote
+                  </button>
+                )}
+                {buttonConfig.show_find_stockist && (
+                  <button
+                    onClick={onStockist}
+                    style={{ padding: '13px 10px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
+                  >
+                    Find a Stockist
+                  </button>
+                )}
+              </div>
+            )}
+            {buttonConfig.show_general_enquiry && (
               <button
-                onClick={onQuote}
-                style={{ padding: '13px 10px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
+                onClick={onEnquiry}
+                style={{ padding: '11px 16px', background: '#f8fafc', color: '#374151', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', width: '100%' }}
               >
-                Request a Quote
+                General Enquiry
               </button>
-              <button
-                onClick={onStockist}
-                style={{ padding: '13px 10px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
-              >
-                Find a Stockist
-              </button>
-            </div>
-            <button
-              onClick={onEnquiry}
-              style={{ padding: '11px 16px', background: '#f8fafc', color: '#374151', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', width: '100%' }}
-            >
-              General Enquiry
-            </button>
+            )}
           </div>
         </div>
       </div>
@@ -805,12 +815,14 @@ function StockistModal({ system, widgetToken, onClose, onEnquiry }: {
 // ── Main export ────────────────────────────────────────────────────────────
 
 export function WidgetClient({
-  systems, manufacturerName, widgetToken,
+  systems, manufacturerName, widgetToken, buttonConfig: buttonConfigProp,
 }: {
   systems: WidgetSystem[]
   manufacturerName?: string
   widgetToken: string
+  buttonConfig?: WidgetButtonConfig | null
 }) {
+  const buttonConfig = buttonConfigProp ?? DEFAULT_BUTTON_CONFIG
   const [openSystem,    setOpenSystem]    = useState<WidgetSystem | null>(null)
   const [activeSystem,  setActiveSystem]  = useState<WidgetSystem | null>(null)
   const [enquiryType,   setEnquiryType]   = useState<EnquiryType | null>(null)
@@ -851,6 +863,7 @@ export function WidgetClient({
           onEnquiry={() => transitionTo(openSystem, 'enquiry')}
           onQuote={  () => transitionTo(openSystem, 'quote')}
           onStockist={() => transitionTo(openSystem, 'stockist')}
+          buttonConfig={buttonConfig}
         />
       )}
 
