@@ -1453,6 +1453,12 @@ function ExpandedCardView({
             <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>{system.name}</div>
             {system.category && <div style={{ fontSize: '12px', color: '#6b7280' }}>{system.category}</div>}
           </div>
+          {isVerified && (
+            <button onClick={handleReopen} disabled={verifyPending}
+              style={{ padding: '4px 12px', borderRadius: '6px', border: '1.5px solid #6b7280', background: '#fff', color: '#374151', fontSize: '12px', fontWeight: 600, cursor: verifyPending ? 'not-allowed' : 'pointer', opacity: verifyPending ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+              Re-open for editing
+            </button>
+          )}
           {isVerified ? (
             <span style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '4px 10px', borderRadius: '20px' }}>Verified</span>
           ) : (
@@ -1749,7 +1755,9 @@ export function VerificationGrid({
 
   function handleStatusChange(systemId: string, newStatus: string, reviewerNotes: string | null) {
     setSystems(prev => prev.map(s =>
-      s.id === systemId ? { ...s, verification_status: newStatus, reviewer_notes: reviewerNotes } : s,
+      s.id === systemId
+        ? { ...s, verification_status: newStatus, reviewer_notes: reviewerNotes, updated_at: new Date().toISOString() }
+        : s,
     ))
   }
 
