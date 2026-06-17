@@ -1,13 +1,10 @@
 'use client'
 
-import { useState } from 'react'
 import type { WidgetData } from '@/lib/data/getWidgetData'
 
 export function ManufacturerHero({ manufacturer }: {
   manufacturer: WidgetData['manufacturer']
 }) {
-  const [logoError, setLogoError] = useState(false)
-
   if (!manufacturer) return null
 
   const bgStyle = manufacturer.hero_image_url
@@ -18,8 +15,6 @@ export function ManufacturerHero({ manufacturer }: {
       }
     : { background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 60%, #1e3a5f 100%)' }
 
-  const showLogo = manufacturer.logo_url && !logoError
-
   return (
     <div style={{
       ...bgStyle,
@@ -29,27 +24,8 @@ export function ManufacturerHero({ manufacturer }: {
       marginBottom: '28px',
       overflow: 'hidden',
     }}>
-      {showLogo && (
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'rgba(255,255,255,0.93)',
-          borderRadius: '10px',
-          padding: '8px 18px',
-          marginBottom: '20px',
-        }}>
-          <img
-            src={manufacturer.logo_url!}
-            alt={manufacturer.name}
-            onError={() => setLogoError(true)}
-            style={{ height: '38px', objectFit: 'contain', display: 'block' }}
-          />
-        </div>
-      )}
-
       <div style={{
-        fontSize: showLogo ? '22px' : '34px',
+        fontSize: '34px',
         fontWeight: 800,
         color: '#ffffff',
         letterSpacing: '-0.02em',

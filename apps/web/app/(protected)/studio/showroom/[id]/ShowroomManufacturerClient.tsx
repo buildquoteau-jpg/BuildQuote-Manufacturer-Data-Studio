@@ -41,8 +41,6 @@ function fmtUom(uom: string | null): string {
 // ── Manufacturer Hero ─────────────────────────────────────────────────────────
 
 function ManufacturerHero({ manufacturer }: { manufacturer: ShowroomManufacturer }) {
-  const [logoError, setLogoError] = useState(false)
-
   // The full-width banner uses the dedicated wide image when set, otherwise it
   // falls back to the hero image (and its crop position).
   const bannerUrl = manufacturer.hero_wide_image_url || manufacturer.hero_image_url
@@ -61,16 +59,9 @@ function ManufacturerHero({ manufacturer }: { manufacturer: ShowroomManufacturer
       }
     : { background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 60%, #1e3a5f 100%)' }
 
-  const showLogo = manufacturer.logo_url && !logoError
-
   return (
     <div style={{ ...bgStyle, borderRadius: '14px', padding: '56px 32px 52px', textAlign: 'center', marginBottom: '28px', overflow: 'hidden' }}>
-      {showLogo && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.93)', borderRadius: '10px', padding: '8px 18px', marginBottom: '20px' }}>
-          <img src={manufacturer.logo_url!} alt={manufacturer.name} onError={() => setLogoError(true)} style={{ height: '38px', objectFit: 'contain', display: 'block' }} />
-        </div>
-      )}
-      <div style={{ fontSize: showLogo ? '22px' : '34px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', marginBottom: '10px', textShadow: '0 2px 12px rgba(0,0,0,0.4)', lineHeight: 1.1 }}>
+      <div style={{ fontSize: '34px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', marginBottom: '10px', textShadow: '0 2px 12px rgba(0,0,0,0.4)', lineHeight: 1.1 }}>
         {manufacturer.name}
       </div>
       {manufacturer.description && (
@@ -134,14 +125,9 @@ function SystemCardTile({ system, onClick }: { system: ShowroomSystem; onClick: 
       {/* Content */}
       <div style={{ padding: '12px 14px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {system.description && (
-          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
             {system.description}
           </p>
-        )}
-        {system.australian_made && (
-          <span style={{ alignSelf: 'flex-start', fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em', color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: '20px' }}>
-            Australian Made
-          </span>
         )}
         <div style={{ marginTop: 'auto', paddingTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '12px', color: '#9ca3af' }}>
