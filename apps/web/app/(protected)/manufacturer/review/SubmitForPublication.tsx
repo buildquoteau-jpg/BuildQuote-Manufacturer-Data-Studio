@@ -7,14 +7,22 @@ export function SubmitForPublication({
   manufacturerId,
   verifiedCount,
   totalCount,
+  liveCount,
+  updateReadyCount,
 }: {
   manufacturerId: string
   verifiedCount: number
   totalCount: number
+  liveCount: number
+  updateReadyCount: number
 }) {
-  const [message, setMessage] = useState(
-    `Hi BuildQuote, we have verified ${verifiedCount} out of ${totalCount} systems and would like to publish the verified system cards please. Go.`,
-  )
+  const newCount = verifiedCount - liveCount
+  const defaultMessage = updateReadyCount > 0 && newCount === 0
+    ? `Hi BuildQuote, we have ${updateReadyCount} system card${updateReadyCount !== 1 ? 's' : ''} with updates ready to re-publish. Please push the changes live. Thanks.`
+    : updateReadyCount > 0
+      ? `Hi BuildQuote, we have ${newCount} new system${newCount !== 1 ? 's' : ''} and ${updateReadyCount} update${updateReadyCount !== 1 ? 's' : ''} to live systems ready to publish. Go.`
+      : `Hi BuildQuote, we have verified ${verifiedCount} out of ${totalCount} systems and would like to publish the verified system cards please. Go.`
+  const [message, setMessage] = useState(defaultMessage)
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<
     { ok: true; systemCount: number; newCount?: number; updateCount?: number } | { ok: false; error: string } | null
@@ -68,8 +76,14 @@ export function SubmitForPublication({
         Ready to publish?
       </div>
       <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '10px' }}>
-        {verifiedCount} of {totalCount} system{totalCount !== 1 ? 's' : ''} verified. Submit your verified cards to
-        BuildQuote for publication — you don't need to wait until every system is done.
+        {verifiedCount} of {totalCount} system{totalCount !== 1 ? 's' : ''} verified
+        {(newCount > 0 || updateReadyCount > 0) && (
+          <> — {[
+            newCount > 0 ? `${newCount} new` : null,
+            updateReadyCount > 0 ? `${updateReadyCount} update${updateReadyCount !== 1 ? 's' : ''} to live systems` : null,
+          ].filter(Boolean).join(', ')} ready to send</>
+        )}
+        . Submit your verified cards to BuildQuote for publication — you don't need to wait until every system is done.
       </div>
       <textarea
         value={message}
@@ -92,7 +106,11 @@ export function SubmitForPublication({
           fontSize: '13px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer',
         }}
       >
-        {pending ? 'Submitting…' : `Submit ${verifiedCount} verified system${verifiedCount !== 1 ? 's' : ''} to BuildQuote`}
+        {pending ? 'Submitting…' : updateReadyCount > 0 && newCount === 0
+          ? `Submit ${updateReadyCount} update${updateReadyCount !== 1 ? 's' : ''} to BuildQuote`
+          : updateReadyCount > 0
+            ? `Submit ${newCount} new + ${updateReadyCount} update${updateReadyCount !== 1 ? 's' : ''} to BuildQuote`
+            : `Submit ${verifiedCount} verified system${verifiedCount !== 1 ? 's' : ''} to BuildQuote`}
       </button>
       {result && !result.ok && (
         <div style={{ marginTop: '8px', fontSize: '12px', color: '#dc2626' }}>{result.error}</div>

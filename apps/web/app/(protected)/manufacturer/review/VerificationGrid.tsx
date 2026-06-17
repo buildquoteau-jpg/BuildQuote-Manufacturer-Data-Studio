@@ -60,11 +60,15 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
 
   const isVerified = system.verification_status === 'manufacturer_verified'
   const isInReview = system.verification_status === 'in_review'
+  const isLive = !!system.production_system_id && !!system.last_published_at
+  const hasUpdateReady = isLive && isVerified && (
+    !system.last_submitted_at || new Date(system.updated_at) > new Date(system.last_submitted_at)
+  )
 
-  const statusLabel = isVerified ? 'Verified' : isInReview ? 'In review' : 'Not started'
-  const statusColor = isVerified ? '#16a34a' : isInReview ? '#d97706' : '#9ca3af'
-  const statusBg    = isVerified ? '#f0fdf4' : isInReview ? '#fffbeb' : '#f9fafb'
-  const statusBorder= isVerified ? '#bbf7d0' : isInReview ? '#fde68a' : '#e5e7eb'
+  const statusLabel = hasUpdateReady ? 'Update ready' : isVerified ? 'Verified' : isInReview ? 'In review' : 'Not started'
+  const statusColor = hasUpdateReady ? '#b45309' : isVerified ? '#16a34a' : isInReview ? '#d97706' : '#9ca3af'
+  const statusBg    = hasUpdateReady ? '#fffbeb' : isVerified ? '#f0fdf4' : isInReview ? '#fffbeb' : '#f9fafb'
+  const statusBorder= hasUpdateReady ? '#fde68a' : isVerified ? '#bbf7d0' : isInReview ? '#fde68a' : '#e5e7eb'
 
   return (
     <button
@@ -75,7 +79,7 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
       style={{
         display: 'flex', flexDirection: 'column', textAlign: 'left', width: '100%',
         background: '#ffffff',
-        border: isVerified ? '1.5px solid #16a34a' : hovered ? '1.5px solid #185D7A' : '1px solid #d1d5db',
+        border: hasUpdateReady ? '1.5px solid #f59e0b' : isVerified ? '1.5px solid #16a34a' : hovered ? '1.5px solid #185D7A' : '1px solid #d1d5db',
         borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
         boxShadow: hovered ? '0 8px 28px rgba(24,93,122,0.15)' : '0 2px 8px rgba(0,0,0,0.06)',
         transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
@@ -103,14 +107,15 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
         }}>
           {category}
         </span>
-        {isVerified && (
+        {(isVerified || isLive) && (
           <span style={{
             position: 'absolute', top: '10px', right: '10px',
             fontSize: '10px', fontWeight: 700,
-            background: '#16a34a', color: '#fff',
+            background: hasUpdateReady ? '#f59e0b' : isLive ? '#0d9488' : '#16a34a',
+            color: '#fff',
             padding: '3px 8px', borderRadius: '20px',
           }}>
-            Verified
+            {hasUpdateReady ? '↑ Update ready' : isLive ? '● Live' : 'Verified'}
           </span>
         )}
       </div>
@@ -138,9 +143,14 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
         background: statusBg, border: `1px solid ${statusBorder}`, borderRadius: '8px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: statusColor }}>{statusLabel}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: statusColor }}>{statusLabel}</span>
+          {isLive && !isVerified && (
+            <span style={{ fontSize: '10px', color: '#0d9488', fontWeight: 600 }}>● Live on BuildQuote</span>
+          )}
+        </div>
         <span style={{ fontSize: '11px', color: '#185D7A', fontWeight: 600 }}>
-          {isVerified ? 'Re-open' : 'Open to verify'} →
+          {isVerified ? (hasUpdateReady ? 'Review →' : 'Re-open →') : 'Open to verify →'}
         </span>
       </div>
     </button>
@@ -1757,6 +1767,12 @@ export function VerificationGrid({
   const unverified = sorted.filter(s => s.verification_status !== 'manufacturer_verified')
   const verified   = sorted.filter(s => s.verification_status === 'manufacturer_verified')
 
+  const liveCount = verified.filter(s => !!s.production_system_id && !!s.last_published_at).length
+  const updateReadyCount = verified.filter(s =>
+    !!s.production_system_id && !!s.last_published_at &&
+    (!s.last_submitted_at || new Date(s.updated_at) > new Date(s.last_submitted_at))
+  ).length
+
   return (
     <>
       <style>{`
@@ -1807,6 +1823,8 @@ export function VerificationGrid({
         manufacturerId={manufacturerId}
         verifiedCount={verified.length}
         totalCount={systems.length}
+        liveCount={liveCount}
+        updateReadyCount={updateReadyCount}
       />
     </>
   )

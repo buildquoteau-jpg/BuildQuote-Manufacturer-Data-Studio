@@ -20,10 +20,10 @@ type VerifStage = {
 }
 
 const VERIF_STAGES: VerifStage[] = [
-  { key: 'submitted',    label: 'Submitted',             color: '#3b82f6', dimColor: '#e2e8f0' },
-  { key: 'under_review', label: 'Under Review',          color: '#f59e0b', dimColor: '#e2e8f0' },
-  { key: 'verified',     label: 'BuildQuote Verified',   color: '#4FCBB0', dimColor: '#e2e8f0' },
-  { key: 'published',    label: 'Published to BuildQuote', color: '#22c55e', dimColor: '#e2e8f0' },
+  { key: 'submitted',    label: 'Submitted',              color: '#3b82f6', dimColor: '#e2e8f0' },
+  { key: 'under_review', label: 'Under Review',           color: '#f59e0b', dimColor: '#e2e8f0' },
+  { key: 'verified',     label: 'Manufacturer Verified',  color: '#4FCBB0', dimColor: '#e2e8f0' },
+  { key: 'published',    label: 'BuildQuote Published',   color: '#22c55e', dimColor: '#e2e8f0' },
 ]
 
 /**
@@ -92,20 +92,23 @@ function VerificationBanner({ system }: { system: PortalSystem }) {
               title={stage.label}
               style={{
                 flex: 1,
-                padding: '0.3rem 0.3rem 0.35rem',
+                padding: '0.3rem 0.25rem 0.35rem',
                 background: bg,
                 borderRadius: isFirst ? '5px 0 0 5px' : isLast ? '0 5px 5px 0' : 0,
                 textAlign: 'center',
-                fontSize: '0.63rem',
+                fontSize: '0.6rem',
                 fontWeight: 600,
                 color: textColor,
                 letterSpacing: '0.01em',
-                lineHeight: 1.3,
+                lineHeight: 1.25,
+                minHeight: '2.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 transition: 'background 0.2s',
                 userSelect: 'none',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
               }}
             >
               {stage.label}

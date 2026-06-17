@@ -34,9 +34,15 @@ export default async function ManufacturerReviewPage() {
   }
 
   const { manufacturer, systems } = result
-  const verifiedCount = systems.filter(s => s.verification_status === 'manufacturer_verified').length
-  const inReviewCount = systems.filter(s => s.verification_status === 'in_review').length
-  const pendingCount  = systems.filter(s => s.verification_status === 'pending_review').length
+  const verifiedCount    = systems.filter(s => s.verification_status === 'manufacturer_verified').length
+  const inReviewCount    = systems.filter(s => s.verification_status === 'in_review').length
+  const pendingCount     = systems.filter(s => s.verification_status === 'pending_review').length
+  const publishedCount   = systems.filter(s => !!s.production_system_id && !!s.last_published_at).length
+  const updateReadyCount = systems.filter(s =>
+    !!s.production_system_id && !!s.last_published_at &&
+    s.verification_status === 'manufacturer_verified' &&
+    (!s.last_submitted_at || new Date(s.updated_at) > new Date(s.last_submitted_at))
+  ).length
 
   return (
     <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Verify systems`}>
@@ -102,9 +108,32 @@ export default async function ManufacturerReviewPage() {
                   {pendingCount} not started
                 </span>
               )}
+              {publishedCount > 0 && (
+                <span style={{ color: '#0d9488', fontWeight: 600 }}>
+                  {publishedCount} live
+                </span>
+              )}
+              {updateReadyCount > 0 && (
+                <span style={{ color: '#b45309', fontWeight: 600 }}>
+                  {updateReadyCount} update{updateReadyCount !== 1 ? 's' : ''} ready
+                </span>
+              )}
             </div>
           </div>
         )}
+      </div>
+
+      {/* Desktop recommendation */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', gap: '0.6rem',
+        padding: '0.65rem 0.9rem', marginBottom: '1.25rem',
+        background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px',
+        fontSize: '0.8rem', color: '#92400e', lineHeight: 1.5,
+      }}>
+        <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: '0.05rem' }}>💻</span>
+        <span>
+          <strong>Best done on a desktop or laptop.</strong> The verification cards contain a lot of detail — reviewing on a phone makes it easy to miss errors or tap the wrong action. We recommend completing verification on a larger screen.
+        </span>
       </div>
 
       {systems.length === 0 ? (
