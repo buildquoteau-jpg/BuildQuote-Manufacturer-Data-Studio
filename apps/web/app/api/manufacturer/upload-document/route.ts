@@ -26,6 +26,9 @@ function makeR2Client(): S3Client {
   console.log('[r2] accessKeyId:', accessKeyId ? accessKeyId.slice(0, 6) + '...' : 'MISSING')
   console.log('[r2] secretKey:', secretAccessKey ? secretAccessKey.slice(0, 4) + '...' : 'MISSING')
   console.log('[r2] bucket:', process.env.CLOUDFLARE_R2_BUCKET_NAME ?? 'MISSING')
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error('Cloudflare R2 credentials not configured')
+  }
   return new S3Client({
     region: 'auto',
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
