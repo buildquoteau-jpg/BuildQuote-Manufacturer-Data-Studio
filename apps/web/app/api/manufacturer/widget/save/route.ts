@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest } from '@/lib/studio-manufacturer/workspace'
-import { createStudioServerClient } from '@/lib/supabase/server'
+import { createStudioServiceClient } from '@/lib/supabase/service'
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'system_ids must be an array' }, { status: 400 })
     }
 
-    const sb = createStudioServerClient()
+    // Use service role so admin-impersonation works (auth.uid() is admin, not manufacturer user)
+    const sb = createStudioServiceClient()
 
     // Validate: all provided system_ids must belong to this manufacturer and be approved/live
     if (system_ids.length > 0) {
