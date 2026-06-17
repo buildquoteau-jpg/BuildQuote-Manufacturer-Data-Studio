@@ -79,7 +79,10 @@ function BatchCard({ batch }: { batch: PendingBatch }) {
 
   return (
     <div style={{
-      background: '#fff', border: '1px solid var(--ds-border)', borderRadius: 10, padding: '14px 16px',
+      background: '#fff',
+      border: isDone ? '1.5px solid #bbf7d0' : '1px solid var(--ds-border)',
+      borderRadius: 10, padding: '14px 16px',
+      transition: 'border-color 0.3s',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div>
@@ -101,36 +104,42 @@ function BatchCard({ batch }: { batch: PendingBatch }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-          <button type="button" onClick={handlePreview} disabled={pending}
-            style={{ padding: '6px 14px', borderRadius: '6px', border: '1.5px solid #185D7A', background: '#fff', color: '#185D7A', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
-            Preview
-          </button>
-          {!isDone && (
-            confirmingPublish ? (
-              <>
-                <button type="button" onClick={handlePublish} disabled={pending}
-                  style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
-                  {pending ? 'Publishing…' : 'Confirm publish'}
-                </button>
-                <button type="button" onClick={() => setConfirmingPublish(false)} disabled={pending}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button type="button" onClick={() => setConfirmingPublish(true)} disabled={pending}
-                style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
-                Publish
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+          {isDone ? (
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '5px 12px', borderRadius: '20px' }}>
+              Published ✓
+            </span>
+          ) : (
+            <>
+              <button type="button" onClick={handlePreview} disabled={pending}
+                style={{ padding: '6px 14px', borderRadius: '6px', border: '1.5px solid #185D7A', background: '#fff', color: '#185D7A', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
+                {pending && !confirmingPublish ? 'Loading…' : 'Preview'}
               </button>
-            )
+              {confirmingPublish ? (
+                <>
+                  <button type="button" onClick={handlePublish} disabled={pending}
+                    style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
+                    {pending ? 'Publishing…' : 'Confirm publish'}
+                  </button>
+                  <button type="button" onClick={() => setConfirmingPublish(false)} disabled={pending}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => setConfirmingPublish(true)} disabled={pending}
+                  style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
+                  Publish
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {expanded && previewResult && !publishResult && (
-        <div style={{ marginTop: '4px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
             Dry run — nothing written yet
           </div>
           <ResultSummary result={previewResult} />
@@ -138,10 +147,7 @@ function BatchCard({ batch }: { batch: PendingBatch }) {
       )}
 
       {publishResult && (
-        <div style={{ marginTop: '4px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Published
-          </div>
+        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
           <ResultSummary result={publishResult} />
         </div>
       )}
