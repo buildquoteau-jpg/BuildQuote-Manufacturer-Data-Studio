@@ -93,64 +93,40 @@ function SystemCardTile({
         transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
       }}
     >
-      {/* Hero image */}
-      <div style={{
-        height: '180px', flexShrink: 0, position: 'relative',
-        background: system.hero_image_url
-          ? `url(${system.hero_image_url}) center/cover`
-          : 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {!system.hero_image_url && (
-          <span style={{ fontSize: '14px', fontWeight: 800, color: '#94a3b8', fontFamily: 'monospace' }}>
-            {system.product_code ?? system.name}
-          </span>
+      {/* Hero image — gradient overlay with text on image */}
+      <div style={{ height: '220px', flexShrink: 0, position: 'relative', overflow: 'hidden', background: system.hero_image_url ? undefined : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)' }}>
+        {system.hero_image_url && (
+          <img src={system.hero_image_url} alt={system.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
         )}
-        {/* Category pill */}
-        <span style={{
-          position: 'absolute', top: '10px', left: '10px',
-          fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
-          background: catStyle.bg, color: catStyle.color,
-          padding: '3px 9px', borderRadius: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
-        }}>
-          {category}
-        </span>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,30,45,0.88) 0%, rgba(15,30,45,0.18) 55%, transparent 100%)' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 14px 14px' }}>
+          {mfr && (
+            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: '3px' }}>
+              {mfr.name}
+            </div>
+          )}
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#ffffff', lineHeight: 1.2, letterSpacing: '-0.01em', textShadow: '0 1px 6px rgba(0,0,0,0.3)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+            {system.name}
+          </h3>
+          <div style={{ marginTop: '4px', fontSize: '11px', color: 'rgba(255,255,255,0.65)', fontWeight: 500 }}>
+            {category}
+          </div>
+        </div>
       </div>
 
       {/* Content strip */}
-      <div style={{ padding: '14px 16px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {/* Manufacturer name */}
-        {mfr && (
-          mfr.logo_url
-            ? <img src={mfr.logo_url} alt={mfr.name} style={{ height: '14px', objectFit: 'contain', maxWidth: '70px' }} />
-            : <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{mfr.name}</span>
-        )}
-        <h3 style={{
-          margin: 0, fontSize: '15px', fontWeight: 800, color: '#0f172a', lineHeight: 1.3,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-        }}>
-          {system.name}
-        </h3>
+      <div style={{ padding: '12px 16px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {system.description && (
-          <p style={{
-            margin: 0, fontSize: '13px', color: '#6b7280', lineHeight: 1.5,
-            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-          }}>
+          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
             {system.description}
           </p>
         )}
         {system.australian_made && (
-          <span style={{
-            alignSelf: 'flex-start',
-            fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em',
-            color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0',
-            padding: '2px 8px', borderRadius: '20px',
-          }}>
+          <span style={{ alignSelf: 'flex-start', fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em', color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: '20px' }}>
             AU Australian Made
           </span>
         )}
-        {/* Footer row */}
-        <div style={{ marginTop: 'auto', paddingTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ marginTop: 'auto', paddingTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '12px', color: '#9ca3af' }}>
             {profileCount > 0 ? `${profileCount} profile${profileCount !== 1 ? 's' : ''}` : ''}
           </span>
