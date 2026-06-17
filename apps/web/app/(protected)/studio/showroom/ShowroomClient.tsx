@@ -431,7 +431,7 @@ export function ShowroomClient({
                 {filteredManufacturers.map((m) => (
                   <a key={m.id} href={`/studio/showroom/${m.id}`} className="showroom-mfr-card">
                     <div style={{
-                      height: '110px', flexShrink: 0,
+                      height: '160px', flexShrink: 0,
                       ...(m.hero_image_url
                         ? {
                             backgroundImage: `url(${m.hero_image_url})`,
