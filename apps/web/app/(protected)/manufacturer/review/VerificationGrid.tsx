@@ -563,8 +563,8 @@ function CropAdjuster({
         <span>Image crop position</span>
         {saving && <span style={{ fontWeight: 400, color: '#9ca3af' }}>saving…</span>}
       </div>
-      {/* Preview */}
-      <div style={{ height: '120px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
+      {/* Preview — matches system card dimensions: 220px tall × ~360px wide */}
+      <div style={{ width: '100%', maxWidth: '360px', height: '220px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
         <img src={imageUrl} alt="crop preview" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${x}% ${y}%`, display: 'block' }} />
       </div>
       {/* X slider */}
