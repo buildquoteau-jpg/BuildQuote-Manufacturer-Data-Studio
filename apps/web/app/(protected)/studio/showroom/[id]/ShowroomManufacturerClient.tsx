@@ -117,7 +117,7 @@ function SystemCardTile({ system, onClick }: { system: ShowroomSystem; onClick: 
     >
       {/* Hero image */}
       <div style={{
-        height: '180px', flexShrink: 0, position: 'relative',
+        height: '220px', flexShrink: 0, position: 'relative',
         background: system.hero_image_url
           ? `url(${system.hero_image_url}) center/cover`
           : 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)',

@@ -603,6 +603,8 @@ export type VerificationSystem = {
   subcategory: string | null
   description: string | null
   hero_image_url: string | null
+  hero_image_position_x: number | null
+  hero_image_position_y: number | null
   australian_made: boolean | null
   bal_rating: string | null
   fire_rating: string | null
@@ -643,6 +645,7 @@ export async function getManufacturerVerificationData(
       .from('staged_systems')
       .select(
         'id, name, product_code, category, subcategory, description, hero_image_url, ' +
+        'hero_image_position_x, hero_image_position_y, ' +
         'australian_made, bal_rating, fire_rating, acoustic_rating, moisture_resistant, ' +
         'structural_grade, website_url, source_url, install_guide_urls, design_guide_url, tech_data_url, ' +
         'notes, verification_status, reviewer_notes, verified_at',

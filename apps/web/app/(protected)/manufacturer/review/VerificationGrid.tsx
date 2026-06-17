@@ -19,6 +19,7 @@ import {
   updateComponent,
   getManufacturerComponents,
   linkExistingComponent,
+  updateSystemImageCrop,
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
 import { SubmitForPublication } from './SubmitForPublication'
@@ -83,10 +84,10 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
       }}
     >
       <div style={{
-        height: '160px', flexShrink: 0, position: 'relative',
-        background: system.hero_image_url
-          ? `url(${system.hero_image_url}) center/cover`
-          : 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)',
+        height: '180px', flexShrink: 0, position: 'relative',
+        ...(system.hero_image_url
+          ? { backgroundImage: `url(${system.hero_image_url})`, backgroundSize: 'cover', backgroundPosition: `${system.hero_image_position_x ?? 50}% ${system.hero_image_position_y ?? 50}%` }
+          : { background: 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)' }),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {!system.hero_image_url && (
@@ -522,6 +523,62 @@ function BALFieldRow({
         </div>
       </div>
       {errorMsg && <div style={{ marginTop: '4px', fontSize: '11px', color: '#dc2626' }}>{errorMsg}</div>}
+    </div>
+  )
+}
+
+// ─── Image crop adjuster ──────────────────────────────────────────────────────
+
+function CropAdjuster({
+  imageUrl, positionX, positionY, systemId, manufacturerId, onChange,
+}: {
+  imageUrl: string | null
+  positionX: number
+  positionY: number
+  systemId: string
+  manufacturerId: string
+  onChange: (x: number, y: number) => void
+}) {
+  const [x, setX] = useState(positionX)
+  const [y, setY] = useState(positionY)
+  const [saving, setSaving] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  if (!imageUrl) return null
+
+  function handleChange(newX: number, newY: number) {
+    setX(newX); setY(newY)
+    onChange(newX, newY)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(async () => {
+      setSaving(true)
+      await updateSystemImageCrop(systemId, manufacturerId, newX, newY)
+      setSaving(false)
+    }, 600)
+  }
+
+  return (
+    <div style={{ borderRadius: '8px', border: '1px solid #d1d5db', padding: '10px 12px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+        <span>Image crop position</span>
+        {saving && <span style={{ fontWeight: 400, color: '#9ca3af' }}>saving…</span>}
+      </div>
+      {/* Preview */}
+      <div style={{ height: '120px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
+        <img src={imageUrl} alt="crop preview" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${x}% ${y}%`, display: 'block' }} />
+      </div>
+      {/* X slider */}
+      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '6px' }}>
+        Horizontal — {x === 50 ? 'centre' : x < 50 ? `left ${x}%` : `right ${x}%`}
+        <input type="range" min={0} max={100} value={x} onChange={e => handleChange(Number(e.target.value), y)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
+      {/* Y slider */}
+      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280' }}>
+        Vertical — {y === 50 ? 'centre' : y < 50 ? `top ${y}%` : `bottom ${y}%`}
+        <input type="range" min={0} max={100} value={y} onChange={e => handleChange(x, Number(e.target.value))}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
     </div>
   )
 }
@@ -1297,6 +1354,9 @@ function ExpandedCardView({
     setShowAddComponent(false)
   }
 
+  const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
+  const [cropY, setCropY] = useState(system.hero_image_position_y ?? 50)
+
   // Build SystemCardData
   const cardData: SystemCardData = {
     name:               system.name,
@@ -1305,6 +1365,8 @@ function ExpandedCardView({
     subcategory:        system.subcategory,
     description:        system.description,
     hero_image_url:     system.hero_image_url,
+    hero_image_position_x: cropX,
+    hero_image_position_y: cropY,
     bal_rating:         system.bal_rating,
     fire_rating:        system.fire_rating,
     moisture_resistant: system.moisture_resistant,
@@ -1428,6 +1490,14 @@ function ExpandedCardView({
             {/* Images & resources */}
             <FieldSection label="Images & resources">
               <FieldRow {...fieldRowProps('Hero image URL', 'hero_image_url', { isUrl: true })} />
+              <CropAdjuster
+                imageUrl={system.hero_image_url}
+                positionX={cropX}
+                positionY={cropY}
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                onChange={(x, y) => { setCropX(x); setCropY(y) }}
+              />
               {system.website_url  && <FieldRow {...fieldRowProps('Manufacturer website', 'website_url', { isUrl: true })} />}
               {system.source_url   && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
               {(system.install_guide_urls ?? []).length > 0

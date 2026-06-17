@@ -110,6 +110,33 @@ export async function upsertFieldVerification(
   return { ok: true }
 }
 
+// ─── updateSystemImageCrop ────────────────────────────────────────────────────
+// Directly saves X/Y crop positions for the system hero image.
+// Bypasses field_verifications — this is an aesthetic control, not a parsed field.
+
+export async function updateSystemImageCrop(
+  systemId: string,
+  manufacturerId: string,
+  positionX: number,
+  positionY: number,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({
+      hero_image_position_x: Math.round(Math.max(0, Math.min(100, positionX))),
+      hero_image_position_y: Math.round(Math.max(0, Math.min(100, positionY))),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 // ─── clearFieldVerification ───────────────────────────────────────────────────
 // Removes a field verification (resets to unreviewed).
 

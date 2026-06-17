@@ -241,6 +241,7 @@ export async function publishSystem(
     .select(`
       id, manufacturer_id, source_document_id, production_system_id, name, product_code, slug,
       category, subcategory, description, dimensions, length_m, double_sided, hero_image_url,
+      hero_image_position_x, hero_image_position_y,
       website_url, source_label, source_url, sheet_format, fire_rating, acoustic_rating,
       moisture_resistant, structural_grade, tech_data_url, bal_rating, australian_made,
       install_guide_urls, design_guide_url, sort_order
@@ -280,6 +281,8 @@ export async function publishSystem(
       length_m: sys.length_m,
       double_sided: sys.double_sided,
       hero_image_url: sys.hero_image_url,
+      hero_image_position_x: sys.hero_image_position_x ?? 50,
+      hero_image_position_y: sys.hero_image_position_y ?? 50,
       website_url: sys.website_url,
       source_label: sys.source_label,
       source_url: sys.source_url,
