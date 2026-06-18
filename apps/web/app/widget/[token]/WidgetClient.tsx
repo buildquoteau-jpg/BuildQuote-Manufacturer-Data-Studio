@@ -277,18 +277,38 @@ function ProfileGroupBlock({
   const [open, setOpen] = useState(defaultOpen)
 
   if (!groupKey) {
+    const keylessSelectedCount = selectable
+      ? items.filter(({ profile }) => selectedIds?.has(profile.id)).length
+      : 0
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {items.map(({ label, profile }) => (
-          <ProfileRow
-            key={profile.id}
-            label={label}
-            profile={profile}
-            selectable={selectable}
-            selected={selectedIds?.has(profile.id)}
-            onToggle={() => onToggle?.(profile.id)}
-          />
-        ))}
+      <div>
+        {showSystemName && (
+          <div style={{
+            fontSize: '13px', fontWeight: 700, color: '#111827',
+            paddingLeft: '10px', borderLeft: '3px solid #185D7A',
+            margin: '10px 0 8px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            {systemName}
+            {selectable && keylessSelectedCount > 0 && (
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#185D7A' }}>
+                · {keylessSelectedCount} selected
+              </span>
+            )}
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {items.map(({ label, profile }) => (
+            <ProfileRow
+              key={profile.id}
+              label={label}
+              profile={profile}
+              selectable={selectable}
+              selected={selectedIds?.has(profile.id)}
+              onToggle={() => onToggle?.(profile.id)}
+            />
+          ))}
+        </div>
       </div>
     )
   }
