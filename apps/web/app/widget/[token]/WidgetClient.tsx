@@ -14,6 +14,8 @@ type SelectedItem = {
   dims: string
   uom: string
   product_code: string | null
+  quantity: number  // default 1, editable in quote form
+  details: string   // free-text: custom dims, colour spec, notes
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -482,7 +484,6 @@ function ComponentsAccordion({
             const inner = (
               <>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  {selectable && <Checkbox checked={!!isSelected} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', lineHeight: 1.35 }}>{comp.name}</div>
                     {item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{item.notes}</div>}
@@ -492,6 +493,7 @@ function ComponentsAccordion({
                       {uom && <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#9ca3af' }}>{uom}</span>}
                     </div>
                   </div>
+                  {selectable && <Checkbox checked={!!isSelected} />}
                 </div>
               </>
             )
@@ -569,6 +571,7 @@ function SystemDetailModal({
         item_id: profile.id, type: 'profile', label,
         dims: fmtDims(profile), uom: fmtUom(profile.uom),
         product_code: profile.product_code ?? null,
+        quantity: 1, details: '',
       }))
 
     system.system_colours
@@ -576,6 +579,7 @@ function SystemDetailModal({
       .forEach(c => items.push({
         item_id: c.colour_name, type: 'colour', label: c.colour_name,
         dims: '', uom: '', product_code: null,
+        quantity: 1, details: '',
       }))
 
     system.system_components
@@ -584,6 +588,7 @@ function SystemDetailModal({
         item_id: sc.id, type: 'component', label: sc.components!.name,
         dims: '', uom: fmtUom(sc.components!.uom),
         product_code: sc.components!.sku ?? null,
+        quantity: 1, details: '',
       }))
 
     return items
@@ -814,6 +819,9 @@ function QuoteRequestModal({
   preselectedItems: SelectedItem[]
   onClose: () => void
 }) {
+  const [editableItems, setEditableItems] = useState<SelectedItem[]>(() =>
+    preselectedItems.map(item => ({ ...item, quantity: item.quantity ?? 1, details: item.details ?? '' }))
+  )
   const [name,        setName]        = useState('')
   const [email,       setEmail]       = useState('')
   const [phone,       setPhone]       = useState('')
@@ -822,6 +830,10 @@ function QuoteRequestModal({
   const [timeline,    setTimeline]    = useState('')
   const [message,     setMessage]     = useState('')
   const [status,      setStatus]      = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  function updateItem(idx: number, patch: Partial<SelectedItem>) {
+    setEditableItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it))
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -841,7 +853,7 @@ function QuoteRequestModal({
           token:          widgetToken,
           system_id:      system.id,
           system_name:    system.name,
-          selected_items: preselectedItems,
+          selected_items: editableItems,
           name, email, phone,
           postcode:     postcode || null,
           project_type: projectType || null,
@@ -902,21 +914,42 @@ function QuoteRequestModal({
         ) : (
           <form onSubmit={handleSubmit} style={{ padding: '20px 24px 28px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
-            {/* Selected items (read-only) */}
-            {preselectedItems.length > 0 && (
+            {/* Selected items (editable) */}
+            {editableItems.length > 0 && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: '8px' }}>
-                  Your selection · {preselectedItems.length} item{preselectedItems.length !== 1 ? 's' : ''}
+                <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: '10px' }}>
+                  Your selection · {editableItems.length} item{editableItems.length !== 1 ? 's' : ''}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  {preselectedItems.map((item, i) => (
-                    <div key={i} style={{ fontSize: '13px', color: '#374151', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600 }}>{item.label}</span>
-                      {item.dims && <span style={{ color: '#6b7280' }}>{item.dims}</span>}
-                      {item.uom && <span style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em' }}>{item.uom}</span>}
-                      {item.product_code && (
-                        <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#4b5563', background: '#f3f4f6', padding: '1px 5px', borderRadius: '3px' }}>{item.product_code}</span>
-                      )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {editableItems.map((item, i) => (
+                    <div key={i} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {/* Item identity row */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{item.label}</span>
+                        {item.dims && <span style={{ fontSize: '12px', color: '#6b7280' }}>{item.dims}</span>}
+                        {item.uom && <span style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em' }}>{item.uom}</span>}
+                        {item.product_code && (
+                          <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#4b5563', background: '#f3f4f6', padding: '1px 5px', borderRadius: '3px' }}>{item.product_code}</span>
+                        )}
+                      </div>
+                      {/* Qty + details row */}
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280' }}>Qty</span>
+                          <input
+                            type="number" min={1} value={item.quantity}
+                            onChange={e => updateItem(i, { quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                            style={{ width: '60px', padding: '5px 8px', fontSize: '13px', fontWeight: 600, border: '1.5px solid #d1d5db', borderRadius: '6px', outline: 'none', textAlign: 'center', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <input
+                          type="text"
+                          value={item.details}
+                          onChange={e => updateItem(i, { details: e.target.value })}
+                          placeholder={item.type === 'profile' ? 'Custom dimensions or notes…' : item.type === 'colour' ? 'Colour specification or notes…' : 'Notes…'}
+                          style={{ flex: 1, padding: '5px 10px', fontSize: '13px', border: '1.5px solid #d1d5db', borderRadius: '6px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', color: '#111827', background: '#fff' }}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
