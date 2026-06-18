@@ -14,6 +14,7 @@ export type ManufacturerMessage = {
   body: string
   message_type: 'general' | 'help' | 'submission'
   related_publish_batch_id: string | null
+  acknowledged_at: string | null
   created_at: string
 }
 
@@ -135,6 +136,30 @@ export type MessageThreadSummary = {
   message_count: number
 }
 
+// ─── acknowledgeAdminMessage ─────────────────────────────────────────────────
+// Manufacturer marks a BuildQuote message as acknowledged from their Inbox.
+
+export async function acknowledgeAdminMessage(
+  messageId: string,
+  manufacturerId: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('manufacturer_messages')
+    .update({ acknowledged_at: new Date().toISOString() })
+    .eq('id', messageId)
+    .eq('manufacturer_id', manufacturerId)
+    .eq('sender_type', 'buildquote')
+    .is('acknowledged_at', null)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ─── getAllMessageThreads ───────────────────────────────────────────────────────
 export async function getAllMessageThreads(): Promise<
   { ok: true; threads: MessageThreadSummary[] } | { ok: false; error: string }
 > {

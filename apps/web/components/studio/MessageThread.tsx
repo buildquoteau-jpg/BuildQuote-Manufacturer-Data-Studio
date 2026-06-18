@@ -45,6 +45,7 @@ export function MessageThread({
           body,
           message_type: 'general',
           related_publish_batch_id: null,
+          acknowledged_at: null,
           created_at: new Date().toISOString(),
         },
       ])
