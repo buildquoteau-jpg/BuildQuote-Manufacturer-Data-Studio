@@ -223,10 +223,11 @@ function buildManufacturerEmailHtml(opts: {
 function buildCustomerConfirmationHtml(opts: {
   customerName: string
   manufacturerName: string
+  manufacturerEmail: string | null
   systemName: string
   items: SelectedItem[]
 }): string {
-  const { customerName, manufacturerName, systemName, items } = opts
+  const { customerName, manufacturerName, manufacturerEmail, systemName, items } = opts
   const dateStr = formatDate()
 
   const itemRows = items.map((item, i) => {
@@ -311,7 +312,7 @@ function buildCustomerConfirmationHtml(opts: {
     <td style="background:#fff8f0;border-top:2px solid #f97316;padding:20px 32px;">
       <p style="margin:0 0 8px;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">What Happens Next</p>
       <p style="margin:0;font-size:12px;color:#334155;line-height:1.5;">
-        <strong>${manufacturerName}</strong> will contact you directly to discuss your quote. If you have any follow-up questions in the meantime, simply reply to this email.
+        <strong>${manufacturerName}</strong> will be in touch directly to discuss pricing and availability. If you have any follow-up questions, reply to this email${manufacturerEmail ? ` or contact them directly at <a href="mailto:${manufacturerEmail}" style="color:#185D7A;">${manufacturerEmail}</a>` : ''}.
       </p>
     </td>
   </tr>
@@ -357,7 +358,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid widget token' }, { status: 403 })
     }
 
-    const [insertResult, mfrResult] = await Promise.all([
+    const [insertResult, mfrResult, userResult] = await Promise.all([
       studio.from('widget_quote_requests').insert({
         manufacturer_id: widget.manufacturer_id,
         widget_id:       widget.id,
@@ -375,8 +376,15 @@ export async function POST(req: NextRequest) {
       }),
       studio
         .from('data_studio_manufacturers')
-        .select('name, pending_contact_email_primary')
+        .select('name')
         .eq('id', widget.manufacturer_id)
+        .single(),
+      // Prefer company_email_primary from the manufacturer's user profile
+      studio
+        .from('manufacturer_users')
+        .select('data_studio_user_profiles!inner(company_email_primary, email)')
+        .eq('manufacturer_id', widget.manufacturer_id)
+        .limit(1)
         .single(),
     ])
 
@@ -385,8 +393,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to submit quote request' }, { status: 500 })
     }
 
-    const manufacturerName  = mfrResult.data?.name ?? 'the manufacturer'
-    const manufacturerEmail = mfrResult.data?.pending_contact_email_primary
+    const manufacturerName = mfrResult.data?.name ?? 'the manufacturer'
+    const profile          = (userResult.data as any)?.data_studio_user_profiles
+    const manufacturerEmail: string | null =
+      profile?.company_email_primary ?? profile?.email ?? null
     const items             = (Array.isArray(selected_items) ? selected_items : []) as SelectedItem[]
     const systemName        = system_name ?? system_id
 
@@ -416,10 +426,12 @@ export async function POST(req: NextRequest) {
       resend.emails.send({
         from:    `BuildQuote <${FROM}>`,
         to:      email,
+        replyTo: manufacturerEmail ?? FROM,
         subject: `Your quote request for ${systemName} has been received`,
         html:    buildCustomerConfirmationHtml({
-          customerName:    name,
+          customerName:     name,
           manufacturerName,
+          manufacturerEmail: manufacturerEmail ?? null,
           systemName,
           items,
         }),
