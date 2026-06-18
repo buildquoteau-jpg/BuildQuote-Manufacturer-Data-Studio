@@ -542,7 +542,7 @@ function EnquiryModal({ system, widgetToken, type, onClose }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: widgetToken,
-          staged_system_id: system.id,
+          system_id:    system.id,
           system_name:  system.name,
           product_code: system.product_code,
           name, email, phone, message, type,

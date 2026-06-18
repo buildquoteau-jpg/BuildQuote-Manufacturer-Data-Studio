@@ -1,11 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-
-function getDataStudioClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) throw new Error('Missing Supabase env vars')
-  return createClient(url, key)
-}
+import { createStudioServiceClient } from '@/lib/supabase/service'
+import { getRfqServerClient } from '@/lib/supabase/rfq-server'
 
 export type WidgetButtonConfig = {
   show_request_quote: boolean
@@ -103,10 +97,14 @@ export type WidgetData = {
 }
 
 export async function getWidgetData(token: string): Promise<WidgetData | null> {
-  const supabase = getDataStudioClient()
+  // Config lookups stay on data-studio (service role, server-side only).
+  // System content is read from production — only published systems have a
+  // production_system_id, so unpublished data is silently excluded.
+  const studio = createStudioServiceClient()
+  const prod   = getRfqServerClient()
 
-  // Resolve widget
-  const { data: widget, error: widgetError } = await supabase
+  // Resolve widget token (data-studio)
+  const { data: widget, error: widgetError } = await studio
     .from('manufacturer_embed_widgets')
     .select('id, manufacturer_id')
     .eq('public_token', token)
@@ -117,33 +115,44 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
 
   const w = widget as { id: string; manufacturer_id: string }
 
-  // Fetch manufacturer + widget systems in parallel
+  // Manufacturer profile + widget system config in parallel (data-studio)
   const [mfrResult, widgetSystemsResult] = await Promise.all([
-    supabase
+    studio
       .from('data_studio_manufacturers')
       .select('name, slug, logo_url, hero_image_url, hero_wide_image_url, hero_wide_image_position_y, website_url, description, widget_button_config')
       .eq('id', w.manufacturer_id)
       .single(),
-    supabase
+    studio
       .from('manufacturer_embed_widget_systems')
       .select('staged_system_id, sort_order')
       .eq('embed_widget_id', w.id)
       .order('sort_order'),
   ])
 
-  const manufacturer = mfrResult.data
-    ? (mfrResult.data as WidgetManufacturer)
-    : null
-
+  const manufacturer = mfrResult.data ? (mfrResult.data as WidgetManufacturer) : null
   const widgetSystems = (widgetSystemsResult.data ?? []) as { staged_system_id: string; sort_order: number }[]
-  const systemIds = widgetSystems.map(ws => ws.staged_system_id)
+  const stagedIds = widgetSystems.map(ws => ws.staged_system_id)
 
-  if (systemIds.length === 0) {
-    return { id: w.id, manufacturer, systems: [] }
-  }
+  if (stagedIds.length === 0) return { id: w.id, manufacturer, systems: [] }
 
-  // Fetch full system data
-  const { data: systemRows } = await supabase
+  // Resolve staged → production IDs (data-studio).
+  // Systems without a production_system_id have not been published — exclude them.
+  const { data: idRows } = await studio
+    .from('staged_systems')
+    .select('id, production_system_id')
+    .in('id', stagedIds)
+    .not('production_system_id', 'is', null)
+
+  const stagedToProduction = new Map(
+    ((idRows ?? []) as { id: string; production_system_id: string }[])
+      .map(r => [r.id, r.production_system_id])
+  )
+  const productionIds = Array.from(stagedToProduction.values())
+
+  if (productionIds.length === 0) return { id: w.id, manufacturer, systems: [] }
+
+  // All system content from production — verified, published data only
+  const { data: systemRows } = await prod
     .from('staged_systems')
     .select(
       'id, name, product_code, category, subcategory, description, dimensions, ' +
@@ -152,24 +161,23 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
       'fire_rating, acoustic_rating, moisture_resistant, structural_grade, ' +
       'bal_rating, australian_made, double_sided'
     )
-    .in('id', systemIds)
+    .in('id', productionIds)
 
-  // Fetch profiles, colours, components for all systems
   const [profilesRes, coloursRes, sysCompRes] = await Promise.all([
-    supabase
+    prod
       .from('staged_system_profiles')
       .select('id, staged_system_id, profile_name, product_code, dimensions, length_mm, width_mm, height_mm, thickness_mm, uom, supplier_pack_qty, supplier_pack_uom, sort_order')
-      .in('staged_system_id', systemIds)
+      .in('staged_system_id', productionIds)
       .order('sort_order'),
-    supabase
+    prod
       .from('staged_system_colours')
       .select('staged_system_id, colour_name, image_url, sort_order, is_stocked')
-      .in('staged_system_id', systemIds)
+      .in('staged_system_id', productionIds)
       .order('sort_order'),
-    supabase
+    prod
       .from('staged_system_components')
       .select('id, staged_system_id, role, notes, sort_order, staged_components(name, sku, description, category, uom, procurement_route)')
-      .in('staged_system_id', systemIds)
+      .in('staged_system_id', productionIds)
       .order('sort_order'),
   ])
 
@@ -177,8 +185,8 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
   type ColourRow  = { staged_system_id: string; colour_name: string; image_url: string | null; sort_order: number; is_stocked: boolean }
   type SysCompRow = { id: string; staged_system_id: string; role: string; notes: string | null; sort_order: number; staged_components: any }
 
-  const profilesMap  = new Map<string, WidgetProfile[]>()
-  const coloursMap   = new Map<string, WidgetColour[]>()
+  const profilesMap   = new Map<string, WidgetProfile[]>()
+  const coloursMap    = new Map<string, WidgetColour[]>()
   const componentsMap = new Map<string, WidgetComponent[]>()
 
   for (const r of (profilesRes.data ?? []) as ProfileRow[]) {
@@ -202,16 +210,20 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
     componentsMap.set(r.staged_system_id, list)
   }
 
-  // Preserve widget sort_order
-  const sortMap = new Map(widgetSystems.map(ws => [ws.staged_system_id, ws.sort_order]))
+  // Preserve widget sort_order via staged → production ID chain
+  const sortMap = new Map(
+    widgetSystems
+      .filter(ws => stagedToProduction.has(ws.staged_system_id))
+      .map(ws => [stagedToProduction.get(ws.staged_system_id)!, ws.sort_order])
+  )
 
   const systems: WidgetSystem[] = ((systemRows ?? []) as any[])
     .sort((a, b) => (sortMap.get(a.id) ?? 0) - (sortMap.get(b.id) ?? 0))
     .map(s => ({
       ...s,
-      system_profiles:   profilesMap.get(s.id)   ?? [],
-      system_colours:    coloursMap.get(s.id)     ?? [],
-      system_components: componentsMap.get(s.id)  ?? [],
+      system_profiles:   profilesMap.get(s.id) ?? [],
+      system_colours:    coloursMap.get(s.id)  ?? [],
+      system_components: componentsMap.get(s.id) ?? [],
     }))
 
   return { id: w.id, manufacturer, systems }

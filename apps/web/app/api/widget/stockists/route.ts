@@ -6,9 +6,9 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl
     const token            = searchParams.get('token')
-    const stagedSystemId   = searchParams.get('system_id')
-    const postcode         = searchParams.get('postcode')?.trim() ?? ''
-    const state            = searchParams.get('state')?.trim() ?? ''
+    const systemId = searchParams.get('system_id')
+    const postcode = searchParams.get('postcode')?.trim() ?? ''
+    const state    = searchParams.get('state')?.trim() ?? ''
 
     if (!token) {
       return NextResponse.json({ error: 'Missing token' }, { status: 400 })
@@ -28,16 +28,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid widget token' }, { status: 403 })
     }
 
-    // Resolve production_system_id
-    let productionSystemId: string | null = null
-    if (stagedSystemId) {
-      const { data: sys } = await studio
-        .from('staged_systems')
-        .select('production_system_id')
-        .eq('id', stagedSystemId)
-        .single()
-      productionSystemId = (sys as any)?.production_system_id ?? null
-    }
+    // system_id is already a production ID (getWidgetData now returns production IDs)
+    const productionSystemId: string | null = systemId ?? null
 
     if (!productionSystemId) {
       return NextResponse.json({ stockists: [], direct: true })
