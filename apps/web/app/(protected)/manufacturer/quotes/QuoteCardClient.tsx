@@ -217,38 +217,37 @@ export function QuoteCardClient({ q }: { q: QuoteRequest }) {
         {q.timeline && <span style={{ color: '#6b7280' }}>Timeline: {TIMELINE_LABELS[q.timeline] ?? q.timeline}</span>}
       </div>
 
-      {/* Selected items */}
+      {/* Selected items table */}
       {items.length > 0 && (
-        <div>
-          <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: '0.4rem' }}>
-            Selected items ({items.length})
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            {items.map((item, i) => {
-              const specs = [item.dims, item.details].filter(Boolean).join(' · ')
-              return (
-                <div key={i} style={{
-                  fontSize: '0.82rem', color: '#374151',
-                  background: '#f8fafc', border: '1px solid #e2e8f0',
-                  borderRadius: 6, padding: '6px 10px',
-                  display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
-                }}>
-                  <span style={{ fontWeight: 600 }}>{item.label}</span>
-                  {specs && <span style={{ color: '#6b7280' }}>{specs}</span>}
-                  {item.uom && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em' }}>{item.uom}</span>}
-                  {item.product_code && (
-                    <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: '#4b5563', background: '#f3f4f6', padding: '1px 5px', borderRadius: 3 }}>{item.product_code}</span>
-                  )}
-                  {(item.quantity ?? 1) > 1 && (
-                    <span style={{ marginLeft: 'auto', fontSize: '0.82rem', fontWeight: 700, color: '#185D7A', flexShrink: 0 }}>× {item.quantity}</span>
-                  )}
-                  {(item.quantity ?? 1) === 1 && (
-                    <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#9ca3af', flexShrink: 0 }}>× 1</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <thead>
+              <tr style={{ background: '#185D7A' }}>
+                <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#fff', whiteSpace: 'nowrap', width: '28px' }}>#</th>
+                <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#fff' }}>Item</th>
+                <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#fff' }}>Specs / Notes</th>
+                <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#fff', whiteSpace: 'nowrap' }}>Product Code</th>
+                <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#fff', whiteSpace: 'nowrap' }}>UOM</th>
+                <th style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.72rem', color: '#fff', width: '48px' }}>Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => {
+                const specs = [item.dims, item.details].filter(Boolean).join(' · ')
+                const bg    = i % 2 === 0 ? '#ffffff' : '#f8fafc'
+                return (
+                  <tr key={i} style={{ background: bg }}>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', verticalAlign: 'top' }}>{i + 1}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#0f172a', verticalAlign: 'top' }}>{item.label}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', color: '#64748b', verticalAlign: 'top' }}>{specs || '—'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontFamily: 'monospace', fontSize: '0.75rem', verticalAlign: 'top' }}>{item.product_code ?? '—'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.04em', verticalAlign: 'top' }}>{item.uom || '—'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e2e8f0', fontWeight: 700, color: '#0f172a', textAlign: 'center', verticalAlign: 'top' }}>{item.quantity ?? 1}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
