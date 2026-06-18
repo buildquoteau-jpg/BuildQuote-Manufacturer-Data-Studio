@@ -527,15 +527,11 @@ function SystemDetailModal({
         {/* Scrollable body */}
         <div style={{ overflowY: 'auto', flex: 1, borderRadius: '18px 18px 0 0' }}>
           {/* Hero */}
-          <div style={{
-            height: '200px', flexShrink: 0, position: 'relative',
-            background: system.hero_image_url ? `url(${system.hero_image_url}) center/cover` : 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)',
-            borderRadius: '18px 18px 0 0',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            {!system.hero_image_url && (
-              <span style={{ fontSize: '22px', fontWeight: 800, color: '#94a3b8', fontFamily: 'monospace' }}>{system.product_code}</span>
+          <div style={{ height: '220px', flexShrink: 0, position: 'relative', borderRadius: '18px 18px 0 0', overflow: 'hidden', background: system.hero_image_url ? undefined : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)' }}>
+            {system.hero_image_url && (
+              <img src={system.hero_image_url} alt={system.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${system.hero_image_position_x ?? 50}% ${system.hero_image_position_y ?? 50}%` }} />
             )}
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,30,45,0.88) 0%, rgba(15,30,45,0.25) 55%, transparent 100%)' }} />
             <span style={{
               position: 'absolute', top: '14px', left: '14px',
               fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -549,16 +545,17 @@ function SystemDetailModal({
               style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(0,0,0,0.45)', border: 'none', cursor: 'pointer', width: '34px', height: '34px', borderRadius: '8px', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', lineHeight: 1 }}
               aria-label="Close"
             >×</button>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 20px 18px' }}>
+              {manufacturerName && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: 600, marginBottom: '4px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{manufacturerName}</div>}
+              <h2 style={{ margin: 0, color: '#ffffff', fontSize: '22px', fontWeight: 800, lineHeight: 1.2, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>{system.name}</h2>
+              {system.product_code && <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace', letterSpacing: '0.04em' }}>{system.product_code}</p>}
+            </div>
           </div>
 
           {/* Body */}
           <div style={{ padding: '24px 24px 28px', flex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{system.name}</h2>
-            {system.product_code && (
-              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9ca3af', fontFamily: 'monospace', letterSpacing: '0.04em' }}>{system.product_code}</p>
-            )}
             {system.description && (
-              <p style={{ margin: '12px 0 0', fontSize: '14px', color: '#374151', lineHeight: 1.65 }}>{system.description}</p>
+              <p style={{ margin: '0 0 0', fontSize: '14px', color: '#374151', lineHeight: 1.65 }}>{system.description}</p>
             )}
 
             {showQuote && hasProfiles && (

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { DraftDisclaimerBanner, DraftWatermark } from '@/components/DraftDisclaimer'
 import type { ReactNode } from 'react'
 
 /**
@@ -32,5 +33,11 @@ export default async function ProtectedLayout({ children }: { children: ReactNod
     redirect('/login')
   }
 
-  return <>{children}</>
+  return (
+    <>
+      <DraftDisclaimerBanner />
+      <DraftWatermark />
+      {children}
+    </>
+  )
 }
