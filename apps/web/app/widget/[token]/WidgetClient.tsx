@@ -563,16 +563,16 @@ function SystemDetailModal({
   function buildSelectedItems(): SelectedItem[] {
     const items: SelectedItem[] = []
 
-    const allProfileItems: { label: string; profile: WidgetProfile }[] = []
-    groupProfiles(system.system_profiles).forEach(({ items: g }) => allProfileItems.push(...g))
-    allProfileItems
-      .filter(({ profile }) => selectedProfileIds.has(profile.id))
-      .forEach(({ label, profile }) => items.push({
-        item_id: profile.id, type: 'profile', label,
-        dims: fmtDims(profile), uom: fmtUom(profile.uom),
-        product_code: profile.product_code ?? null,
-        quantity: 1, details: '',
-      }))
+    groupProfiles(system.system_profiles).forEach(({ key, items: g }) => {
+      g.filter(({ profile }) => selectedProfileIds.has(profile.id))
+        .forEach(({ label, profile }) => items.push({
+          item_id: profile.id, type: 'profile',
+          label: key ? `${key} — ${label}` : label,
+          dims: fmtDims(profile), uom: fmtUom(profile.uom),
+          product_code: profile.product_code ?? null,
+          quantity: 1, details: '',
+        }))
+    })
 
     system.system_colours
       .filter(c => selectedColourNames.has(c.colour_name))
