@@ -654,9 +654,13 @@ function SystemDetailModal({
             )}
 
             {showQuote && hasSelectable && (
-              <p style={{ margin: '14px 0 0', fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
-                Tick the items you need, then tap &ldquo;Request a Quote&rdquo; below.
-              </p>
+              <div style={{
+                margin: '14px 0 0', padding: '10px 14px',
+                background: '#eef6fa', borderLeft: '3px solid #5ba3bf', borderRadius: '0 8px 8px 0',
+                fontSize: '12px', fontWeight: 600, color: '#185D7A', lineHeight: 1.5,
+              }}>
+                Tick the items you need, then tap <strong>&ldquo;Add selected to RFQ&rdquo;</strong> below to request a quote.
+              </div>
             )}
 
             <ColoursSection
@@ -789,10 +793,10 @@ function SystemDetailModal({
             <button
               disabled
               style={{
-                flex: 1, padding: '13px 20px', background: '#cbd5e1', color: '#fff',
+                flex: 1, padding: '13px 20px', background: '#5ba3bf', color: '#fff',
                 border: 'none', borderRadius: '10px',
                 fontSize: '15px', fontWeight: 700, cursor: 'default',
-                whiteSpace: 'nowrap', letterSpacing: '-0.01em',
+                whiteSpace: 'nowrap', letterSpacing: '-0.01em', opacity: 0.75,
               }}
             >
               Add selected to RFQ →
