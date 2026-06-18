@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM   = process.env.RESEND_FROM_EMAIL ?? 'rfq@buildquote.com.au'
+const FROM = process.env.RESEND_FROM_EMAIL ?? 'rfq@buildquote.com.au'
+
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY)
+}
 
 function formatDate(date: Date = new Date()): string {
   const dd   = String(date.getDate()).padStart(2, '0')
@@ -387,6 +390,7 @@ export async function POST(req: NextRequest) {
     const items             = (Array.isArray(selected_items) ? selected_items : []) as SelectedItem[]
     const systemName        = system_name ?? system_id
 
+    const resend = getResend()
     await Promise.allSettled([
       manufacturerEmail
         ? resend.emails.send({
