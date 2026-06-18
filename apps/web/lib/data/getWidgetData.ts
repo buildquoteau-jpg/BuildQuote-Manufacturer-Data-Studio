@@ -151,9 +151,11 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
 
   if (productionIds.length === 0) return { id: w.id, manufacturer, systems: [] }
 
-  // All system content from production — verified, published data only
+  // All system content from production — verified, published data only.
+  // Production uses unprefixed table names: systems, system_profiles, system_colours,
+  // system_components, components (the staged_* tables are data-studio-only).
   const { data: systemRows } = await prod
-    .from('staged_systems')
+    .from('systems')
     .select(
       'id, name, product_code, category, subcategory, description, dimensions, ' +
       'hero_image_url, hero_image_position_x, hero_image_position_y, ' +
@@ -165,49 +167,49 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
 
   const [profilesRes, coloursRes, sysCompRes] = await Promise.all([
     prod
-      .from('staged_system_profiles')
-      .select('id, staged_system_id, profile_name, product_code, dimensions, length_mm, width_mm, height_mm, thickness_mm, uom, supplier_pack_qty, supplier_pack_uom, sort_order')
-      .in('staged_system_id', productionIds)
+      .from('system_profiles')
+      .select('id, system_id, profile_name, product_code, dimensions, length_mm, width_mm, height_mm, thickness_mm, uom, supplier_pack_qty, supplier_pack_uom, sort_order')
+      .in('system_id', productionIds)
       .order('sort_order'),
     prod
-      .from('staged_system_colours')
-      .select('staged_system_id, colour_name, image_url, sort_order, is_stocked')
-      .in('staged_system_id', productionIds)
+      .from('system_colours')
+      .select('system_id, colour_name, image_url, sort_order, is_stocked')
+      .in('system_id', productionIds)
       .order('sort_order'),
     prod
-      .from('staged_system_components')
-      .select('id, staged_system_id, role, notes, sort_order, staged_components(name, sku, description, category, uom, procurement_route)')
-      .in('staged_system_id', productionIds)
+      .from('system_components')
+      .select('id, system_id, role, notes, sort_order, components(name, sku, description, category, uom, procurement_route)')
+      .in('system_id', productionIds)
       .order('sort_order'),
   ])
 
-  type ProfileRow = { id: string; staged_system_id: string; profile_name: string | null; product_code: string | null; dimensions: string | null; length_mm: number | null; width_mm: number | null; height_mm: number | null; thickness_mm: number | null; uom: string | null; supplier_pack_qty: number | null; supplier_pack_uom: string | null; sort_order: number }
-  type ColourRow  = { staged_system_id: string; colour_name: string; image_url: string | null; sort_order: number; is_stocked: boolean }
-  type SysCompRow = { id: string; staged_system_id: string; role: string; notes: string | null; sort_order: number; staged_components: any }
+  type ProfileRow = { id: string; system_id: string; profile_name: string | null; product_code: string | null; dimensions: string | null; length_mm: number | null; width_mm: number | null; height_mm: number | null; thickness_mm: number | null; uom: string | null; supplier_pack_qty: number | null; supplier_pack_uom: string | null; sort_order: number }
+  type ColourRow  = { system_id: string; colour_name: string; image_url: string | null; sort_order: number; is_stocked: boolean }
+  type SysCompRow = { id: string; system_id: string; role: string; notes: string | null; sort_order: number; components: any }
 
   const profilesMap   = new Map<string, WidgetProfile[]>()
   const coloursMap    = new Map<string, WidgetColour[]>()
   const componentsMap = new Map<string, WidgetComponent[]>()
 
   for (const r of (profilesRes.data ?? []) as ProfileRow[]) {
-    const { staged_system_id, ...rest } = r
-    const list = profilesMap.get(staged_system_id) ?? []
+    const { system_id, ...rest } = r
+    const list = profilesMap.get(system_id) ?? []
     list.push({ ...rest, name: rest.profile_name })
-    profilesMap.set(staged_system_id, list)
+    profilesMap.set(system_id, list)
   }
 
   for (const r of (coloursRes.data ?? []) as ColourRow[]) {
-    const { staged_system_id, ...rest } = r
-    const list = coloursMap.get(staged_system_id) ?? []
+    const { system_id, ...rest } = r
+    const list = coloursMap.get(system_id) ?? []
     list.push(rest)
-    coloursMap.set(staged_system_id, list)
+    coloursMap.set(system_id, list)
   }
 
   for (const r of (sysCompRes.data ?? []) as SysCompRow[]) {
-    const comp = Array.isArray(r.staged_components) ? r.staged_components[0] : r.staged_components
-    const list = componentsMap.get(r.staged_system_id) ?? []
+    const comp = Array.isArray(r.components) ? r.components[0] : r.components
+    const list = componentsMap.get(r.system_id) ?? []
     list.push({ id: r.id, role: r.role, notes: r.notes, sort_order: r.sort_order, components: comp ?? null })
-    componentsMap.set(r.staged_system_id, list)
+    componentsMap.set(r.system_id, list)
   }
 
   // Preserve widget sort_order via staged → production ID chain
