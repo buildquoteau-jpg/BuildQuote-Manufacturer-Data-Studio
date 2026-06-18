@@ -11,7 +11,6 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Manufacturers', href: '/admin/manufacturers' },
   { label: 'Messages', href: '/admin/messages' },
   { label: 'Publish queue', href: '/admin/publish' },
-  { label: 'Showroom', href: '/studio/showroom' },
   { label: 'User profile', href: '/manufacturer/account' },
 ]
 
@@ -26,7 +25,6 @@ const MFR_NAV: NavItem[] = [
   { label: 'Documents',       href: '/manufacturer/documents' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
   { label: 'Widgets',         href: '/manufacturer/widgets' },
-  { label: 'Showroom',        href: '/studio/showroom' },
   { label: 'Help',            href: '/manufacturer/help' },
 ]
 

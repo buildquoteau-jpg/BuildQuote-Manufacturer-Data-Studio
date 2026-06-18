@@ -1,7 +1,12 @@
+import { notFound } from 'next/navigation'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { ShowroomClient } from './ShowroomClient'
 
 export const dynamic = 'force-dynamic'
+
+export default function Page() {
+  notFound()
+}
 
 export type ShowroomManufacturer = {
   id: string

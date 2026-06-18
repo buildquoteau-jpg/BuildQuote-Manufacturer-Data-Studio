@@ -4,6 +4,10 @@ import { ShowroomManufacturerClient } from './ShowroomManufacturerClient'
 
 export const dynamic = 'force-dynamic'
 
+export default function Page() {
+  notFound()
+}
+
 export type ShowroomSystem = {
   id: string
   name: string
