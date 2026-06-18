@@ -8,7 +8,8 @@ import { SystemCardTile, CATEGORY_COLOURS } from '@/components/ui/SystemCardTile
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type SelectedItem = {
-  profile_id: string
+  item_id: string   // profile UUID, colour_name, or component ID
+  type: 'profile' | 'colour' | 'component'
   label: string
   dims: string
   uom: string
@@ -128,36 +129,67 @@ function groupProfiles(profiles: WidgetProfile[]): ProfileGroup[] {
 
 // ── Colours section ────────────────────────────────────────────────────────
 
-function ColoursSection({ colours }: { colours: WidgetColour[] }) {
+function ColoursSection({
+  colours, selectable, selectedNames, onToggle,
+}: {
+  colours: WidgetColour[]
+  selectable?: boolean
+  selectedNames?: Set<string>
+  onToggle?: (name: string) => void
+}) {
   if (colours.length === 0) return null
   return (
-    <div style={{ marginTop: '14px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-      {colours.map((c, i) => (
-        <span
-          key={i}
-          style={{
+    <div style={{ marginTop: '14px' }}>
+      {selectable && (
+        <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#6b7280', marginBottom: '8px' }}>
+          Colours
+          {selectedNames && selectedNames.size > 0 && (
+            <span style={{ marginLeft: '8px', color: '#185D7A' }}>{selectedNames.size} selected</span>
+          )}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        {colours.map((c, i) => {
+          const isSelected = selectedNames?.has(c.colour_name)
+          const chipStyle: React.CSSProperties = {
             display: 'inline-flex', alignItems: 'center', gap: '7px',
             fontSize: '13px', fontWeight: 500,
-            background: '#f8fafc', color: '#374151',
-            border: '1px solid #e2e8f0',
+            background: isSelected ? '#eef6fa' : '#f8fafc',
+            color: isSelected ? '#185D7A' : '#374151',
+            border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? '#185D7A' : '#e2e8f0'}`,
             padding: c.image_url ? '4px 10px 4px 4px' : '5px 12px',
             borderRadius: '20px', lineHeight: 1.4,
-          }}
-        >
-          {c.image_url && (
-            <span style={{
-              display: 'inline-block', width: '20px', height: '20px',
-              borderRadius: '50%', flexShrink: 0,
-              background: `url(${c.image_url}) center/cover`,
-              border: '1px solid rgba(0,0,0,0.1)',
-            }} />
-          )}
-          {c.colour_name}
-          {c.is_stocked === false && (
-            <span style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af' }}>EOI</span>
-          )}
-        </span>
-      ))}
+            cursor: selectable ? 'pointer' : 'default',
+            transition: 'background 0.1s, border-color 0.1s',
+          }
+          const inner = (
+            <>
+              {c.image_url && (
+                <span style={{
+                  display: 'inline-block', width: '20px', height: '20px',
+                  borderRadius: '50%', flexShrink: 0,
+                  background: `url(${c.image_url}) center/cover`,
+                  border: '1px solid rgba(0,0,0,0.1)',
+                }} />
+              )}
+              {c.colour_name}
+              {isSelected && (
+                <svg width="11" height="9" viewBox="0 0 11 9" fill="none" style={{ flexShrink: 0 }}>
+                  <path d="M1 4.5L4 7.5L10 1" stroke="#185D7A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+              {c.is_stocked === false && !isSelected && (
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af' }}>EOI</span>
+              )}
+            </>
+          )
+          return selectable ? (
+            <button key={i} type="button" onClick={() => onToggle?.(c.colour_name)} style={chipStyle}>{inner}</button>
+          ) : (
+            <span key={i} style={chipStyle}>{inner}</span>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -329,6 +361,7 @@ function ProfilesSection({
         {selectable && selectedIds && selectedIds.size > 0 && (
           <span style={{ marginLeft: '8px', color: '#185D7A' }}>{selectedIds.size} selected</span>
         )}
+
       </div>
       {!multiGroup && (
         <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827', paddingLeft: '10px', borderLeft: '3px solid #185D7A', marginBottom: '8px' }}>
@@ -404,10 +437,18 @@ function AttributePills({ system }: { system: WidgetSystem }) {
 
 // ── Components accordion ───────────────────────────────────────────────────
 
-function ComponentsAccordion({ components }: { components: WidgetComponent[] }) {
+function ComponentsAccordion({
+  components, selectable, selectedIds, onToggle,
+}: {
+  components: WidgetComponent[]
+  selectable?: boolean
+  selectedIds?: Set<string>
+  onToggle?: (id: string) => void
+}) {
   const [open, setOpen] = useState(false)
   const visible = components.filter(c => c.components)
   if (visible.length === 0) return null
+  const selectedCount = selectable ? visible.filter(item => selectedIds?.has(item.id)).length : 0
 
   return (
     <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
@@ -423,6 +464,9 @@ function ComponentsAccordion({ components }: { components: WidgetComponent[] }) 
       >
         <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#185D7A' }}>
           Accessories &amp; Components · {visible.length}
+          {selectable && selectedCount > 0 && (
+            <span style={{ marginLeft: '8px', fontWeight: 700, color: '#185D7A', textTransform: 'none', letterSpacing: 0 }}>· {selectedCount} selected</span>
+          )}
         </span>
         <span style={{ fontSize: '12px', fontWeight: 700, color: '#185D7A', flexShrink: 0, marginLeft: '8px' }}>
           {open ? '▲ Hide' : '▼ Show'}
@@ -433,18 +477,43 @@ function ComponentsAccordion({ components }: { components: WidgetComponent[] }) 
           {visible.map((item) => {
             const comp = item.components!
             const uom  = fmtUom(comp.uom)
-            return (
-              <div
-                key={item.id}
-                style={{ padding: '11px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px' }}
-              >
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', lineHeight: 1.35 }}>{comp.name}</div>
-                {item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{item.notes}</div>}
-                {comp.description && !item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#6b7280', lineHeight: 1.4 }}>{comp.description}</div>}
-                <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                  {comp.sku && <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{comp.sku}</span>}
-                  {uom && <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#9ca3af' }}>{uom}</span>}
+            const isSelected = selectedIds?.has(item.id)
+
+            const inner = (
+              <>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  {selectable && <Checkbox checked={!!isSelected} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', lineHeight: 1.35 }}>{comp.name}</div>
+                    {item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{item.notes}</div>}
+                    {comp.description && !item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#6b7280', lineHeight: 1.4 }}>{comp.description}</div>}
+                    <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                      {comp.sku && <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{comp.sku}</span>}
+                      {uom && <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#9ca3af' }}>{uom}</span>}
+                    </div>
+                  </div>
                 </div>
+              </>
+            )
+
+            return selectable ? (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onToggle?.(item.id)}
+                style={{
+                  padding: '11px 12px', textAlign: 'left', width: '100%',
+                  background: isSelected ? '#eef6fa' : '#f9fafb',
+                  border: `${isSelected ? '1.5px' : '1px'} solid ${isSelected ? '#b6dcea' : '#e5e7eb'}`,
+                  borderRadius: '10px', cursor: 'pointer',
+                  transition: 'background 0.1s, border-color 0.1s',
+                }}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div key={item.id} style={{ padding: '11px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px' }}>
+                {inner}
               </div>
             )
           })}
@@ -469,34 +538,55 @@ function SystemDetailModal({
   buttonConfig: WidgetButtonConfig
 }) {
   const _catRaw = CATEGORY_COLOURS[system.category] ?? { bg: '#f3f4f6', color: '#374151' }
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectedProfileIds,   setSelectedProfileIds]   = useState<Set<string>>(new Set())
+  const [selectedColourNames,  setSelectedColourNames]  = useState<Set<string>>(new Set())
+  const [selectedComponentIds, setSelectedComponentIds] = useState<Set<string>>(new Set())
 
   const showQuote    = buttonConfig.show_request_quote
   const hasProfiles  = system.system_profiles.length > 0
-  const selectedCount = selectedIds.size
+  const hasColours   = system.system_colours.length > 0
+  const hasComponents = system.system_components.some(c => c.components)
+  const hasSelectable = hasProfiles || hasColours || hasComponents
+  const selectedCount = selectedProfileIds.size + selectedColourNames.size + selectedComponentIds.size
 
-  function toggleProfile(profileId: string) {
-    setSelectedIds(prev => {
+  function toggle<T>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, value: T) {
+    setter(prev => {
       const next = new Set(prev)
-      if (next.has(profileId)) next.delete(profileId)
-      else next.add(profileId)
+      if (next.has(value)) next.delete(value)
+      else next.add(value)
       return next
     })
   }
 
   function buildSelectedItems(): SelectedItem[] {
-    const allItems: { label: string; profile: WidgetProfile }[] = []
-    groupProfiles(system.system_profiles).forEach(({ items }) => allItems.push(...items))
+    const items: SelectedItem[] = []
 
-    return allItems
-      .filter(({ profile }) => selectedIds.has(profile.id))
-      .map(({ label, profile }) => ({
-        profile_id:   profile.id,
-        label,
-        dims:         fmtDims(profile),
-        uom:          fmtUom(profile.uom),
+    const allProfileItems: { label: string; profile: WidgetProfile }[] = []
+    groupProfiles(system.system_profiles).forEach(({ items: g }) => allProfileItems.push(...g))
+    allProfileItems
+      .filter(({ profile }) => selectedProfileIds.has(profile.id))
+      .forEach(({ label, profile }) => items.push({
+        item_id: profile.id, type: 'profile', label,
+        dims: fmtDims(profile), uom: fmtUom(profile.uom),
         product_code: profile.product_code ?? null,
       }))
+
+    system.system_colours
+      .filter(c => selectedColourNames.has(c.colour_name))
+      .forEach(c => items.push({
+        item_id: c.colour_name, type: 'colour', label: c.colour_name,
+        dims: '', uom: '', product_code: null,
+      }))
+
+    system.system_components
+      .filter(sc => sc.components && selectedComponentIds.has(sc.id))
+      .forEach(sc => items.push({
+        item_id: sc.id, type: 'component', label: sc.components!.name,
+        dims: '', uom: fmtUom(sc.components!.uom),
+        product_code: sc.components!.sku ?? null,
+      }))
+
+    return items
   }
 
   function handleQuoteClick() {
@@ -558,21 +648,31 @@ function SystemDetailModal({
               <p style={{ margin: '0 0 0', fontSize: '14px', color: '#374151', lineHeight: 1.65 }}>{system.description}</p>
             )}
 
-            {showQuote && hasProfiles && (
+            {showQuote && hasSelectable && (
               <p style={{ margin: '14px 0 0', fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
-                Tick the variants you need, then tap &ldquo;Request a Quote&rdquo; below.
+                Tick the items you need, then tap &ldquo;Request a Quote&rdquo; below.
               </p>
             )}
 
-            <ColoursSection colours={system.system_colours} />
+            <ColoursSection
+              colours={system.system_colours}
+              selectable={showQuote && hasColours}
+              selectedNames={selectedColourNames}
+              onToggle={name => toggle(setSelectedColourNames, name)}
+            />
             <ProfilesSection
               profiles={system.system_profiles}
               systemName={system.name}
               selectable={showQuote && hasProfiles}
-              selectedIds={selectedIds}
-              onToggle={toggleProfile}
+              selectedIds={selectedProfileIds}
+              onToggle={id => toggle(setSelectedProfileIds, id)}
             />
-            <ComponentsAccordion components={system.system_components} />
+            <ComponentsAccordion
+              components={system.system_components}
+              selectable={showQuote && hasComponents}
+              selectedIds={selectedComponentIds}
+              onToggle={id => toggle(setSelectedComponentIds, id)}
+            />
             <AttributePills system={system} />
 
             {/* Action links */}
@@ -607,9 +707,9 @@ function SystemDetailModal({
               )}
 
               {/* Action buttons — shown only when no profiles, or no selection mode */}
-              {(showQuote && !hasProfiles || buttonConfig.show_find_stockist) && (
-                <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: (showQuote && !hasProfiles) && buttonConfig.show_find_stockist ? '1fr 1fr' : '1fr', gap: '8px' }}>
-                  {showQuote && !hasProfiles && (
+              {(showQuote && !hasSelectable || buttonConfig.show_find_stockist) && (
+                <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: (showQuote && !hasSelectable) && buttonConfig.show_find_stockist ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                  {showQuote && !hasSelectable && (
                     <button
                       onClick={handleSimpleQuoteClick}
                       style={{ padding: '13px 10px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
@@ -639,8 +739,8 @@ function SystemDetailModal({
           </div>
         </div>
 
-        {/* Sticky footer — appears when profiles are selected */}
-        {showQuote && hasProfiles && selectedCount > 0 && (
+        {/* Sticky footer — appears when any items are selected */}
+        {showQuote && hasSelectable && selectedCount > 0 && (
           <div style={{
             flexShrink: 0,
             borderTop: '1.5px solid #b6dcea',
@@ -667,7 +767,7 @@ function SystemDetailModal({
         )}
 
         {/* Placeholder footer when quote is enabled but nothing selected yet */}
-        {showQuote && hasProfiles && selectedCount === 0 && (
+        {showQuote && hasSelectable && selectedCount === 0 && (
           <div style={{
             flexShrink: 0,
             borderTop: '1px solid #e5e7eb',

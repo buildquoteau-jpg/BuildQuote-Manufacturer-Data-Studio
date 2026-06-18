@@ -7,7 +7,7 @@ import { StudioShell } from '@/components/studio/StudioShell'
 type QuoteRequest = {
   id: string
   system_name: string | null
-  selected_items: { profile_id: string; label: string; dims: string; uom: string; product_code: string | null }[]
+  selected_items: { item_id: string; type: string; label: string; dims: string; uom: string; product_code: string | null }[]
   name: string
   email: string
   phone: string | null
