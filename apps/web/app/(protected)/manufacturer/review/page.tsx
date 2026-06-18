@@ -69,22 +69,6 @@ export default async function ManufacturerReviewPage() {
               {systems.length} system{systems.length !== 1 ? 's' : ''}
             </span>
           </div>
-          <a
-            href={`/studio/showroom/${ctx.manufacturerId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="studio-preview-cta"
-            style={{
-              fontSize: '0.8rem', fontWeight: 600,
-              color: '#185D7A', textDecoration: 'none',
-              border: '1.5px solid #185D7A', background: 'transparent',
-              padding: '0.4rem 0.9rem', borderRadius: '7px',
-              display: 'inline-flex', alignItems: 'center',
-              letterSpacing: '0.01em',
-            }}
-          >
-            Preview system cards →
-          </a>
         </div>
 
         <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 1rem', lineHeight: 1.65 }}>
