@@ -748,26 +748,31 @@ function SystemDetailModal({
         {showQuote && hasSelectable && selectedCount > 0 && (
           <div style={{
             flexShrink: 0,
-            borderTop: '1.5px solid #b6dcea',
-            background: '#eef6fa',
+            borderTop: '1px solid #e5e7eb',
+            background: '#f9fafb',
             borderRadius: '0 0 18px 18px',
-            padding: '14px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+            padding: '12px 16px',
+            display: 'flex', alignItems: 'center', gap: '10px',
           }}>
-            <span style={{ fontSize: '13px', color: '#185D7A', fontWeight: 600 }}>
-              {selectedCount} variant{selectedCount !== 1 ? 's' : ''} selected
-            </span>
             <button
               onClick={handleQuoteClick}
               style={{
-                padding: '11px 20px', background: '#185D7A', color: '#fff',
+                flex: 1, padding: '13px 20px', background: '#185D7A', color: '#fff',
                 border: 'none', borderRadius: '10px',
-                fontSize: '14px', fontWeight: 700, cursor: 'pointer',
-                whiteSpace: 'nowrap',
+                fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                whiteSpace: 'nowrap', letterSpacing: '-0.01em',
               }}
             >
-              Request a Quote ({selectedCount})
+              Add {selectedCount} selected to RFQ →
             </button>
+            {buttonConfig.show_find_stockist && (
+              <button
+                onClick={onStockist}
+                style={{ padding: '13px 16px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                Find a Stockist
+              </button>
+            )}
           </div>
         )}
 
@@ -781,23 +786,21 @@ function SystemDetailModal({
             padding: '12px 16px',
             display: 'flex', alignItems: 'center', gap: '10px',
           }}>
-            <div style={{
-              flex: 1,
-              padding: '11px 16px',
-              background: '#e9f0f4',
-              border: '1.5px dashed #a8c8d8',
-              borderRadius: '10px',
-              fontSize: '13px', fontWeight: 600,
-              color: '#5a8fa3',
-              textAlign: 'center',
-              cursor: 'default',
-            }}>
-              ☑ Select items above to add to your quote request
-            </div>
+            <button
+              disabled
+              style={{
+                flex: 1, padding: '13px 20px', background: '#cbd5e1', color: '#fff',
+                border: 'none', borderRadius: '10px',
+                fontSize: '15px', fontWeight: 700, cursor: 'default',
+                whiteSpace: 'nowrap', letterSpacing: '-0.01em',
+              }}
+            >
+              Add selected to RFQ →
+            </button>
             {buttonConfig.show_find_stockist && (
               <button
                 onClick={onStockist}
-                style={{ padding: '11px 16px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                style={{ padding: '13px 16px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
               >
                 Find a Stockist
               </button>
