@@ -358,7 +358,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid widget token' }, { status: 403 })
     }
 
-    const [insertResult, mfrResult, userResult] = await Promise.all([
+    const [insertResult, mfrResult, muResult] = await Promise.all([
       studio.from('widget_quote_requests').insert({
         manufacturer_id: widget.manufacturer_id,
         widget_id:       widget.id,
@@ -379,13 +379,12 @@ export async function POST(req: NextRequest) {
         .select('name')
         .eq('id', widget.manufacturer_id)
         .single(),
-      // Prefer company_email_primary from the manufacturer's user profile
       studio
         .from('manufacturer_users')
-        .select('data_studio_user_profiles!inner(company_email_primary, email)')
+        .select('auth_user_id')
         .eq('manufacturer_id', widget.manufacturer_id)
         .limit(1)
-        .single(),
+        .maybeSingle(),
     ])
 
     if (insertResult.error) {
@@ -394,9 +393,18 @@ export async function POST(req: NextRequest) {
     }
 
     const manufacturerName = mfrResult.data?.name ?? 'the manufacturer'
-    const profile          = (userResult.data as any)?.data_studio_user_profiles
-    const manufacturerEmail: string | null =
-      profile?.company_email_primary ?? profile?.email ?? null
+
+    // Resolve manufacturer email from user profile
+    let manufacturerEmail: string | null = null
+    if (muResult.data?.auth_user_id) {
+      const { data: profile } = await studio
+        .from('data_studio_user_profiles')
+        .select('company_email_primary, email')
+        .eq('auth_user_id', muResult.data.auth_user_id)
+        .maybeSingle()
+      manufacturerEmail = profile?.company_email_primary ?? profile?.email ?? null
+    }
+    console.log('manufacturer email resolved:', manufacturerEmail)
     const items             = (Array.isArray(selected_items) ? selected_items : []) as SelectedItem[]
     const systemName        = system_name ?? system_id
 
