@@ -1,5 +1,5 @@
 import { createStudioServiceClient } from '@/lib/supabase/service'
-import { getRfqServerClient } from '@/lib/supabase/rfq-server'
+import { createProductionServiceClient } from '@/lib/supabase/production'
 
 export type WidgetButtonConfig = {
   show_request_quote: boolean
@@ -101,7 +101,7 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
   // System content is read from production — only published systems have a
   // production_system_id, so unpublished data is silently excluded.
   const studio = createStudioServiceClient()
-  const prod   = getRfqServerClient()
+  const prod   = createProductionServiceClient()
 
   // Resolve widget token (data-studio)
   const { data: widget, error: widgetError } = await studio

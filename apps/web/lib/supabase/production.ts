@@ -26,10 +26,6 @@ export function createProductionServiceClient() {
   if (!url) throw new Error('Missing env var: PRODUCTION_SUPABASE_URL')
   if (!serviceKey) throw new Error('Missing env var: PRODUCTION_SUPABASE_SERVICE_ROLE_KEY')
 
-  console.log('[prod-supabase] url:', url)
-  console.log('[prod-supabase] key prefix:', serviceKey.slice(0, 30) + '...')
-  console.log('[prod-supabase] key length:', serviceKey.length)
-
   return createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
