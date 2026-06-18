@@ -673,16 +673,26 @@ function SystemDetailModal({
             borderTop: '1px solid #e5e7eb',
             background: '#f9fafb',
             borderRadius: '0 0 18px 18px',
-            padding: '12px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+            padding: '12px 16px',
+            display: 'flex', alignItems: 'center', gap: '10px',
           }}>
-            <span style={{ fontSize: '12px', color: '#9ca3af' }}>
-              Select variants above to request a quote
-            </span>
+            <div style={{
+              flex: 1,
+              padding: '11px 16px',
+              background: '#e9f0f4',
+              border: '1.5px dashed #a8c8d8',
+              borderRadius: '10px',
+              fontSize: '13px', fontWeight: 600,
+              color: '#5a8fa3',
+              textAlign: 'center',
+              cursor: 'default',
+            }}>
+              ☑ Select items above to add to your quote request
+            </div>
             {buttonConfig.show_find_stockist && (
               <button
                 onClick={onStockist}
-                style={{ padding: '9px 16px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '9px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                style={{ padding: '11px 16px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
               >
                 Find a Stockist
               </button>
