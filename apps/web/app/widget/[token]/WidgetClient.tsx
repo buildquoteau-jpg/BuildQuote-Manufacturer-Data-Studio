@@ -216,8 +216,8 @@ function ProfileRow({
   if (selectable) {
     return (
       <button type="button" onClick={onToggle} style={baseStyle}>
-        <Checkbox checked={!!selected} />
         {content}
+        <Checkbox checked={!!selected} />
       </button>
     )
   }
