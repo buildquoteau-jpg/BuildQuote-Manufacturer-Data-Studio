@@ -4,10 +4,6 @@ import { ShowroomManufacturerClient } from './ShowroomManufacturerClient'
 
 export const dynamic = 'force-dynamic'
 
-export default function Page() {
-  notFound()
-}
-
 export type ShowroomSystem = {
   id: string
   name: string
@@ -117,13 +113,6 @@ async function getData(id: string): Promise<{ manufacturer: ShowroomManufacturer
   }
 }
 
-export default async function ShowroomManufacturerPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
-  const data = await getData(id)
-  if (!data) notFound()
-  return <ShowroomManufacturerClient manufacturer={data.manufacturer} systems={data.systems} />
+export default function ShowroomManufacturerPage() {
+  notFound()
 }
