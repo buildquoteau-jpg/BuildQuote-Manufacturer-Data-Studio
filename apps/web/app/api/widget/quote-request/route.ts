@@ -5,6 +5,13 @@ import { createStudioServiceClient } from '@/lib/supabase/service'
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM   = process.env.RESEND_FROM_EMAIL ?? 'rfq@buildquote.com.au'
 
+function formatDate(date: Date = new Date()): string {
+  const dd   = String(date.getDate()).padStart(2, '0')
+  const mm   = String(date.getMonth() + 1).padStart(2, '0')
+  const yyyy = date.getFullYear()
+  return `${dd}-${mm}-${yyyy}`
+}
+
 const TIMELINE_LABELS: Record<string, string> = {
   asap:       'ASAP',
   '1-3months': '1–3 months',
@@ -16,20 +23,18 @@ const PROJECT_LABELS: Record<string, string> = {
   other:       'Other',
 }
 
-function itemsHtml(items: any[]): string {
-  if (!items.length) return '<p style="color:#6b7280">No items selected.</p>'
-  return items.map(it => {
-    const meta = [it.dims, it.uom, it.product_code ? `SKU: ${it.product_code}` : ''].filter(Boolean).join(' · ')
-    const qty  = it.quantity && it.quantity !== 1 ? ` <span style="color:#6b7280">× ${it.quantity}</span>` : ''
-    const note = it.details ? `<br><span style="color:#6b7280;font-size:13px">${it.details}</span>` : ''
-    return `<div style="padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;font-size:14px">
-      <strong>${it.label}</strong>${qty}${meta ? `<br><span style="color:#6b7280;font-size:13px">${meta}</span>` : ''}${note}
-    </div>`
-  }).join('')
+type SelectedItem = {
+  item_id: string
+  type: 'profile' | 'colour' | 'component'
+  label: string
+  dims: string
+  uom: string
+  product_code: string | null
+  quantity: number
+  details: string
 }
 
-async function sendManufacturerNotification(opts: {
-  toEmail: string
+function buildManufacturerEmailHtml(opts: {
   manufacturerName: string
   systemName: string
   customerName: string
@@ -39,97 +44,287 @@ async function sendManufacturerNotification(opts: {
   projectType: string | null
   timeline: string | null
   message: string | null
-  items: any[]
-}) {
-  const { toEmail, manufacturerName, systemName, customerName, customerEmail, customerPhone, postcode, projectType, timeline, message, items } = opts
+  items: SelectedItem[]
+}): string {
+  const { manufacturerName, systemName, customerName, customerEmail, customerPhone, postcode, projectType, timeline, message, items } = opts
 
-  const metaRows = [
-    postcode    && `<tr><td style="padding:4px 0;color:#6b7280;width:130px">Postcode</td><td>${postcode}</td></tr>`,
-    projectType && `<tr><td style="padding:4px 0;color:#6b7280">Project type</td><td>${PROJECT_LABELS[projectType] ?? projectType}</td></tr>`,
-    timeline    && `<tr><td style="padding:4px 0;color:#6b7280">Timeline</td><td>${TIMELINE_LABELS[timeline] ?? timeline}</td></tr>`,
-  ].filter(Boolean).join('')
+  const dateStr   = formatDate()
+  const shortRef  = `QR-${dateStr}-${customerName.replace(/\s+/g, '').slice(0, 6).toUpperCase()}`
+  const mfrShort  = manufacturerName.substring(0, 42)
 
-  await resend.emails.send({
-    from:    `BuildQuote RFQ <${FROM}>`,
-    to:      toEmail,
-    subject: `New quote request — ${systemName} from ${customerName}`,
-    html: `
-<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;color:#111827">
-  <div style="background:#185D7A;padding:24px 28px;border-radius:12px 12px 0 0">
-    <h1 style="margin:0;font-size:20px;color:#fff;font-weight:800">New Quote Request</h1>
-    <p style="margin:6px 0 0;color:#b6dcea;font-size:14px">${manufacturerName} · ${systemName}</p>
-  </div>
-  <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:24px 28px;border-radius:0 0 12px 12px">
+  const itemRows = items.map((item, i) => {
+    const bg = i % 2 === 0 ? '#ffffff' : '#f5f7f9'
+    const specs = [item.dims, item.details].filter(Boolean).join(' · ')
+    return `
+    <tr style="background:${bg};">
+      <td style="padding:8px 10px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">${i + 1}</td>
+      <td style="padding:8px 10px;font-size:13px;color:#000000;border-bottom:1px solid #e2e8f0;">${item.label}</td>
+      <td style="padding:8px 10px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;">${specs}</td>
+      <td style="padding:8px 10px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;">${item.product_code ?? ''}</td>
+      <td style="padding:8px 10px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;">${item.uom ?? ''}</td>
+      <td style="padding:8px 10px;font-size:13px;color:#000000;font-weight:600;border-bottom:1px solid #e2e8f0;">${item.quantity ?? 1}</td>
+    </tr>`
+  }).join('')
 
-    <h2 style="font-size:16px;font-weight:700;margin:0 0 12px">Contact</h2>
-    <table style="font-size:14px;border-collapse:collapse;width:100%">
-      <tr><td style="padding:4px 0;color:#6b7280;width:130px">Name</td><td><strong>${customerName}</strong></td></tr>
-      <tr><td style="padding:4px 0;color:#6b7280">Email</td><td><a href="mailto:${customerEmail}" style="color:#185D7A">${customerEmail}</a></td></tr>
-      ${customerPhone ? `<tr><td style="padding:4px 0;color:#6b7280">Phone</td><td><a href="tel:${customerPhone}" style="color:#185D7A">${customerPhone}</a></td></tr>` : ''}
-      ${metaRows}
-    </table>
+  const projectRow  = projectType ? `<p style="margin:0 0 4px;font-size:12px;color:#64748b;"><strong style="color:#334155;">Project type:</strong> ${PROJECT_LABELS[projectType] ?? projectType}</p>` : ''
+  const timelineRow = timeline    ? `<p style="margin:0;font-size:12px;color:#64748b;"><strong style="color:#334155;">Timeline:</strong> ${TIMELINE_LABELS[timeline] ?? timeline}</p>` : ''
+  const postcodeRow = postcode    ? `<p style="margin:0 0 4px;font-size:12px;color:#64748b;"><strong style="color:#334155;">Postcode:</strong> ${postcode}</p>` : ''
 
-    ${items.length ? `
-    <h2 style="font-size:16px;font-weight:700;margin:20px 0 10px">Selected items (${items.length})</h2>
-    ${itemsHtml(items)}
-    ` : ''}
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f5f7f9;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7f9;padding:24px 0;">
+<tr><td align="center">
+<table width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
 
-    ${message ? `
-    <h2 style="font-size:16px;font-weight:700;margin:20px 0 8px">Message</h2>
-    <p style="font-size:14px;color:#374151;line-height:1.6;margin:0;white-space:pre-wrap">${message}</p>
-    ` : ''}
+  <!-- HEADER -->
+  <tr>
+    <td style="background:#185D7A;padding:20px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>
+            <p style="margin:0;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">${mfrShort}</p>
+            <p style="margin:2px 0 0;font-size:9px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">Quote Request — ${systemName}</p>
+          </td>
+          <td style="text-align:right;vertical-align:top;">
+            <p style="margin:0;font-size:13px;font-weight:700;color:#f97316;">${shortRef}</p>
+            <p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.7);">${dateStr}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
 
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #f1f5f9">
-      <a href="mailto:${customerEmail}?subject=Re: Quote request — ${encodeURIComponent(systemName)}"
-         style="display:inline-block;background:#185D7A;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
-        Reply to ${customerName} →
+  <!-- ORANGE ACCENT BAR -->
+  <tr><td style="background:#f97316;height:3px;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+  <!-- FROM / TO -->
+  <tr>
+    <td style="padding:24px 32px 16px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="width:50%;vertical-align:top;padding-right:16px;">
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">From</p>
+            <p style="margin:0 0 2px;font-size:14px;font-weight:700;color:#185D7A;">${customerName}</p>
+            <p style="margin:0 0 1px;font-size:12px;color:#64748b;"><a href="mailto:${customerEmail}" style="color:#64748b;text-decoration:none;">${customerEmail}</a></p>
+            ${customerPhone ? `<p style="margin:0 0 1px;font-size:12px;color:#64748b;"><a href="tel:${customerPhone}" style="color:#64748b;text-decoration:none;">${customerPhone}</a></p>` : ''}
+            ${postcode ? `<p style="margin:0;font-size:12px;color:#64748b;">Postcode: ${postcode}</p>` : ''}
+          </td>
+          <td style="width:50%;vertical-align:top;">
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">To</p>
+            <p style="margin:0 0 2px;font-size:14px;font-weight:700;color:#185D7A;">${manufacturerName}</p>
+            <p style="margin:0;font-size:12px;color:#64748b;">via BuildQuote widget</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- DIVIDER -->
+  <tr><td style="padding:0 32px;"><div style="border-top:1px solid #e2e8f0;"></div></td></tr>
+
+  <!-- PROJECT DETAILS -->
+  ${projectType || timeline || postcode ? `
+  <tr>
+    <td style="padding:16px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7f9;border-radius:6px;">
+        <tr>
+          <td style="padding:12px 16px;">
+            ${postcodeRow}
+            ${projectRow}
+            ${timelineRow}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  ` : ''}
+
+  <!-- LINE ITEMS LABEL -->
+  <tr>
+    <td style="padding:8px 32px 8px;">
+      <p style="margin:0;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">Requested Items</p>
+    </td>
+  </tr>
+
+  <!-- LINE ITEMS TABLE -->
+  <tr>
+    <td style="padding:0 32px 24px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <thead>
+          <tr style="background:#185D7A;">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">#</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">Item</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">Specs / Notes</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">Product Code</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">UOM</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">Qty</th>
+          </tr>
+        </thead>
+        <tbody>${items.length ? itemRows : `<tr><td colspan="6" style="padding:12px 10px;font-size:13px;color:#94a3b8;font-style:italic;">No specific items selected — general enquiry.</td></tr>`}</tbody>
+      </table>
+    </td>
+  </tr>
+
+  ${message ? `
+  <!-- MESSAGE -->
+  <tr>
+    <td style="padding:0 32px 24px;">
+      <p style="margin:0 0 8px;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">Message</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7f9;border-radius:6px;">
+        <tr><td style="padding:12px 16px;font-size:13px;color:#334155;line-height:1.5;">${message}</td></tr>
+      </table>
+    </td>
+  </tr>
+  ` : ''}
+
+  <!-- DIVIDER -->
+  <tr><td style="padding:0 32px;"><div style="border-top:1px solid #e2e8f0;"></div></td></tr>
+
+  <!-- REFERENCE -->
+  <tr>
+    <td style="padding:16px 32px;">
+      <p style="margin:0 0 2px;font-size:12px;color:#64748b;"><strong style="color:#334155;">Reference:</strong> ${shortRef}</p>
+      <p style="margin:0;font-size:12px;color:#64748b;"><strong style="color:#334155;">Received:</strong> ${dateStr}</p>
+    </td>
+  </tr>
+
+  <!-- WHAT HAPPENS NEXT -->
+  <tr>
+    <td style="background:#fff8f0;border-top:2px solid #f97316;padding:20px 32px;">
+      <p style="margin:0 0 8px;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">What Happens Next</p>
+      <p style="margin:0 0 6px;font-size:12px;color:#334155;line-height:1.5;">Reply directly to <strong>${customerName}</strong> at <a href="mailto:${customerEmail}" style="color:#185D7A;">${customerEmail}</a>${customerPhone ? ` or call <strong>${customerPhone}</strong>` : ''} to provide a quote or discuss the request further.</p>
+      <p style="margin:0 0 12px;font-size:12px;color:#334155;line-height:1.5;">You can also manage all incoming quote requests in your BuildQuote manufacturer workspace.</p>
+      <a href="https://studio.buildquote.com.au/manufacturer/quotes"
+         style="display:inline-block;background:#185D7A;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:700;">
+        View Quote Requests →
       </a>
-    </div>
-  </div>
-  <p style="font-size:12px;color:#9ca3af;text-align:center;margin-top:16px">
-    Sent via BuildQuote · <a href="https://studio.buildquote.com.au/manufacturer/quotes" style="color:#9ca3af">View all quote requests</a>
-  </p>
-</div>`,
-  })
+    </td>
+  </tr>
+
+  <!-- FOOTER -->
+  <tr>
+    <td style="background:#f5f7f9;border-top:1px solid #e2e8f0;padding:16px 32px;">
+      <p style="margin:0;font-size:10px;color:#94a3b8;">Sent via <strong style="color:#f97316;">BuildQuote</strong> &mdash; buildquote.com.au</p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
 }
 
-async function sendCustomerConfirmation(opts: {
-  toEmail: string
+function buildCustomerConfirmationHtml(opts: {
   customerName: string
   manufacturerName: string
   systemName: string
-  items: any[]
-}) {
-  const { toEmail, customerName, manufacturerName, systemName, items } = opts
+  items: SelectedItem[]
+}): string {
+  const { customerName, manufacturerName, systemName, items } = opts
+  const dateStr = formatDate()
 
-  await resend.emails.send({
-    from:    `BuildQuote <${FROM}>`,
-    to:      toEmail,
-    subject: `Your quote request for ${systemName} has been received`,
-    html: `
-<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;color:#111827">
-  <div style="background:#185D7A;padding:24px 28px;border-radius:12px 12px 0 0">
-    <h1 style="margin:0;font-size:20px;color:#fff;font-weight:800">Quote Request Received</h1>
-  </div>
-  <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:24px 28px;border-radius:0 0 12px 12px">
-    <p style="font-size:15px;margin:0 0 16px">Hi ${customerName},</p>
-    <p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 16px">
-      Thanks for your quote request. <strong>${manufacturerName}</strong> will review your enquiry and be in touch shortly.
-    </p>
+  const itemRows = items.map((item, i) => {
+    const bg    = i % 2 === 0 ? '#ffffff' : '#f5f7f9'
+    const specs = [item.dims, item.details].filter(Boolean).join(' · ')
+    return `
+    <tr style="background:${bg};">
+      <td style="padding:8px 10px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">${i + 1}</td>
+      <td style="padding:8px 10px;font-size:13px;color:#000000;border-bottom:1px solid #e2e8f0;">${item.label}</td>
+      <td style="padding:8px 10px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;">${specs}</td>
+      <td style="padding:8px 10px;font-size:13px;color:#000000;font-weight:600;border-bottom:1px solid #e2e8f0;">${item.quantity ?? 1}</td>
+    </tr>`
+  }).join('')
 
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-bottom:16px">
-      <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#94a3b8">Your request</p>
-      <p style="margin:0 0 10px;font-size:14px;font-weight:600">${systemName}</p>
-      ${itemsHtml(items)}
-    </div>
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f5f7f9;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7f9;padding:24px 0;">
+<tr><td align="center">
+<table width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
 
-    <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0">
-      If you have any follow-up questions in the meantime, reply to this email and we'll pass it on.
-    </p>
-  </div>
-  <p style="font-size:12px;color:#9ca3af;text-align:center;margin-top:16px">Sent via BuildQuote</p>
-</div>`,
-  })
+  <!-- HEADER -->
+  <tr>
+    <td style="background:#185D7A;padding:20px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>
+            <p style="margin:0;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Quote Request Received</p>
+            <p style="margin:2px 0 0;font-size:9px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">${systemName} · ${manufacturerName}</p>
+          </td>
+          <td style="text-align:right;vertical-align:top;">
+            <p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.7);">${dateStr}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ORANGE ACCENT BAR -->
+  <tr><td style="background:#f97316;height:3px;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+  <!-- INTRO -->
+  <tr>
+    <td style="padding:24px 32px 16px;">
+      <p style="margin:0 0 12px;font-size:15px;color:#334155;">Hi ${customerName},</p>
+      <p style="margin:0;font-size:14px;color:#334155;line-height:1.6;">
+        Thanks for your quote request. <strong>${manufacturerName}</strong> has received your enquiry and will be in touch directly to discuss pricing and availability.
+      </p>
+    </td>
+  </tr>
+
+  <!-- DIVIDER -->
+  <tr><td style="padding:0 32px;"><div style="border-top:1px solid #e2e8f0;"></div></td></tr>
+
+  <!-- ITEMS LABEL -->
+  <tr>
+    <td style="padding:16px 32px 8px;">
+      <p style="margin:0;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">Your Selection</p>
+    </td>
+  </tr>
+
+  <!-- ITEMS TABLE -->
+  <tr>
+    <td style="padding:0 32px 24px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <thead>
+          <tr style="background:#185D7A;">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">#</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">Item</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">Specs / Notes</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#ffffff;">Qty</th>
+          </tr>
+        </thead>
+        <tbody>${items.length ? itemRows : `<tr><td colspan="4" style="padding:12px 10px;font-size:13px;color:#94a3b8;font-style:italic;">General enquiry — no specific items selected.</td></tr>`}</tbody>
+      </table>
+    </td>
+  </tr>
+
+  <!-- WHAT HAPPENS NEXT -->
+  <tr>
+    <td style="background:#fff8f0;border-top:2px solid #f97316;padding:20px 32px;">
+      <p style="margin:0 0 8px;font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1.5px;">What Happens Next</p>
+      <p style="margin:0;font-size:12px;color:#334155;line-height:1.5;">
+        <strong>${manufacturerName}</strong> will contact you directly to discuss your quote. If you have any follow-up questions in the meantime, simply reply to this email.
+      </p>
+    </td>
+  </tr>
+
+  <!-- FOOTER -->
+  <tr>
+    <td style="background:#f5f7f9;border-top:1px solid #e2e8f0;padding:16px 32px;">
+      <p style="margin:0;font-size:10px;color:#94a3b8;">Sent via <strong style="color:#f97316;">BuildQuote</strong> &mdash; buildquote.com.au</p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
 }
 
 export async function POST(req: NextRequest) {
@@ -148,7 +343,6 @@ export async function POST(req: NextRequest) {
 
     const studio = createStudioServiceClient()
 
-    // Validate token + get manufacturer
     const { data: widget } = await studio
       .from('manufacturer_embed_widgets')
       .select('id, manufacturer_id')
@@ -160,7 +354,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid widget token' }, { status: 403 })
     }
 
-    // Fetch manufacturer name + notification email in parallel with insert
     const [insertResult, mfrResult] = await Promise.all([
       studio.from('widget_quote_requests').insert({
         manufacturer_id: widget.manufacturer_id,
@@ -191,24 +384,42 @@ export async function POST(req: NextRequest) {
 
     const manufacturerName  = mfrResult.data?.name ?? 'the manufacturer'
     const manufacturerEmail = mfrResult.data?.pending_contact_email_primary
-    const items             = Array.isArray(selected_items) ? selected_items : []
+    const items             = (Array.isArray(selected_items) ? selected_items : []) as SelectedItem[]
+    const systemName        = system_name ?? system_id
 
-    // Fire emails — don't let failures block the 200 response
-    const emailOpts = { customerName: name, manufacturerName, systemName: system_name ?? system_id, items }
     await Promise.allSettled([
       manufacturerEmail
-        ? sendManufacturerNotification({
-            toEmail: manufacturerEmail,
-            customerEmail: email,
-            customerPhone: phone ?? null,
-            postcode: postcode ?? null,
-            projectType: project_type ?? null,
-            timeline: timeline ?? null,
-            message: message ?? null,
-            ...emailOpts,
+        ? resend.emails.send({
+            from:     `BuildQuote RFQ <${FROM}>`,
+            to:       manufacturerEmail,
+            replyTo:  email,
+            bcc:      FROM,
+            subject:  `New quote request — ${systemName} from ${name}`,
+            html:     buildManufacturerEmailHtml({
+              manufacturerName,
+              systemName,
+              customerName:  name,
+              customerEmail: email,
+              customerPhone: phone ?? null,
+              postcode:      postcode ?? null,
+              projectType:   project_type ?? null,
+              timeline:      timeline ?? null,
+              message:       message ?? null,
+              items,
+            }),
           })
         : Promise.resolve(),
-      sendCustomerConfirmation({ toEmail: email, ...emailOpts }),
+      resend.emails.send({
+        from:    `BuildQuote <${FROM}>`,
+        to:      email,
+        subject: `Your quote request for ${systemName} has been received`,
+        html:    buildCustomerConfirmationHtml({
+          customerName:    name,
+          manufacturerName,
+          systemName,
+          items,
+        }),
+      }),
     ])
 
     return NextResponse.json({ ok: true })
