@@ -39,8 +39,23 @@ Use this as a reference whenever making visual changes to system cards, modals, 
 
 | Source | File | Reads from |
 |---|---|---|
-| Studio widget data | `apps/web/lib/data/getWidgetData.ts` | `staged_systems` (data studio DB) |
-| Studio → production publish | `apps/web/lib/studio-admin/publish.ts` | writes to RFQ production `systems` |
+| Studio widget data | `apps/web/lib/data/getWidgetData.ts` | Config/token lookup → data-studio (service role, server-side). System content → **production Supabase** (`SUPABASE_RFQ_URL`) via `staged_system_id → production_system_id` resolution. Only published systems (non-null `production_system_id`) are returned. |
+| Studio → production publish | `apps/web/lib/studio-admin/publish.ts` | Writes verified systems to production Supabase `staged_systems` table; sets `production_system_id` on data-studio record. |
+
+> **Security note (2026-06-18):** `getWidgetData.ts` was rewritten so that all system content comes from production Supabase only. `system.id` values returned by this function are **production IDs**, not data-studio staged IDs. The publish step is the hard gate — unpublished systems cannot appear in any widget.
+
+---
+
+## Enquiry & quote request pathways
+
+| Action | Entry point | Handler | Writes to |
+|---|---|---|---|
+| **General Enquiry** | `EnquiryModal` in `WidgetClient.tsx` (type = `'enquiry'`) | `POST /api/widget/enquiry/route.ts` | `rfq_enquiries` on production Supabase |
+| **Request a Quote** (current — simple form) | `EnquiryModal` in `WidgetClient.tsx` (type = `'quote'`) | `POST /api/widget/enquiry/route.ts` | `rfq_enquiries` on production Supabase (message prefixed `[Quote Request]`) |
+| **Request a Quote** (planned — full RFQ form) | Widget checkbox selection → sticky button → form modal | `POST /api/widget/quote-request` (not yet built) | `widget_quote_requests` on data-studio + email to manufacturer |
+| **Find a Stockist** | `StockistModal` in `WidgetClient.tsx` | `GET /api/widget/stockists/route.ts` | Read-only — queries `supplier_systems` + `suppliers` on production Supabase |
+
+> **Note on system_id in API routes:** As of 2026-06-18, `system_id` passed from `WidgetClient.tsx` to all widget API routes is a **production ID**. The old staged→production resolution step has been removed from both `enquiry/route.ts` and `stockists/route.ts`.
 
 ---
 
