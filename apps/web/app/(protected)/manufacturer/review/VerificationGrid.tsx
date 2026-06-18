@@ -993,7 +993,18 @@ function ComponentItem({
   const [sku,     setSku]     = useState(component.sku ?? '')
   const [desc,    setDesc]    = useState(component.description ?? '')
   const [pending, startTransition] = useTransition()
+  const [routePending, startRouteTransition] = useTransition()
   const [err,     setErr]     = useState<string | null>(null)
+  const [route,   setRoute]   = useState<'specialist_supplier' | 'trade_merchant' | null>(component.procurement_route)
+
+  function handleRouteChange(val: 'specialist_supplier' | 'trade_merchant' | null) {
+    startRouteTransition(async () => {
+      const res = await updateComponent(component.id, manufacturerId, { procurement_route: val })
+      if (!res.ok) return
+      setRoute(val)
+      onUpdated(component.id, { procurement_route: val })
+    })
+  }
 
   function handleSave() {
     setErr(null)
@@ -1009,18 +1020,46 @@ function ComponentItem({
     })
   }
 
+  const routeColors = {
+    specialist_supplier: { bg: '#eff6ff', border: '#3b82f6', text: '#1d4ed8' },
+    trade_merchant:      { bg: '#f0fdf4', border: '#16a34a', text: '#15803d' },
+  }
+
   if (!editing) {
     return (
-      <div style={{ padding: '8px 10px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>{component.name}</div>
-          {component.description && <div style={{ color: '#6b7280', marginTop: '2px' }}>{component.description}</div>}
-          {component.sku && <code style={{ fontSize: '11px', color: '#4b5563' }}>{component.sku}</code>}
+      <div style={{ padding: '8px 10px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', color: '#374151' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>{component.name}</div>
+            {component.description && <div style={{ color: '#6b7280', marginTop: '2px' }}>{component.description}</div>}
+            {component.sku && <code style={{ fontSize: '11px', color: '#4b5563' }}>{component.sku}</code>}
+          </div>
+          <button type="button" onClick={() => setEditing(true)}
+            style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
+            Edit
+          </button>
         </div>
-        <button type="button" onClick={() => setEditing(true)}
-          style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
-          Edit
-        </button>
+        {/* Procurement route toggle */}
+        <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Route:</span>
+          {(['specialist_supplier', 'trade_merchant'] as const).map(val => {
+            const c = routeColors[val]
+            const active = route === val
+            return (
+              <button key={val} type="button" disabled={routePending} onClick={() => handleRouteChange(active ? null : val)}
+                style={{
+                  padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.1s',
+                  border: `1.5px solid ${active ? c.border : '#d1d5db'}`,
+                  background: active ? c.bg : '#fff',
+                  color: active ? c.text : '#9ca3af',
+                }}>
+                {val === 'specialist_supplier' ? 'Specialist' : 'Trade merchant'}
+              </button>
+            )
+          })}
+          {routePending && <span style={{ fontSize: '10px', color: '#9ca3af' }}>saving…</span>}
+          {!route && !routePending && <span style={{ fontSize: '10px', color: '#d97706', fontWeight: 600 }}>not set</span>}
+        </div>
       </div>
     )
   }
