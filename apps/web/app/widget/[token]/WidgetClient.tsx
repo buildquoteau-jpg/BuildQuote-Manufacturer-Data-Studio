@@ -563,21 +563,27 @@ function SystemDetailModal({
   function buildSelectedItems(): SelectedItem[] {
     const items: SelectedItem[] = []
 
+    const sysPrefix = system.name
+
     groupProfiles(system.system_profiles).forEach(({ key, items: g }) => {
       g.filter(({ profile }) => selectedProfileIds.has(profile.id))
-        .forEach(({ label, profile }) => items.push({
-          item_id: profile.id, type: 'profile',
-          label: key ? `${key} — ${label}` : label,
-          dims: fmtDims(profile), uom: fmtUom(profile.uom),
-          product_code: profile.product_code ?? null,
-          quantity: 1, details: '',
-        }))
+        .forEach(({ label, profile }) => {
+          const profileLabel = key ? `${key} — ${label}` : label
+          items.push({
+            item_id: profile.id, type: 'profile',
+            label: `${sysPrefix} — ${profileLabel}`,
+            dims: fmtDims(profile), uom: fmtUom(profile.uom),
+            product_code: profile.product_code ?? null,
+            quantity: 1, details: '',
+          })
+        })
     })
 
     system.system_colours
       .filter(c => selectedColourNames.has(c.colour_name))
       .forEach(c => items.push({
-        item_id: c.colour_name, type: 'colour', label: c.colour_name,
+        item_id: c.colour_name, type: 'colour',
+        label: `${sysPrefix} — ${c.colour_name}`,
         dims: '', uom: '', product_code: null,
         quantity: 1, details: '',
       }))
@@ -585,7 +591,8 @@ function SystemDetailModal({
     system.system_components
       .filter(sc => sc.components && selectedComponentIds.has(sc.id))
       .forEach(sc => items.push({
-        item_id: sc.id, type: 'component', label: sc.components!.name,
+        item_id: sc.id, type: 'component',
+        label: `${sysPrefix} — ${sc.components!.name}`,
         dims: '', uom: fmtUom(sc.components!.uom),
         product_code: sc.components!.sku ?? null,
         quantity: 1, details: '',
