@@ -333,11 +333,13 @@ export function AccountProfileForm({
             <button
               type="button"
               onClick={() => setShowPassword(v => !v)}
+              onMouseDown={(e) => e.preventDefault()}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               style={{
                 position: 'absolute', right: '0.7rem', top: '50%', transform: 'translateY(-50%)',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem',
                 color: 'var(--ds-text-faint)', display: 'flex', alignItems: 'center', lineHeight: 1,
+                zIndex: 1,
               }}
             >
               <EyeIcon open={showPassword} />
