@@ -30,7 +30,8 @@
     "csv-parse": "^6.2.1",
     "next": "14.2.29",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "resend": "^6.12.4"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.55.0",
