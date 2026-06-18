@@ -3,6 +3,17 @@
 
 ---
 
+## Handover note — read before touching anything
+
+**Read both of these documents first, in this order:**
+
+1. This file (`docs/brainstorm-widget-rfq-flows.md`) — design decisions, build order, agreed scope
+2. [`docs/skills/system-card-rendering.md`](skills/system-card-rendering.md) — widget file map, component hierarchy, button business rules, and how system/profile/component data flows through the widget UI
+
+Both are current as of June 2026. Do not skip the skill doc — the widget UI is non-trivial and the button logic has already changed several times.
+
+---
+
 ## Context
 
 The BuildQuote widget (`/widget/{public_token}`) is embedded on a **manufacturer's own website**. It displays their product catalogue (systems, variants, components). Three actions need to be wired up:

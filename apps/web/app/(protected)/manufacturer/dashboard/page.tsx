@@ -627,6 +627,7 @@ export default async function ManufacturerPortalPage() {
         }}
       >
         {[
+          { href: '/manufacturer/quotes',    label: 'Quote Requests' },
           { href: '/manufacturer/profile',   label: 'Brand profile' },
           { href: '/manufacturer/documents', label: 'Documents' },
           { href: '/manufacturer/review',    label: 'Verify systems' },

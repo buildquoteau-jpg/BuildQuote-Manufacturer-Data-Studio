@@ -5,6 +5,16 @@ import type { WidgetSystem, WidgetComponent, WidgetProfile, WidgetColour, Widget
 import { DEFAULT_BUTTON_CONFIG } from '@/lib/data/getWidgetData'
 import { SystemCardTile, CATEGORY_COLOURS } from '@/components/ui/SystemCardTile'
 
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type SelectedItem = {
+  profile_id: string
+  label: string
+  dims: string
+  uom: string
+  product_code: string | null
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function fmtDims(p: WidgetProfile): string {
@@ -154,7 +164,16 @@ function ColoursSection({ colours }: { colours: WidgetColour[] }) {
 
 // ── Profile row ────────────────────────────────────────────────────────────
 
-function ProfileRow({ label, profile }: { label: string; profile: WidgetProfile }) {
+function ProfileRow({
+  label, profile,
+  selectable, selected, onToggle,
+}: {
+  label: string
+  profile: WidgetProfile
+  selectable?: boolean
+  selected?: boolean
+  onToggle?: () => void
+}) {
   const dims = fmtDims(profile)
   const uom  = fmtUom(profile.uom)
   const sku  = profile.product_code
@@ -164,43 +183,62 @@ function ProfileRow({ label, profile }: { label: string; profile: WidgetProfile 
   const dimsNums      = extractNums(dims)
   const labelOverlaps = labelNums.length > 0 && labelNums.every((n, i) => dimsNums[i] === n)
 
-  return labelOverlaps ? (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '8px',
-      padding: '8px 12px', background: '#f9fafb',
-      border: '1px solid #e5e7eb', borderRadius: '10px',
-    }}>
+  const baseStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+    padding: '8px 12px',
+    background: selected ? '#eef6fa' : '#f9fafb',
+    border: `1px solid ${selected ? '#b6dcea' : '#e5e7eb'}`,
+    borderRadius: '10px',
+    cursor: selectable ? 'pointer' : 'default',
+    textAlign: 'left',
+    transition: 'background 0.1s, border-color 0.1s',
+  }
+
+  const content = labelOverlaps ? (
+    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
       <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{dims}</span>
       {uom && <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#6b7280' }}>{uom}</span>}
       {sku && <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', background: '#f3f4f6', padding: '1px 5px', borderRadius: '4px' }}>{sku}</span>}
-    </div>
+    </span>
   ) : (
-    <div style={{
-      padding: '8px 12px', background: '#f9fafb',
-      border: '1px solid #e5e7eb', borderRadius: '10px',
-    }}>
-      <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>{label}</div>
+    <span style={{ flex: 1, minWidth: 0 }}>
+      <span style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>{label}</span>
       {(dims || uom || sku) && (
-        <div style={{ marginTop: '3px', fontSize: '12px', color: '#6b7280', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-          {dims && <span>{dims}</span>}
-          {uom && <span style={{ fontWeight: 700, letterSpacing: '0.05em' }}>{uom}</span>}
-          {sku && <span style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '1px 4px', borderRadius: '3px' }}>{sku}</span>}
-        </div>
+        <span style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', marginTop: '3px' }}>
+          {dims && <span style={{ fontSize: '12px', color: '#6b7280' }}>{dims}</span>}
+          {uom && <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.05em', color: '#6b7280' }}>{uom}</span>}
+          {sku && <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', background: '#f3f4f6', padding: '1px 4px', borderRadius: '3px' }}>{sku}</span>}
+        </span>
       )}
-    </div>
+    </span>
   )
+
+  if (selectable) {
+    return (
+      <button type="button" onClick={onToggle} style={baseStyle}>
+        <Checkbox checked={!!selected} />
+        {content}
+      </button>
+    )
+  }
+
+  return <div style={baseStyle}>{content}</div>
 }
 
 // ── Profile group (collapsible) ────────────────────────────────────────────
 
 function ProfileGroupBlock({
   groupKey, systemName, showSystemName, items, defaultOpen,
+  selectable, selectedIds, onToggle,
 }: {
   groupKey: string
   systemName: string
   showSystemName: boolean
   items: { label: string; profile: WidgetProfile }[]
   defaultOpen: boolean
+  selectable?: boolean
+  selectedIds?: Set<string>
+  onToggle?: (profileId: string) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
 
@@ -208,7 +246,14 @@ function ProfileGroupBlock({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {items.map(({ label, profile }) => (
-          <ProfileRow key={profile.id} label={label} profile={profile} />
+          <ProfileRow
+            key={profile.id}
+            label={label}
+            profile={profile}
+            selectable={selectable}
+            selected={selectedIds?.has(profile.id)}
+            onToggle={() => onToggle?.(profile.id)}
+          />
         ))}
       </div>
     )
@@ -216,6 +261,9 @@ function ProfileGroupBlock({
 
   const fmtKey     = formatGroupKey(groupKey)
   const displayKey = showSystemName ? `${systemName} ${fmtKey}` : fmtKey
+  const groupSelectedCount = selectable
+    ? items.filter(({ profile }) => selectedIds?.has(profile.id)).length
+    : 0
 
   return (
     <div>
@@ -232,13 +280,23 @@ function ProfileGroupBlock({
           {displayKey}
         </span>
         <span style={{ fontSize: '12px', fontWeight: 600, color: '#185D7A', flexShrink: 0 }}>
-          {open ? '▲' : `▼ ${items.length}`}
+          {open
+            ? '▲'
+            : `▼ ${items.length}${selectable && groupSelectedCount > 0 ? ` · ${groupSelectedCount} selected` : ''}`
+          }
         </span>
       </button>
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingBottom: '4px' }}>
           {items.map(({ label, profile }) => (
-            <ProfileRow key={profile.id} label={label} profile={profile} />
+            <ProfileRow
+              key={profile.id}
+              label={label}
+              profile={profile}
+              selectable={selectable}
+              selected={selectedIds?.has(profile.id)}
+              onToggle={() => onToggle?.(profile.id)}
+            />
           ))}
         </div>
       )}
@@ -248,7 +306,16 @@ function ProfileGroupBlock({
 
 // ── Profiles section ───────────────────────────────────────────────────────
 
-function ProfilesSection({ profiles, systemName }: { profiles: WidgetProfile[]; systemName: string }) {
+function ProfilesSection({
+  profiles, systemName,
+  selectable, selectedIds, onToggle,
+}: {
+  profiles: WidgetProfile[]
+  systemName: string
+  selectable?: boolean
+  selectedIds?: Set<string>
+  onToggle?: (profileId: string) => void
+}) {
   if (profiles.length === 0) return null
   const groups      = groupProfiles(profiles)
   const defaultOpen = profiles.length <= 3
@@ -259,6 +326,9 @@ function ProfilesSection({ profiles, systemName }: { profiles: WidgetProfile[]; 
     <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
       <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#6b7280', marginBottom: '10px' }}>
         Profiles · {profiles.length} variant{profiles.length !== 1 ? 's' : ''}
+        {selectable && selectedIds && selectedIds.size > 0 && (
+          <span style={{ marginLeft: '8px', color: '#185D7A' }}>{selectedIds.size} selected</span>
+        )}
       </div>
       {!multiGroup && (
         <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827', paddingLeft: '10px', borderLeft: '3px solid #185D7A', marginBottom: '8px' }}>
@@ -268,7 +338,14 @@ function ProfilesSection({ profiles, systemName }: { profiles: WidgetProfile[]; 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {!useHeaders
           ? groups.flatMap(({ items }) => items).map(({ label, profile }) => (
-              <ProfileRow key={profile.id} label={label} profile={profile} />
+              <ProfileRow
+                key={profile.id}
+                label={label}
+                profile={profile}
+                selectable={selectable}
+                selected={selectedIds?.has(profile.id)}
+                onToggle={() => onToggle?.(profile.id)}
+              />
             ))
           : groups.map(({ key, items }) => (
               <ProfileGroupBlock
@@ -278,6 +355,9 @@ function ProfilesSection({ profiles, systemName }: { profiles: WidgetProfile[]; 
                 showSystemName={multiGroup}
                 items={items}
                 defaultOpen={defaultOpen}
+                selectable={selectable}
+                selectedIds={selectedIds}
+                onToggle={onToggle}
               />
             ))
         }
@@ -376,16 +456,57 @@ function ComponentsAccordion({ components }: { components: WidgetComponent[] }) 
 
 // ── System Detail Modal ────────────────────────────────────────────────────
 
-function SystemDetailModal({ system, onClose, manufacturerName, onEnquiry, onQuote, onStockist, buttonConfig }: {
+function SystemDetailModal({
+  system, onClose, manufacturerName,
+  onEnquiry, onQuote, onStockist, buttonConfig,
+}: {
   system: WidgetSystem
   onClose: () => void
   manufacturerName?: string
   onEnquiry: () => void
-  onQuote: () => void
+  onQuote: (items: SelectedItem[]) => void
   onStockist: () => void
   buttonConfig: WidgetButtonConfig
 }) {
   const _catRaw = CATEGORY_COLOURS[system.category] ?? { bg: '#f3f4f6', color: '#374151' }
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const showQuote    = buttonConfig.show_request_quote
+  const hasProfiles  = system.system_profiles.length > 0
+  const selectedCount = selectedIds.size
+
+  function toggleProfile(profileId: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(profileId)) next.delete(profileId)
+      else next.add(profileId)
+      return next
+    })
+  }
+
+  function buildSelectedItems(): SelectedItem[] {
+    const allItems: { label: string; profile: WidgetProfile }[] = []
+    groupProfiles(system.system_profiles).forEach(({ items }) => allItems.push(...items))
+
+    return allItems
+      .filter(({ profile }) => selectedIds.has(profile.id))
+      .map(({ label, profile }) => ({
+        profile_id:   profile.id,
+        label,
+        dims:         fmtDims(profile),
+        uom:          fmtUom(profile.uom),
+        product_code: profile.product_code ?? null,
+      }))
+  }
+
+  function handleQuoteClick() {
+    onQuote(buildSelectedItems())
+  }
+
+  // For systems with no profiles, allow a direct quote click with no items
+  function handleSimpleQuoteClick() {
+    onQuote([])
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -400,124 +521,401 @@ function SystemDetailModal({ system, onClose, manufacturerName, onEnquiry, onQuo
       onClick={onClose}
     >
       <div
-        style={{ background: '#ffffff', borderRadius: '18px', width: '100%', maxWidth: '620px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', display: 'flex', flexDirection: 'column' }}
+        style={{ background: '#ffffff', borderRadius: '18px', width: '100%', maxWidth: '620px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Hero */}
-        <div style={{
-          height: '200px', flexShrink: 0, position: 'relative',
-          background: system.hero_image_url ? `url(${system.hero_image_url}) center/cover` : 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)',
-          borderRadius: '18px 18px 0 0',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {!system.hero_image_url && (
-            <span style={{ fontSize: '22px', fontWeight: 800, color: '#94a3b8', fontFamily: 'monospace' }}>{system.product_code}</span>
-          )}
-          <span style={{
-            position: 'absolute', top: '14px', left: '14px',
-            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-            background: _catRaw.bg, color: _catRaw.color,
-            padding: '4px 10px', borderRadius: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+        {/* Scrollable body */}
+        <div style={{ overflowY: 'auto', flex: 1, borderRadius: '18px 18px 0 0' }}>
+          {/* Hero */}
+          <div style={{
+            height: '200px', flexShrink: 0, position: 'relative',
+            background: system.hero_image_url ? `url(${system.hero_image_url}) center/cover` : 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)',
+            borderRadius: '18px 18px 0 0',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            {system.category}
-          </span>
-          <button
-            onClick={onClose}
-            style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(0,0,0,0.45)', border: 'none', cursor: 'pointer', width: '34px', height: '34px', borderRadius: '8px', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', lineHeight: 1 }}
-            aria-label="Close"
-          >×</button>
+            {!system.hero_image_url && (
+              <span style={{ fontSize: '22px', fontWeight: 800, color: '#94a3b8', fontFamily: 'monospace' }}>{system.product_code}</span>
+            )}
+            <span style={{
+              position: 'absolute', top: '14px', left: '14px',
+              fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              background: _catRaw.bg, color: _catRaw.color,
+              padding: '4px 10px', borderRadius: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+            }}>
+              {system.category}
+            </span>
+            <button
+              onClick={onClose}
+              style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(0,0,0,0.45)', border: 'none', cursor: 'pointer', width: '34px', height: '34px', borderRadius: '8px', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', lineHeight: 1 }}
+              aria-label="Close"
+            >×</button>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding: '24px 24px 28px', flex: 1 }}>
+            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{system.name}</h2>
+            {system.product_code && (
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9ca3af', fontFamily: 'monospace', letterSpacing: '0.04em' }}>{system.product_code}</p>
+            )}
+            {system.description && (
+              <p style={{ margin: '12px 0 0', fontSize: '14px', color: '#374151', lineHeight: 1.65 }}>{system.description}</p>
+            )}
+
+            {showQuote && hasProfiles && (
+              <p style={{ margin: '14px 0 0', fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
+                Tick the variants you need, then tap &ldquo;Request a Quote&rdquo; below.
+              </p>
+            )}
+
+            <ColoursSection colours={system.system_colours} />
+            <ProfilesSection
+              profiles={system.system_profiles}
+              systemName={system.name}
+              selectable={showQuote && hasProfiles}
+              selectedIds={selectedIds}
+              onToggle={toggleProfile}
+            />
+            <ComponentsAccordion components={system.system_components} />
+            <AttributePills system={system} />
+
+            {/* Action links */}
+            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(system.install_guide_urls ?? []).map((guide, i) => (
+                <a
+                  key={i}
+                  href={guide.url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '13px 16px', fontSize: '14px', fontWeight: 600, color: '#185D7A', background: '#eef6fa', border: '1.5px solid #b6dcea', borderRadius: '10px', textDecoration: 'none', boxSizing: 'border-box' as const }}
+                >
+                  {guide.label}
+                  <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2V8" stroke="#185D7A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </a>
+              ))}
+              {system.design_guide_url && (
+                <a
+                  href={system.design_guide_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '13px 16px', fontSize: '14px', fontWeight: 600, color: '#185D7A', background: '#eef6fa', border: '1.5px solid #b6dcea', borderRadius: '10px', textDecoration: 'none', boxSizing: 'border-box' as const }}
+                >
+                  Design Guide
+                  <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2V8" stroke="#185D7A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </a>
+              )}
+              {system.website_url && (
+                <a
+                  href={system.website_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '13px 16px', fontSize: '14px', fontWeight: 600, color: '#374151', background: '#f9fafb', border: '1.5px solid #d1d5db', borderRadius: '10px', textDecoration: 'none', boxSizing: 'border-box' as const }}
+                >
+                  View on {manufacturerName ?? 'manufacturer'} website
+                  <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2V8" stroke="#4b5563" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </a>
+              )}
+
+              {/* Action buttons — shown only when no profiles, or no selection mode */}
+              {(showQuote && !hasProfiles || buttonConfig.show_find_stockist) && (
+                <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: (showQuote && !hasProfiles) && buttonConfig.show_find_stockist ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                  {showQuote && !hasProfiles && (
+                    <button
+                      onClick={handleSimpleQuoteClick}
+                      style={{ padding: '13px 10px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
+                    >
+                      Request a Quote
+                    </button>
+                  )}
+                  {buttonConfig.show_find_stockist && (
+                    <button
+                      onClick={onStockist}
+                      style={{ padding: '13px 10px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
+                    >
+                      Find a Stockist
+                    </button>
+                  )}
+                </div>
+              )}
+              {buttonConfig.show_general_enquiry && (
+                <button
+                  onClick={onEnquiry}
+                  style={{ padding: '11px 16px', background: '#f8fafc', color: '#374151', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', width: '100%' }}
+                >
+                  General Enquiry
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: '24px 24px 28px', flex: 1 }}>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{system.name}</h2>
-          {system.product_code && (
-            <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9ca3af', fontFamily: 'monospace', letterSpacing: '0.04em' }}>{system.product_code}</p>
-          )}
-          {system.description && (
-            <p style={{ margin: '12px 0 0', fontSize: '14px', color: '#374151', lineHeight: 1.65 }}>{system.description}</p>
-          )}
+        {/* Sticky footer — appears when profiles are selected */}
+        {showQuote && hasProfiles && selectedCount > 0 && (
+          <div style={{
+            flexShrink: 0,
+            borderTop: '1.5px solid #b6dcea',
+            background: '#eef6fa',
+            borderRadius: '0 0 18px 18px',
+            padding: '14px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+          }}>
+            <span style={{ fontSize: '13px', color: '#185D7A', fontWeight: 600 }}>
+              {selectedCount} variant{selectedCount !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={handleQuoteClick}
+              style={{
+                padding: '11px 20px', background: '#185D7A', color: '#fff',
+                border: 'none', borderRadius: '10px',
+                fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Request a Quote ({selectedCount})
+            </button>
+          </div>
+        )}
 
-          <ColoursSection colours={system.system_colours} />
-          <ProfilesSection profiles={system.system_profiles} systemName={system.name} />
-          <ComponentsAccordion components={system.system_components} />
-          <AttributePills system={system} />
-
-          {/* Action links */}
-          <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {(system.install_guide_urls ?? []).map((guide, i) => (
-              <a
-                key={i}
-                href={guide.url} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '13px 16px', fontSize: '14px', fontWeight: 600, color: '#185D7A', background: '#eef6fa', border: '1.5px solid #b6dcea', borderRadius: '10px', textDecoration: 'none', boxSizing: 'border-box' as const }}
-              >
-                {guide.label}
-                <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2V8" stroke="#185D7A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </a>
-            ))}
-            {system.design_guide_url && (
-              <a
-                href={system.design_guide_url} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '13px 16px', fontSize: '14px', fontWeight: 600, color: '#185D7A', background: '#eef6fa', border: '1.5px solid #b6dcea', borderRadius: '10px', textDecoration: 'none', boxSizing: 'border-box' as const }}
-              >
-                Design Guide
-                <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2V8" stroke="#185D7A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </a>
-            )}
-            {system.website_url && (
-              <a
-                href={system.website_url} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '13px 16px', fontSize: '14px', fontWeight: 600, color: '#374151', background: '#f9fafb', border: '1.5px solid #d1d5db', borderRadius: '10px', textDecoration: 'none', boxSizing: 'border-box' as const }}
-              >
-                View on {manufacturerName ?? 'manufacturer'} website
-                <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2V8" stroke="#4b5563" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </a>
-            )}
-
-            {/* Action buttons */}
-            {(buttonConfig.show_request_quote || buttonConfig.show_find_stockist) && (
-              <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: buttonConfig.show_request_quote && buttonConfig.show_find_stockist ? '1fr 1fr' : '1fr', gap: '8px' }}>
-                {buttonConfig.show_request_quote && (
-                  <button
-                    onClick={onQuote}
-                    style={{ padding: '13px 10px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
-                  >
-                    Request a Quote
-                  </button>
-                )}
-                {buttonConfig.show_find_stockist && (
-                  <button
-                    onClick={onStockist}
-                    style={{ padding: '13px 10px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.3 }}
-                  >
-                    Find a Stockist
-                  </button>
-                )}
-              </div>
-            )}
-            {buttonConfig.show_general_enquiry && (
+        {/* Placeholder footer when quote is enabled but nothing selected yet */}
+        {showQuote && hasProfiles && selectedCount === 0 && (
+          <div style={{
+            flexShrink: 0,
+            borderTop: '1px solid #e5e7eb',
+            background: '#f9fafb',
+            borderRadius: '0 0 18px 18px',
+            padding: '12px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+          }}>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+              Select variants above to request a quote
+            </span>
+            {buttonConfig.show_find_stockist && (
               <button
-                onClick={onEnquiry}
-                style={{ padding: '11px 16px', background: '#f8fafc', color: '#374151', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', width: '100%' }}
+                onClick={onStockist}
+                style={{ padding: '9px 16px', background: '#fff', color: '#185D7A', border: '1.5px solid #185D7A', borderRadius: '9px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
-                General Enquiry
+                Find a Stockist
               </button>
             )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ── Enquiry / Quote modal ──────────────────────────────────────────────────
+// ── Quote Request Modal ────────────────────────────────────────────────────
 
-type EnquiryType = 'enquiry' | 'quote'
-
-function EnquiryModal({ system, widgetToken, type, onClose }: {
+function QuoteRequestModal({
+  system, widgetToken, preselectedItems, onClose,
+}: {
   system: WidgetSystem
   widgetToken: string
-  type: EnquiryType
+  preselectedItems: SelectedItem[]
+  onClose: () => void
+}) {
+  const [name,        setName]        = useState('')
+  const [email,       setEmail]       = useState('')
+  const [phone,       setPhone]       = useState('')
+  const [postcode,    setPostcode]    = useState('')
+  const [projectType, setProjectType] = useState('')
+  const [timeline,    setTimeline]    = useState('')
+  const [message,     setMessage]     = useState('')
+  const [status,      setStatus]      = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [onClose])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setStatus('sending')
+    try {
+      const res = await fetch('/api/widget/quote-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token:          widgetToken,
+          system_id:      system.id,
+          system_name:    system.name,
+          selected_items: preselectedItems,
+          name, email, phone,
+          postcode:     postcode || null,
+          project_type: projectType || null,
+          timeline:     timeline || null,
+          message:      message || null,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setStatus('sent')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  const fieldStyle: React.CSSProperties = {
+    width: '100%', padding: '11px 12px', fontSize: '14px', borderRadius: '9px',
+    border: '1.5px solid #d1d5db', outline: 'none', boxSizing: 'border-box',
+    fontFamily: 'inherit', background: '#fff', color: '#111827',
+  }
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '5px',
+  }
+  const segmentStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1, padding: '9px 8px', fontSize: '13px', fontWeight: 600,
+    cursor: 'pointer', border: 'none', textAlign: 'center',
+    background: active ? '#185D7A' : '#f9fafb',
+    color: active ? '#fff' : '#6b7280',
+    transition: 'background 0.12s, color 0.12s',
+  })
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '16px', backdropFilter: 'blur(3px)' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#fff', borderRadius: '18px', width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.3)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>Request a Quote</h2>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6b7280' }}>{system.name}</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#9ca3af', lineHeight: 1, padding: '2px 4px' }}>×</button>
+        </div>
+
+        {status === 'sent' ? (
+          <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: '40px', marginBottom: '12px' }}>✓</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>Quote request sent!</div>
+            <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#6b7280' }}>
+              We&apos;ll review your request and be in touch shortly.
+            </p>
+            <button onClick={onClose} style={{ marginTop: '20px', padding: '10px 24px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '9px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Close</button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ padding: '20px 24px 28px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+            {/* Selected items (read-only) */}
+            {preselectedItems.length > 0 && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: '8px' }}>
+                  Your selection · {preselectedItems.length} item{preselectedItems.length !== 1 ? 's' : ''}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {preselectedItems.map((item, i) => (
+                    <div key={i} style={{ fontSize: '13px', color: '#374151', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 600 }}>{item.label}</span>
+                      {item.dims && <span style={{ color: '#6b7280' }}>{item.dims}</span>}
+                      {item.uom && <span style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em' }}>{item.uom}</span>}
+                      {item.product_code && (
+                        <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#4b5563', background: '#f3f4f6', padding: '1px 5px', borderRadius: '3px' }}>{item.product_code}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Contact fields */}
+            <div>
+              <label style={labelStyle}>Name *</label>
+              <input required value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Email *</label>
+              <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Phone *</label>
+              <input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Your phone number" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Postcode</label>
+              <input
+                type="text" inputMode="numeric" value={postcode}
+                onChange={e => setPostcode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="Optional" maxLength={4} style={{ ...fieldStyle, maxWidth: '120px' }}
+              />
+            </div>
+
+            {/* Project type */}
+            <div>
+              <label style={labelStyle}>Project type</label>
+              <div style={{ display: 'flex', border: '1.5px solid #d1d5db', borderRadius: '9px', overflow: 'hidden' }}>
+                {([['residential', 'Residential'], ['commercial', 'Commercial'], ['other', 'Other']] as const).map(([val, lbl]) => (
+                  <button
+                    key={val} type="button"
+                    onClick={() => setProjectType(projectType === val ? '' : val)}
+                    style={{
+                      ...segmentStyle(projectType === val),
+                      borderRight: val !== 'other' ? '1px solid #d1d5db' : 'none',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Timeline */}
+            <div>
+              <label style={labelStyle}>Timeline</label>
+              <div style={{ display: 'flex', border: '1.5px solid #d1d5db', borderRadius: '9px', overflow: 'hidden' }}>
+                {([['asap', 'ASAP'], ['1-3months', '1–3 months'], ['planning', 'Just planning']] as const).map(([val, lbl]) => (
+                  <button
+                    key={val} type="button"
+                    onClick={() => setTimeline(timeline === val ? '' : val)}
+                    style={{
+                      ...segmentStyle(timeline === val),
+                      borderRight: val !== 'planning' ? '1px solid #d1d5db' : 'none',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Message</label>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="Project details, quantities, delivery requirements…"
+                rows={3}
+                style={{ ...fieldStyle, resize: 'vertical', minHeight: '80px' }}
+              />
+            </div>
+
+            {status === 'error' && (
+              <p style={{ margin: 0, fontSize: '13px', color: '#dc2626' }}>Something went wrong — please try again.</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={status === 'sending'}
+              style={{
+                padding: '13px', background: '#185D7A', color: '#fff',
+                border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: 700,
+                cursor: status === 'sending' ? 'not-allowed' : 'pointer',
+                opacity: status === 'sending' ? 0.7 : 1,
+              }}
+            >
+              {status === 'sending' ? 'Sending…' : 'Send Quote Request'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Enquiry modal ──────────────────────────────────────────────────────────
+
+function EnquiryModal({ system, widgetToken, onClose }: {
+  system: WidgetSystem
+  widgetToken: string
   onClose: () => void
 }) {
   const [name,    setName]    = useState('')
@@ -545,7 +943,7 @@ function EnquiryModal({ system, widgetToken, type, onClose }: {
           system_id:    system.id,
           system_name:  system.name,
           product_code: system.product_code,
-          name, email, phone, message, type,
+          name, email, phone, message, type: 'enquiry',
         }),
       })
       if (!res.ok) throw new Error('Failed')
@@ -555,7 +953,6 @@ function EnquiryModal({ system, widgetToken, type, onClose }: {
     }
   }
 
-  const title = type === 'quote' ? 'Request a Quote' : 'General Enquiry'
   const fieldStyle: React.CSSProperties = {
     width: '100%', padding: '11px 12px', fontSize: '14px', borderRadius: '9px',
     border: '1.5px solid #d1d5db', outline: 'none', boxSizing: 'border-box',
@@ -576,7 +973,7 @@ function EnquiryModal({ system, widgetToken, type, onClose }: {
       >
         <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>{title}</h2>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>General Enquiry</h2>
             <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6b7280' }}>{system.name}</p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#9ca3af', lineHeight: 1, padding: '2px 4px' }}>×</button>
@@ -585,10 +982,8 @@ function EnquiryModal({ system, widgetToken, type, onClose }: {
         {status === 'sent' ? (
           <div style={{ padding: '40px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: '40px', marginBottom: '12px' }}>✓</div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>
-              {type === 'quote' ? 'Quote request sent!' : 'Enquiry sent!'}
-            </div>
-            <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#6b7280' }}>We'll be in touch shortly.</p>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>Enquiry sent!</div>
+            <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#6b7280' }}>We&apos;ll be in touch shortly.</p>
             <button onClick={onClose} style={{ marginTop: '20px', padding: '10px 24px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '9px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Close</button>
           </div>
         ) : (
@@ -606,11 +1001,11 @@ function EnquiryModal({ system, widgetToken, type, onClose }: {
               <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Optional" style={fieldStyle} />
             </div>
             <div>
-              <label style={labelStyle}>{type === 'quote' ? 'Project details' : 'Message'}</label>
+              <label style={labelStyle}>Message</label>
               <textarea
                 value={message}
                 onChange={e => setMessage(e.target.value)}
-                placeholder={type === 'quote' ? 'Project address, quantities needed, delivery requirements…' : 'How can we help?'}
+                placeholder="How can we help?"
                 rows={4}
                 style={{ ...fieldStyle, resize: 'vertical', minHeight: '96px' }}
               />
@@ -623,7 +1018,7 @@ function EnquiryModal({ system, widgetToken, type, onClose }: {
               disabled={status === 'sending'}
               style={{ padding: '13px', background: '#185D7A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: 700, cursor: status === 'sending' ? 'not-allowed' : 'pointer', opacity: status === 'sending' ? 0.7 : 1 }}
             >
-              {status === 'sending' ? 'Sending…' : title}
+              {status === 'sending' ? 'Sending…' : 'Send Enquiry'}
             </button>
           </form>
         )}
@@ -823,18 +1218,39 @@ export function WidgetClient({
   buttonConfig?: WidgetButtonConfig | null
 }) {
   const buttonConfig = buttonConfigProp ?? DEFAULT_BUTTON_CONFIG
-  const [openSystem,    setOpenSystem]    = useState<WidgetSystem | null>(null)
-  const [activeSystem,  setActiveSystem]  = useState<WidgetSystem | null>(null)
-  const [enquiryType,   setEnquiryType]   = useState<EnquiryType | null>(null)
-  const [showStockist,  setShowStockist]  = useState(false)
+  const [openSystem,   setOpenSystem]   = useState<WidgetSystem | null>(null)
+  const [activeSystem, setActiveSystem] = useState<WidgetSystem | null>(null)
+  const [showEnquiry,  setShowEnquiry]  = useState(false)
+  const [showStockist, setShowStockist] = useState(false)
+  const [showRfqForm,  setShowRfqForm]  = useState(false)
+  const [rfqItems,     setRfqItems]     = useState<SelectedItem[]>([])
 
-  function transitionTo(system: WidgetSystem, action: 'enquiry' | 'quote' | 'stockist') {
+  function openEnquiry(system: WidgetSystem) {
     setActiveSystem(system)
     setOpenSystem(null)
-    if (action === 'stockist') { setShowStockist(true) }
-    else { setEnquiryType(action) }
+    setShowEnquiry(true)
   }
-  function closeAll() { setEnquiryType(null); setShowStockist(false); setActiveSystem(null) }
+
+  function openStockist(system: WidgetSystem) {
+    setActiveSystem(system)
+    setOpenSystem(null)
+    setShowStockist(true)
+  }
+
+  function openRfqForm(system: WidgetSystem, items: SelectedItem[]) {
+    setActiveSystem(system)
+    setRfqItems(items)
+    setOpenSystem(null)
+    setShowRfqForm(true)
+  }
+
+  function closeAll() {
+    setShowEnquiry(false)
+    setShowStockist(false)
+    setShowRfqForm(false)
+    setActiveSystem(null)
+    setRfqItems([])
+  }
 
   const modalSystem = activeSystem ?? systems[0]
 
@@ -860,18 +1276,26 @@ export function WidgetClient({
           system={openSystem}
           manufacturerName={manufacturerName}
           onClose={() => setOpenSystem(null)}
-          onEnquiry={() => transitionTo(openSystem, 'enquiry')}
-          onQuote={  () => transitionTo(openSystem, 'quote')}
-          onStockist={() => transitionTo(openSystem, 'stockist')}
+          onEnquiry={() => openEnquiry(openSystem)}
+          onQuote={(items) => openRfqForm(openSystem, items)}
+          onStockist={() => openStockist(openSystem)}
           buttonConfig={buttonConfig}
         />
       )}
 
-      {enquiryType && modalSystem && (
+      {showEnquiry && modalSystem && (
         <EnquiryModal
           system={modalSystem}
           widgetToken={widgetToken}
-          type={enquiryType}
+          onClose={closeAll}
+        />
+      )}
+
+      {showRfqForm && modalSystem && (
+        <QuoteRequestModal
+          system={modalSystem}
+          widgetToken={widgetToken}
+          preselectedItems={rfqItems}
           onClose={closeAll}
         />
       )}
@@ -881,7 +1305,7 @@ export function WidgetClient({
           system={modalSystem}
           widgetToken={widgetToken}
           onClose={closeAll}
-          onEnquiry={() => { setShowStockist(false); setEnquiryType('enquiry') }}
+          onEnquiry={() => { setShowStockist(false); setShowEnquiry(true) }}
         />
       )}
     </>
