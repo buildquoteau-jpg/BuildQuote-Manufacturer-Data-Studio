@@ -13,15 +13,15 @@ export default async function WidgetPage({
 
   if (!widget) return notFound()
 
+  const showHero = widget.manufacturer?.widget_button_config?.show_hero !== false
+
   return (
     <div style={{
-      padding: '24px 20px 40px',
+      padding: showHero ? '24px 20px 40px' : '16px 20px 32px',
       maxWidth: '1200px',
       margin: '0 auto',
-      background: '#f9fafb',
-      minHeight: '100vh',
     }}>
-      <ManufacturerHero manufacturer={widget.manufacturer} />
+      {showHero && <ManufacturerHero manufacturer={widget.manufacturer} />}
 
       <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#9ca3af' }}>
         {widget.systems.length === 1

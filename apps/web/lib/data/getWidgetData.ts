@@ -5,12 +5,14 @@ export type WidgetButtonConfig = {
   show_request_quote: boolean
   show_find_stockist: boolean
   show_general_enquiry: boolean
+  show_hero: boolean
 }
 
 export const DEFAULT_BUTTON_CONFIG: WidgetButtonConfig = {
   show_request_quote: true,
   show_find_stockist: true,
   show_general_enquiry: true,
+  show_hero: true,
 }
 
 export type WidgetManufacturer = {

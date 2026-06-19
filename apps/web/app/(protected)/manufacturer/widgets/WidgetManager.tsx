@@ -23,12 +23,14 @@ type ButtonConfig = {
   show_request_quote: boolean
   show_find_stockist: boolean
   show_general_enquiry: boolean
+  show_hero: boolean
 }
 
 const DEFAULT_BUTTON_CONFIG: ButtonConfig = {
   show_request_quote: true,
   show_find_stockist: true,
   show_general_enquiry: true,
+  show_hero: true,
 }
 
 type Props = {
@@ -289,14 +291,15 @@ export function WidgetManager({
         )}
       </div>
 
-      {/* Button visibility */}
+      {/* Display & button options */}
       <div style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', marginBottom: '24px' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Widget buttons</div>
-          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Choose which action buttons appear on each product card</div>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Choose which elements and action buttons appear in your widget</div>
         </div>
         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {([
+            { key: 'show_hero',            label: 'Hero banner',      desc: 'Full-width brand image at the top of the widget — hide if your site already shows your branding' },
             { key: 'show_request_quote',   label: 'Request a Quote',  desc: 'Opens a quote request form' },
             { key: 'show_find_stockist',   label: 'Find a Stockist',  desc: 'Lets visitors search local stockists' },
             { key: 'show_general_enquiry', label: 'General Enquiry',  desc: 'Opens a general contact form' },
