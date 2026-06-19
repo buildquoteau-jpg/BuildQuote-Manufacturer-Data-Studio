@@ -53,7 +53,7 @@ export function WidgetManager({
   widget, selectedSystemIds: initialSelected, origin, buttonConfig: initialButtonConfig,
 }: Props) {
   const [selected,      setSelected]      = useState<Set<string>>(new Set(initialSelected))
-  const [btnConfig,     setBtnConfig]     = useState<ButtonConfig>(initialButtonConfig ?? DEFAULT_BUTTON_CONFIG)
+  const [btnConfig,     setBtnConfig]     = useState<ButtonConfig>({ ...DEFAULT_BUTTON_CONFIG, ...(initialButtonConfig ?? {}) })
   const [copied,        setCopied]        = useState(false)
   const [saving,        setSaving]        = useState(false)
   const [saveMsg,       setSaveMsg]       = useState<string | null>(null)
