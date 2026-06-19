@@ -2,6 +2,7 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { VerificationGrid } from './VerificationGrid'
+import { CreateSystemButton } from './CreateSystemButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +70,7 @@ export default async function ManufacturerReviewPage() {
               {systems.length} system{systems.length !== 1 ? 's' : ''}
             </span>
           </div>
+          <CreateSystemButton manufacturerId={ctx.manufacturerId} />
         </div>
 
         <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 1rem', lineHeight: 1.65 }}>

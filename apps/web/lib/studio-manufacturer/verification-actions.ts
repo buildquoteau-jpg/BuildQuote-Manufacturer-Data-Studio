@@ -566,3 +566,27 @@ export async function submitForPublication(
 
   return { ok: true, batchId: batch.id, systemCount: toSubmit.length, newCount, updateCount }
 }
+
+// ─── createBlankSystem ────────────────────────────────────────────────────────
+// Inserts a new staged_system with a placeholder name for manual data entry.
+
+export async function createBlankSystem(
+  manufacturerId: string,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data, error } = await supabase
+    .from('staged_systems')
+    .insert({
+      manufacturer_id: manufacturerId,
+      name: 'New system',
+      verification_status: 'pending_review',
+    })
+    .select('id')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, id: data.id }
+}
