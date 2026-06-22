@@ -78,56 +78,60 @@ export async function StudioShell({ role, subtitle, workspaceName, notice, showP
   return (
     <div className="studio-page">
       <header className="studio-header">
-        <a href="/dashboard">BuildQuote Data Studio</a>
-        <span className={badge.className}>{badge.label}</span>
-        {workspaceName && (
-          <span
-            style={{
-              marginLeft: '0.75rem',
-              fontSize: '0.88rem',
-              fontWeight: 600,
-              color: 'var(--ds-header-text, #fff)',
-              opacity: 0.9,
-            }}
-          >
-            {workspaceName}
-            {subtitle && (
-              <span style={{ fontWeight: 400, opacity: 0.65, marginLeft: '0.4rem' }}>
-                — {subtitle}
-              </span>
-            )}
-          </span>
-        )}
-        {!workspaceName && subtitle && (
-          <span style={{ marginLeft: 'auto', fontSize: '0.85rem', opacity: 0.75 }}>
-            {subtitle}
-          </span>
-        )}
+        <div className="studio-inner">
+          <a href="/dashboard">BuildQuote Data Studio</a>
+          <span className={badge.className}>{badge.label}</span>
+          {workspaceName && (
+            <span
+              style={{
+                marginLeft: '0.75rem',
+                fontSize: '0.88rem',
+                fontWeight: 600,
+                color: 'var(--ds-header-text, #fff)',
+                opacity: 0.9,
+              }}
+            >
+              {workspaceName}
+              {subtitle && (
+                <span style={{ fontWeight: 400, opacity: 0.65, marginLeft: '0.4rem' }}>
+                  — {subtitle}
+                </span>
+              )}
+            </span>
+          )}
+          {!workspaceName && subtitle && (
+            <span style={{ marginLeft: 'auto', fontSize: '0.85rem', opacity: 0.75 }}>
+              {subtitle}
+            </span>
+          )}
+        </div>
       </header>
 
       <nav className="studio-nav">
-        {nav.map((item) => (
-          <a key={item.href} href={item.href}>
-            {item.label}
-          </a>
-        ))}
-        {/* Sign-out is a server action — form POST, no client JS needed */}
-        <form action={logout} style={{ marginLeft: 'auto' }}>
-          <button
-            type="submit"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 'inherit',
-              color: 'var(--ds-text-muted)',
-              padding: '0',
-              lineHeight: 'inherit',
-            }}
-          >
-            Sign out
-          </button>
-        </form>
+        <div className="studio-nav-inner">
+          {nav.map((item) => (
+            <a key={item.href} href={item.href}>
+              {item.label}
+            </a>
+          ))}
+          {/* Sign-out is a server action — form POST, no client JS needed */}
+          <form action={logout} style={{ marginLeft: 'auto' }}>
+            <button
+              type="submit"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 'inherit',
+                color: 'var(--ds-text-muted)',
+                padding: '0',
+                lineHeight: 'inherit',
+              }}
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </nav>
 
       <main className="studio-main">
