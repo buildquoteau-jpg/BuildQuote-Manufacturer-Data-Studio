@@ -1,6 +1,7 @@
 'use server'
 
 import { createStudioServerClient } from '@/lib/supabase/server'
+import { createStudioServiceClient } from '@/lib/supabase/service'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { createPresignedUploadUrl, createPresignedDownloadUrl } from '@/lib/r2'
 import { randomUUID } from 'crypto'
@@ -180,4 +181,79 @@ export async function getDocumentDownloadUrl(
   }
 
   return createPresignedDownloadUrl({ storageKey: row.storage_key })
+}
+
+// ─── Document lifecycle actions ───────────────────────────────────────────────
+// Archive, supersede, and delete use the service role to bypass RLS
+// (no UPDATE/DELETE policies exist on source_documents). Auth is enforced
+// manually via assertManufacturerAccess + manufacturer_id equality guard.
+
+export type DocumentActionResult = { ok: true } | { ok: false; error: string }
+
+function makeServiceClient() {
+  try {
+    return { ok: true as const, supabase: createStudioServiceClient() }
+  } catch {
+    return { ok: false as const, error: 'Service client not configured.' }
+  }
+}
+
+export async function archiveDocument(
+  documentId: string,
+  manufacturerId: string,
+): Promise<DocumentActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const c = makeServiceClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const { error } = await c.supabase
+    .from('source_documents')
+    .update({ status: 'archived' })
+    .eq('id', documentId)
+    .eq('manufacturer_id', manufacturerId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+export async function supersedeDocument(
+  documentId: string,
+  manufacturerId: string,
+): Promise<DocumentActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const c = makeServiceClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const { error } = await c.supabase
+    .from('source_documents')
+    .update({ status: 'superseded' })
+    .eq('id', documentId)
+    .eq('manufacturer_id', manufacturerId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+export async function deleteDocument(
+  documentId: string,
+  manufacturerId: string,
+): Promise<DocumentActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const c = makeServiceClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const { error } = await c.supabase
+    .from('source_documents')
+    .delete()
+    .eq('id', documentId)
+    .eq('manufacturer_id', manufacturerId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
 }
