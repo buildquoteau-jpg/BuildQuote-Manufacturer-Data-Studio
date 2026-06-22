@@ -1,0 +1,9 @@
+[project]
+name = "buildquote-data-studio-api"
+version = "0.1.0"
+description = "BuildQuote Data Studio API and pipeline service"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+]

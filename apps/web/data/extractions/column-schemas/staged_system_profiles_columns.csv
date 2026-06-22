@@ -1,0 +1,35 @@
+column,type,notes
+id,uuid,Primary key
+staged_system_id,uuid,FK → staged_systems
+name,text,Legacy name field
+profile_name,text,Display name for this variant
+product_code,text,SKU / catalogue number
+dimensions,text,Raw dimension string from source
+length_m,numeric,Legacy length field
+sheet_format,text,
+length_mm,numeric,
+width_mm,numeric,
+height_mm,numeric,
+thickness_mm,numeric,
+depth_mm,numeric,
+gauge_mm,numeric,Metal gauge / BMT
+diameter_mm,numeric,
+roll_m,numeric,Roll length in metres
+weight_kg,numeric,
+pieces,numeric,
+volume_ml,numeric,
+weight_g,numeric,
+pack_format,text,e.g. Box / Pallet / Bundle
+supplier_pack_qty,numeric,Units per manufacturer pack
+supplier_pack_uom,text,Unit name inside pack
+supplier_pack_note,text,Pack constraint or sell minimum
+bal_rating,text,Profile-specific BAL if different from system
+uom,text,Sell/quote unit — ea / sheet / roll / lm / m2 etc.
+image_url,text,Profile product image URL
+website_url,text,Manufacturer product page for this profile
+parser_notes,jsonb,Entity-level extraction notes from AI parser
+extracted_at,timestamptz,When AI parser extracted this record
+sort_order,integer,
+verification_status,text,pending_review | approved | rejected | needs_source_check | exported
+reviewer_notes,text,
+created_at,timestamptz,DB row insert time

@@ -1,0 +1,232 @@
+{
+  "components": [
+    {
+      "source_document_id": "a1b2c3d4-0000-0000-0000-000000000001",
+      "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+      "source_page_number": 7,
+      "sku": "TD042-NAT",
+      "name": "Trimdek 0.42 BMT Natural",
+      "description": "Corrugated steel roofing sheet, 0.42 BMT, Natural finish.",
+      "category": "Roofing Sheet",
+      "uom": "lm",
+      "length_mm": null,
+      "width_mm": 762,
+      "height_mm": null,
+      "thickness_mm": null,
+      "depth_mm": null,
+      "gauge_mm": 0.42,
+      "diameter_mm": null,
+      "roll_m": null,
+      "weight_kg": null,
+      "pieces": null,
+      "material": "Steel",
+      "finish": "Natural",
+      "colour": null,
+      "profile": "Corrugated",
+      "texture": null,
+      "coverage_m2": null,
+      "sort_order": null,
+      "extraction_confidence": 0.89,
+      "field_sources": [
+        {
+          "field_name": "sku",
+          "extracted_value": "TD042-NAT",
+          "source_page_number": 7,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.96
+        },
+        {
+          "field_name": "name",
+          "extracted_value": "Trimdek 0.42 BMT Natural",
+          "source_page_number": 7,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.93
+        },
+        {
+          "field_name": "uom",
+          "extracted_value": "lm",
+          "source_page_number": 7,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.85
+        },
+        {
+          "field_name": "width_mm",
+          "extracted_value": "762",
+          "source_page_number": 7,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.91
+        },
+        {
+          "field_name": "gauge_mm",
+          "extracted_value": "0.42",
+          "source_page_number": 7,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.94
+        },
+        {
+          "field_name": "material",
+          "extracted_value": "Steel",
+          "source_page_number": 7,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.90
+        }
+      ],
+      "parser_notes": [],
+      "uncertain_fields": [
+        "coverage_m2"
+      ]
+    },
+    {
+      "source_document_id": "a1b2c3d4-0000-0000-0000-000000000001",
+      "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+      "source_page_number": 8,
+      "sku": "TD-RW-150",
+      "name": "Trimdek Ridge Cap",
+      "description": "Pressed steel ridge cap for Trimdek profile.",
+      "category": "Flashings",
+      "uom": "lm",
+      "length_mm": 3000,
+      "width_mm": 150,
+      "height_mm": null,
+      "thickness_mm": null,
+      "depth_mm": null,
+      "gauge_mm": 0.42,
+      "diameter_mm": null,
+      "roll_m": null,
+      "weight_kg": null,
+      "pieces": null,
+      "material": "Steel",
+      "finish": null,
+      "colour": null,
+      "profile": null,
+      "texture": null,
+      "coverage_m2": null,
+      "sort_order": null,
+      "extraction_confidence": 0.83,
+      "field_sources": [
+        {
+          "field_name": "sku",
+          "extracted_value": "TD-RW-150",
+          "source_page_number": 8,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.92
+        },
+        {
+          "field_name": "name",
+          "extracted_value": "Trimdek Ridge Cap",
+          "source_page_number": 8,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.90
+        },
+        {
+          "field_name": "length_mm",
+          "extracted_value": "3000",
+          "source_page_number": 8,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.88
+        },
+        {
+          "field_name": "width_mm",
+          "extracted_value": "150",
+          "source_page_number": 8,
+          "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002",
+          "confidence": 0.87
+        }
+      ],
+      "parser_notes": [
+        "Width extracted from dimension string '150mm girth' — interpreted as width_mm."
+      ],
+      "uncertain_fields": [
+        "uom"
+      ]
+    }
+  ],
+  "system_components": [
+    {
+      "staged_system_match": {
+        "system_name": "Trimdek 0.42 BMT",
+        "product_code": "TD042"
+      },
+      "component_match": {
+        "sku": "TD042-NAT",
+        "name": "Trimdek 0.42 BMT Natural"
+      },
+      "role": "primary_cladding",
+      "notes": null,
+      "sort_order": 1,
+      "extraction_confidence": 0.88,
+      "source_page_number": 7,
+      "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002"
+    },
+    {
+      "staged_system_match": {
+        "system_name": "Trimdek 0.42 BMT",
+        "product_code": "TD042"
+      },
+      "component_match": {
+        "sku": "TD-RW-150",
+        "name": "Trimdek Ridge Cap"
+      },
+      "role": "accessory",
+      "notes": "Ridge cap listed as compatible accessory on page 8.",
+      "sort_order": 2,
+      "extraction_confidence": 0.79,
+      "source_page_number": 8,
+      "source_chunk_id": "c2c2c2c2-0000-0000-0000-000000000002"
+    }
+  ],
+  "system_colours": [
+    {
+      "system_match": {
+        "system_name": "Trimdek 0.42 BMT",
+        "product_code": "TD042"
+      },
+      "colour_name": "Colorbond Woodland Grey",
+      "sku": "TD042-WG",
+      "image_url": null,
+      "is_stocked": true,
+      "sort_order": 1,
+      "source_page_number": 9,
+      "source_chunk_id": "c3c3c3c3-0000-0000-0000-000000000003",
+      "extraction_confidence": 0.92
+    },
+    {
+      "system_match": {
+        "system_name": "Trimdek 0.42 BMT",
+        "product_code": "TD042"
+      },
+      "colour_name": "Colorbond Surfmist",
+      "sku": "TD042-SM",
+      "image_url": null,
+      "is_stocked": true,
+      "sort_order": 2,
+      "source_page_number": 9,
+      "source_chunk_id": "c3c3c3c3-0000-0000-0000-000000000003",
+      "extraction_confidence": 0.92
+    }
+  ],
+  "system_profiles": [
+    {
+      "system_match": {
+        "system_name": "Trimdek 0.42 BMT",
+        "product_code": "TD042"
+      },
+      "name": "Trimdek 762mm coverage",
+      "product_code": "TD042-762",
+      "dimensions": "762mm coverage, 28mm rib height",
+      "length_m": null,
+      "sheet_format": "Custom length",
+      "sort_order": 1,
+      "source_page_number": 5,
+      "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+      "extraction_confidence": 0.87
+    }
+  ],
+  "warnings": [
+    "Page 8 accessory table headings were ambiguous — uom for ridge cap inferred as lm but should be verified."
+  ],
+  "ignored_content_notes": [
+    "Pages 10–11 contain installation instructions — classified as installation_notes, not extracted as components.",
+    "Warranty section on page 12 ignored — not product data."
+  ]
+}

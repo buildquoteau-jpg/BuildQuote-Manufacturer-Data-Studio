@@ -1,0 +1,1 @@
+DELETE FROM data_studio_manufacturers WHERE slug = 'hume-doors';

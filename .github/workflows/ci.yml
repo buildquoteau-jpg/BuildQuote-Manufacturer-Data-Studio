@@ -1,0 +1,49 @@
+name: CI
+
+# Runs on every pull request and on pushes to the main branch.
+# Gate: type-check + unit tests + production build must all pass.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web (typecheck • test • build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter web typecheck
+
+      - name: Unit tests
+        run: pnpm --filter web test:run
+
+      - name: Build
+        run: pnpm --filter web build
+        env:
+          # Non-secret placeholders so module-load guards don't throw during build.
+          # Real values are supplied at runtime by the hosting platform.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key

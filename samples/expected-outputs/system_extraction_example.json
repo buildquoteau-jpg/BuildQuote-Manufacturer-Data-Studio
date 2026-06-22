@@ -1,0 +1,91 @@
+{
+  "systems": [
+    {
+      "source_document_id": "a1b2c3d4-0000-0000-0000-000000000001",
+      "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+      "source_page_number": 4,
+      "name": "Trimdek 0.42 BMT",
+      "product_code": "TD042",
+      "slug": "trimdek-0-42-bmt",
+      "category": "Roofing",
+      "subcategory": "Corrugated",
+      "description": "High-strength corrugated steel roofing and walling profile in 0.42 BMT steel.",
+      "dimensions": "762mm coverage, 0.42mm BMT",
+      "length_m": null,
+      "double_sided": false,
+      "sheet_format": "Custom length",
+      "fire_rating": null,
+      "acoustic_rating": null,
+      "moisture_resistant": true,
+      "structural_grade": "G550",
+      "install_guide_url": null,
+      "tech_data_url": null,
+      "sort_order": null,
+      "extraction_confidence": 0.91,
+      "field_sources": [
+        {
+          "field_name": "name",
+          "extracted_value": "Trimdek 0.42 BMT",
+          "source_page_number": 4,
+          "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+          "confidence": 0.95
+        },
+        {
+          "field_name": "product_code",
+          "extracted_value": "TD042",
+          "source_page_number": 4,
+          "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+          "confidence": 0.88
+        },
+        {
+          "field_name": "category",
+          "extracted_value": "Roofing",
+          "source_page_number": 4,
+          "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+          "confidence": 0.82
+        },
+        {
+          "field_name": "description",
+          "extracted_value": "High-strength corrugated steel roofing and walling profile in 0.42 BMT steel.",
+          "source_page_number": 4,
+          "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+          "confidence": 0.87
+        },
+        {
+          "field_name": "dimensions",
+          "extracted_value": "762mm coverage, 0.42mm BMT",
+          "source_page_number": 4,
+          "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+          "confidence": 0.93
+        },
+        {
+          "field_name": "moisture_resistant",
+          "extracted_value": "true",
+          "source_page_number": 4,
+          "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+          "confidence": 0.78
+        },
+        {
+          "field_name": "structural_grade",
+          "extracted_value": "G550",
+          "source_page_number": 4,
+          "source_chunk_id": "c1c1c1c1-0000-0000-0000-000000000001",
+          "confidence": 0.96
+        }
+      ],
+      "parser_notes": [
+        "Description extracted from product heading section — marketing sentences stripped."
+      ],
+      "uncertain_fields": [
+        "double_sided"
+      ]
+    }
+  ],
+  "warnings": [
+    "Page 4 contains mixed marketing and technical content — only technical content extracted."
+  ],
+  "ignored_content_notes": [
+    "Promotional tagline 'Built for Australian conditions' ignored — not a product specification.",
+    "Footer text on page 4 ignored — not product data."
+  ]
+}

@@ -1,0 +1,1 @@
+SELECT COUNT(*) FROM staged_systems WHERE notes LIKE '%' || chr(226) || '%';

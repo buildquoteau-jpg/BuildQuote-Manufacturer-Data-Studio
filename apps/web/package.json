@@ -1,0 +1,47 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "extract:local-pdf": "node scripts/extract-local-pdf.mjs",
+    "parser:bundle": "node scripts/create-parser-input-bundle.mjs",
+    "parser:ai-local": "tsx scripts/parser-ai-local.ts",
+    "parser:dry-run": "tsx scripts/parser-dry-run.ts",
+    "parser:insert-preview": "tsx scripts/parser-insert-preview.ts",
+    "parser:insert-local": "tsx scripts/parser-insert-local.ts",
+    "parser:verify-local-insert": "tsx scripts/parser-verify-local-insert.ts",
+    "parser:docling-chunks": "tsx scripts/docling-build-chunks.ts",
+    "parser:docling-parse": "tsx scripts/parse-docling-chunks.ts",
+    "import:csv": "tsx scripts/import-csv-to-staged.ts",
+    "import:images": "tsx scripts/fetch-system-images.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1063.0",
+    "@aws-sdk/s3-request-presigner": "^3.1063.0",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.105.4",
+    "csv-parse": "^6.2.1",
+    "next": "14.2.29",
+    "react": "^18",
+    "react-dom": "^18",
+    "resend": "^6.12.4"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.55.0",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "openai": "^6.37.0",
+    "pdf-parse": "^2.4.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}

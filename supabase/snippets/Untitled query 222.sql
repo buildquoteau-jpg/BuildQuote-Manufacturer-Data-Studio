@@ -1,0 +1,1 @@
+SELECT COUNT(*) FROM staged_components WHERE description LIKE '%' || chr(226) || '%';
