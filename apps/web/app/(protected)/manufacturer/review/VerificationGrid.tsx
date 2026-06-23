@@ -20,6 +20,9 @@ import {
   getManufacturerComponents,
   linkExistingComponent,
   updateSystemImageCrop,
+  createBlankSystem,
+  linkSourceDocument,
+  getManufacturerSourceDocuments,
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
 import { SubmitForPublication } from './SubmitForPublication'
@@ -62,6 +65,9 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
   const isInReview = system.verification_status === 'in_review'
   const isLive = !!system.production_system_id && !!system.last_published_at
 
+  // Live system that was re-opened for editing — needs re-verify before re-publish
+  const isLiveInReview = isLive && isInReview
+
   // Unsent edits — verified but updated_at is newer than last_submitted_at
   const hasUpdateReady = isLive && isVerified && (
     !system.last_submitted_at || new Date(system.updated_at) > new Date(system.last_submitted_at)
@@ -76,21 +82,25 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
 
   const statusLabel = hasUpdateReady ? 'Update ready'
     : isSubmitted ? 'Submitted'
+    : isLiveInReview ? 'Editing (live)'
     : isVerified ? 'Verified'
     : isInReview ? 'In review'
     : 'Not started'
   const statusColor = hasUpdateReady ? '#b45309'
     : isSubmitted ? '#2563eb'
+    : isLiveInReview ? '#b45309'
     : isVerified ? '#16a34a'
     : isInReview ? '#d97706'
     : '#9ca3af'
   const statusBg    = hasUpdateReady ? '#fffbeb'
     : isSubmitted ? '#eff6ff'
+    : isLiveInReview ? '#fffbeb'
     : isVerified ? '#f0fdf4'
     : isInReview ? '#fffbeb'
     : '#f9fafb'
   const statusBorder = hasUpdateReady ? '#fde68a'
     : isSubmitted ? '#bfdbfe'
+    : isLiveInReview ? '#fde68a'
     : isVerified ? '#bbf7d0'
     : isInReview ? '#fde68a'
     : '#e5e7eb'
@@ -104,7 +114,7 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
       style={{
         display: 'flex', flexDirection: 'column', textAlign: 'left', width: '100%',
         background: '#ffffff',
-        border: hasUpdateReady ? '1.5px solid #f59e0b' : isSubmitted ? '1.5px solid #3b82f6' : isVerified ? '1.5px solid #16a34a' : hovered ? '1.5px solid #185D7A' : '1px solid #d1d5db',
+        border: hasUpdateReady ? '1.5px solid #f59e0b' : isLiveInReview ? '1.5px solid #f59e0b' : isSubmitted ? '1.5px solid #3b82f6' : isVerified ? '1.5px solid #16a34a' : hovered ? '1.5px solid #185D7A' : '1px solid #d1d5db',
         borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
         boxShadow: hovered ? '0 8px 28px rgba(24,93,122,0.15)' : '0 2px 8px rgba(0,0,0,0.06)',
         transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
@@ -136,11 +146,11 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
           <span style={{
             position: 'absolute', top: '10px', right: '10px',
             fontSize: '10px', fontWeight: 700,
-            background: hasUpdateReady ? '#f59e0b' : isSubmitted ? '#3b82f6' : isLive ? '#0d9488' : '#16a34a',
+            background: hasUpdateReady ? '#f59e0b' : isLiveInReview ? '#f59e0b' : isSubmitted ? '#3b82f6' : isLive ? '#0d9488' : '#16a34a',
             color: '#fff',
             padding: '3px 8px', borderRadius: '20px',
           }}>
-            {hasUpdateReady ? '↑ Update ready' : isSubmitted ? '● Submitted' : isLive ? '● Live' : 'Verified'}
+            {hasUpdateReady ? '↑ Update ready' : isLiveInReview ? '✎ Editing' : isSubmitted ? '● Submitted' : isLive ? '● Live' : 'Verified'}
           </span>
         )}
       </div>
@@ -175,7 +185,7 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
           )}
         </div>
         <span style={{ fontSize: '11px', color: '#185D7A', fontWeight: 600 }}>
-          {isVerified ? (hasUpdateReady ? 'Review →' : 'Re-open →') : 'Open to verify →'}
+          {isVerified ? (hasUpdateReady ? 'Review →' : 'Open to make changes →') : 'Open to verify →'}
         </span>
       </div>
     </button>
@@ -1305,6 +1315,118 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   )
 }
 
+// ─── Source document picker ────────────────────────────────────────────────────
+
+type SourceDoc = { id: string; document_name: string; document_type: string | null; document_date: string | null }
+
+function SourceDocumentPicker({
+  systemId, manufacturerId, docId, onLinked,
+}: {
+  systemId: string
+  manufacturerId: string
+  docId: string | null
+  onLinked: (newDocId: string | null) => void
+}) {
+  const [open, setOpen]           = useState(false)
+  const [docs, setDocs]           = useState<SourceDoc[]>([])
+  const [docsLoading, setDocsLoading] = useState(false)
+  const [linked, setLinked]       = useState(docId)
+  const [linkedName, setLinkedName] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  const [err, setErr]             = useState<string | null>(null)
+
+  function handleOpenPicker() {
+    setOpen(true)
+    if (docs.length === 0) {
+      setDocsLoading(true)
+      getManufacturerSourceDocuments(manufacturerId).then(res => {
+        if (res.ok) {
+          setDocs(res.documents)
+          if (linked) {
+            const found = res.documents.find(d => d.id === linked)
+            if (found) setLinkedName(found.document_name)
+          }
+        }
+        setDocsLoading(false)
+      })
+    }
+  }
+
+  function handleSelect(docId: string) {
+    setErr(null)
+    startTransition(async () => {
+      const res = await linkSourceDocument(systemId, manufacturerId, docId)
+      if (!res.ok) { setErr(res.error); return }
+      const docName = docs.find(d => d.id === docId)?.document_name ?? null
+      setLinked(docId)
+      setLinkedName(docName)
+      onLinked(docId)
+      setOpen(false)
+    })
+  }
+
+  return (
+    <div style={{ borderRadius: '8px', border: linked ? '1px solid #d1d5db' : '1.5px solid #f59e0b', background: linked ? '#f9fafb' : '#fffbeb', padding: '10px 12px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
+        Source document
+        {!linked && <span style={{ marginLeft: '6px', color: '#b45309', fontWeight: 700 }}>REQUIRED FOR PUBLISH</span>}
+      </div>
+      {linked ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <span style={{ fontSize: '12px', color: '#374151' }}>
+            {linkedName ?? 'Document linked ✓'}
+          </span>
+          <button type="button" onClick={handleOpenPicker}
+            style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer', flexShrink: 0 }}>
+            Change
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '12px', color: '#b45309' }}>No source document linked — required before publishing.</span>
+          <button type="button" onClick={handleOpenPicker}
+            style={{ padding: '4px 12px', borderRadius: '6px', background: '#d97706', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+            Link document
+          </button>
+        </div>
+      )}
+      {open && (
+        <div style={{ marginTop: '10px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }}>
+          {docsLoading ? (
+            <div style={{ fontSize: '12px', color: '#9ca3af' }}>Loading documents…</div>
+          ) : docs.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+              No documents uploaded yet — go to Documents to upload a catalogue first.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+              {docs.map(doc => (
+                <button key={doc.id} type="button" onClick={() => handleSelect(doc.id)} disabled={pending}
+                  style={{
+                    textAlign: 'left', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer',
+                    border: `1.5px solid ${linked === doc.id ? '#d97706' : '#e5e7eb'}`,
+                    background: linked === doc.id ? '#fef3c7' : '#fff',
+                    opacity: pending ? 0.5 : 1,
+                  }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{doc.document_name}</div>
+                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '1px' }}>
+                    {[doc.document_type, doc.document_date].filter(Boolean).join(' · ')}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {err && <div style={{ marginTop: '6px', fontSize: '11px', color: '#dc2626' }}>{err}</div>}
+          <button type="button" onClick={() => setOpen(false)}
+            style={{ marginTop: '8px', padding: '4px 10px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Expanded card view (modal) ───────────────────────────────────────────────
 
 function ExpandedCardView({
@@ -1572,6 +1694,32 @@ function ExpandedCardView({
 
           {/* Right: field editor */}
           <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '20px' }}>
+
+            {/* Verified banner — prominent CTA at top */}
+            {isVerified && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+                padding: '14px 16px', marginBottom: '20px',
+                background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px',
+              }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#16a34a' }}>System verified ✓</div>
+                  <div style={{ fontSize: '12px', color: '#374151', marginTop: '2px' }}>
+                    Fields are locked. Click to reopen and make changes.
+                  </div>
+                </div>
+                <button onClick={handleReopen} disabled={verifyPending}
+                  style={{
+                    padding: '8px 18px', borderRadius: '6px', border: '1.5px solid #374151',
+                    background: '#fff', color: '#374151', fontSize: '13px', fontWeight: 700,
+                    cursor: verifyPending ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                    opacity: verifyPending ? 0.5 : 1, flexShrink: 0,
+                  }}>
+                  Open to make changes
+                </button>
+              </div>
+            )}
+
             <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '16px' }}>
               Verify each field — tick if correct, edit if wrong, flag if unsure
             </div>
@@ -1747,6 +1895,16 @@ function ExpandedCardView({
               </div>
             </FieldSection>
 
+            {/* Source document */}
+            <FieldSection label="Source document">
+              <SourceDocumentPicker
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                docId={system.source_document_id}
+                onLinked={(newDocId) => setSystem(prev => ({ ...prev, source_document_id: newDocId }))}
+              />
+            </FieldSection>
+
             <div style={{ height: 1, background: '#e2e8f0', margin: '20px 0' }} />
 
             {/* Verify footer */}
@@ -1814,6 +1972,52 @@ export function VerificationGrid({
 }) {
   const [systems,    setSystems]    = useState(initialSystems)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [creating,   startCreateTransition] = useTransition()
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  function handleCreateSystem() {
+    setCreateError(null)
+    startCreateTransition(async () => {
+      const res = await createBlankSystem(manufacturerId)
+      if (!res.ok) { setCreateError(res.error); return }
+      const blankSystem: VerificationSystem = {
+        id: res.id,
+        name: 'New system',
+        product_code: null,
+        category: null,
+        subcategory: null,
+        description: null,
+        hero_image_url: null,
+        hero_image_position_x: null,
+        hero_image_position_y: null,
+        australian_made: null,
+        bal_rating: null,
+        fire_rating: null,
+        acoustic_rating: null,
+        moisture_resistant: null,
+        structural_grade: null,
+        website_url: null,
+        source_url: null,
+        source_document_id: null,
+        install_guide_urls: null,
+        design_guide_url: null,
+        tech_data_url: null,
+        notes: null,
+        verification_status: 'pending_review',
+        reviewer_notes: null,
+        verified_at: null,
+        production_system_id: null,
+        last_published_at: null,
+        updated_at: new Date().toISOString(),
+        last_submitted_at: null,
+        profiles: [],
+        components: [],
+        colours: [],
+      }
+      setSystems(prev => [blankSystem, ...prev])
+      setExpandedId(res.id)
+    })
+  }
 
   const expandedSystem = systems.find(s => s.id === expandedId) ?? null
 
@@ -1869,6 +2073,35 @@ export function VerificationGrid({
         @media (min-width: 900px)  { .vgrid { grid-template-columns: repeat(3, 1fr); } }
         @media (min-width: 1280px) { .vgrid { grid-template-columns: repeat(4, 1fr); } }
       `}</style>
+
+      {/* Create system button */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+        {createError && <span style={{ fontSize: '11px', color: '#dc2626' }}>{createError}</span>}
+        <button
+          type="button"
+          onClick={handleCreateSystem}
+          disabled={creating}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '7px 16px', borderRadius: '8px',
+            border: '1.5px solid #185D7A',
+            background: '#fff', color: '#185D7A',
+            fontSize: '13px', fontWeight: 700,
+            cursor: creating ? 'default' : 'pointer',
+            opacity: creating ? 0.6 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span style={{ fontSize: '16px', lineHeight: 1, marginTop: '-1px' }}>+</span>
+          {creating ? 'Creating…' : 'Create a system'}
+        </button>
+      </div>
+
+      {systems.length === 0 && (
+        <div className="studio-info" style={{ marginTop: '8px' }}>
+          No systems yet. Use the button above to create one, or ask BuildQuote admin to run the parser on your catalogue.
+        </div>
+      )}
 
       {unverified.length > 0 && (
         <div className="vgrid" style={{ marginBottom: verified.length > 0 ? '28px' : 0 }}>

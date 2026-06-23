@@ -567,6 +567,48 @@ export async function submitForPublication(
   return { ok: true, batchId: batch.id, systemCount: toSubmit.length, newCount, updateCount }
 }
 
+// ─── getManufacturerSourceDocuments ──────────────────────────────────────────
+// Lists source documents for this manufacturer so the user can pick one to link.
+
+export async function getManufacturerSourceDocuments(
+  manufacturerId: string,
+): Promise<{ ok: true; documents: { id: string; document_name: string; document_type: string | null; document_date: string | null }[] } | { ok: false; error: string }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data, error } = await supabase
+    .from('source_documents')
+    .select('id, document_name, document_type, document_date')
+    .eq('manufacturer_id', manufacturerId)
+    .order('uploaded_at', { ascending: false })
+    .limit(50)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, documents: (data ?? []) as { id: string; document_name: string; document_type: string | null; document_date: string | null }[] }
+}
+
+// ─── linkSourceDocument ───────────────────────────────────────────────────────
+// Attaches (or detaches) a source_document to a staged_system.
+
+export async function linkSourceDocument(
+  systemId: string,
+  manufacturerId: string,
+  documentId: string | null,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ source_document_id: documentId, updated_at: new Date().toISOString() })
+    .eq('id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 // ─── createBlankSystem ────────────────────────────────────────────────────────
 // Inserts a new staged_system with a placeholder name for manual data entry.
 

@@ -2,7 +2,6 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { VerificationGrid } from './VerificationGrid'
-import { CreateSystemButton } from './CreateSystemButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,14 +62,13 @@ export default async function ManufacturerReviewPage() {
       `}</style>
       {/* Header */}
       <div style={{ marginBottom: '1.75rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <div style={{ marginBottom: '0.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem' }}>
             <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Verify your systems</h1>
             <span style={{ fontSize: '0.82rem', color: 'var(--ds-text-faint)' }}>
               {systems.length} system{systems.length !== 1 ? 's' : ''}
             </span>
           </div>
-          <CreateSystemButton manufacturerId={ctx.manufacturerId} />
         </div>
 
         <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 1rem', lineHeight: 1.65 }}>
@@ -129,17 +127,11 @@ export default async function ManufacturerReviewPage() {
         )}
       </div>
 
-      {systems.length === 0 ? (
-        <div className="studio-info">
-          No staged systems found for your workspace yet. Contact BuildQuote admin if you expect to see systems here.
-        </div>
-      ) : (
-        <VerificationGrid
-          manufacturerId={ctx.manufacturerId}
-          manufacturerName={manufacturer.name}
-          systems={systems}
-        />
-      )}
+      <VerificationGrid
+        manufacturerId={ctx.manufacturerId}
+        manufacturerName={manufacturer.name}
+        systems={systems}
+      />
     </StudioShell>
   )
 }
