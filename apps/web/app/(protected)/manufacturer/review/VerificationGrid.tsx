@@ -1499,11 +1499,11 @@ function ExpandedCardView({
   return (
     <>
       {/* Backdrop */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100, backdropFilter: 'blur(2px)' }} />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 10000, backdropFilter: 'blur(2px)' }} />
 
       {/* Modal */}
       <div style={{
-        position: 'fixed', inset: '16px', zIndex: 101,
+        position: 'fixed', inset: '16px', zIndex: 10001,
         background: '#f8fafc', borderRadius: '16px',
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 24px 80px rgba(0,0,0,0.3)', overflow: 'hidden',
