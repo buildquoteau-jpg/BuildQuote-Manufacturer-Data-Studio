@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 import { createProductionServiceClient } from '@/lib/supabase/production'
 
@@ -98,7 +99,7 @@ export type WidgetData = {
   systems: WidgetSystem[]
 }
 
-export async function getWidgetData(token: string): Promise<WidgetData | null> {
+async function fetchWidgetData(token: string): Promise<WidgetData | null> {
   // Config lookups stay on data-studio (service role, server-side only).
   // System content is read from production — only published systems have a
   // production_system_id, so unpublished data is silently excluded.
@@ -232,3 +233,9 @@ export async function getWidgetData(token: string): Promise<WidgetData | null> {
 
   return { id: w.id, manufacturer, systems }
 }
+
+export const getWidgetData = unstable_cache(
+  fetchWidgetData,
+  ['widget-data'],
+  { revalidate: 3600, tags: ['widget-data'] },
+)

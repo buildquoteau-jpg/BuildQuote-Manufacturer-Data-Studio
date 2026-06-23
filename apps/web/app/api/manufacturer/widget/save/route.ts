@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest } from '@/lib/studio-manufacturer/workspace'
 import { createStudioServiceClient } from '@/lib/supabase/service'
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
         .eq('id', manufacturer_id)
     }
 
+    revalidateTag('widget-data')
     return NextResponse.json({ ok: true, widget_id: resolvedWidgetId })
   } catch (err) {
     console.error('Widget save error:', err)

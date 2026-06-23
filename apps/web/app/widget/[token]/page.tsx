@@ -3,8 +3,6 @@ import { notFound } from 'next/navigation'
 import { ManufacturerHero } from './ManufacturerHero'
 import { WidgetClient } from './WidgetClient'
 
-export const dynamic = 'force-dynamic'
-
 export default async function WidgetPage({
   params,
 }: {
