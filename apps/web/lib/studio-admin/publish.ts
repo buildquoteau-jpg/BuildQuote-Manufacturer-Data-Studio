@@ -49,6 +49,11 @@ export type PublishItemResult = {
   colours: { id: string; action: EntityAction }[]
   components: { id: string; name: string; action: EntityAction }[]
   error: string | null
+  // Rich preview fields
+  category: string | null
+  description: string | null
+  heroImageUrl: string | null
+  hasSourceDoc: boolean
 }
 
 export type PublishBatchResult = {
@@ -256,6 +261,13 @@ export async function publishSystem(
     return blankResult(systemId, `Could not load system: ${sysErr?.message ?? 'not found'}`)
   }
 
+  const richExtra = {
+    category: sys.category,
+    description: sys.description,
+    heroImageUrl: sys.hero_image_url,
+    hasSourceDoc: !!sys.source_document_id,
+  }
+
   try {
     const { productionManufacturerId, action: manufacturerAction } =
       await publishManufacturer(ds, prod, sys.manufacturer_id, dryRun)
@@ -342,17 +354,20 @@ export async function publishSystem(
       colours,
       components,
       error: null,
+      ...richExtra,
     }
   } catch (e) {
-    return blankResult(systemId, e instanceof Error ? e.message : String(e), sys.name)
+    return blankResult(systemId, e instanceof Error ? e.message : String(e), sys.name, richExtra)
   }
 }
 
-function blankResult(systemId: string, error: string, systemName = '(unknown)'): PublishItemResult {
+function blankResult(systemId: string, error: string, systemName = '(unknown)', extra?: Partial<PublishItemResult>): PublishItemResult {
   return {
     ok: false, systemId, systemName, systemAction: 'skipped', productionSystemId: null,
     manufacturerAction: 'skipped', catalogueSourceAction: 'skipped',
     profiles: [], colours: [], components: [], error,
+    category: null, description: null, heroImageUrl: null, hasSourceDoc: false,
+    ...extra,
   }
 }
 

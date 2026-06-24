@@ -16,6 +16,15 @@ async function assertBuildquoteStaff(): Promise<{ allowed: true } | { allowed: f
 // ─── getPendingPublishBatches ───────────────────────────────────────────────
 // Admin queue — every batch not yet fully published, newest first.
 
+export type BatchSystem = {
+  id: string
+  name: string
+  category: string | null
+  hero_image_url: string | null
+  change_type: string
+  item_status: string
+}
+
 export type PendingBatch = {
   id: string
   manufacturer_id: string
@@ -26,6 +35,7 @@ export type PendingBatch = {
   new_count: number
   update_count: number
   failed_count: number
+  systems: BatchSystem[]
 }
 
 export async function getPendingPublishBatches(): Promise<
@@ -55,12 +65,21 @@ export async function getPendingPublishBatches(): Promise<
   const batchIds = batches.map((b) => b.id)
   const { data: items, error: itemsErr } = await supabase
     .from('publish_batch_items')
-    .select('publish_batch_id, change_type, status')
+    .select('publish_batch_id, entity_id, change_type, status')
     .in('publish_batch_id', batchIds)
   if (itemsErr) return { ok: false, error: itemsErr.message }
 
+  // Fetch staged system details for rich display
+  const systemIds = Array.from(new Set((items ?? []).map((i) => i.entity_id).filter(Boolean)))
+  const { data: stagedSystems } = await supabase
+    .from('staged_systems')
+    .select('id, name, category, hero_image_url')
+    .in('id', systemIds)
+  const sysById = new Map((stagedSystems ?? []).map((s) => [s.id as string, s as { id: string; name: string; category: string | null; hero_image_url: string | null }]))
+
   const result: PendingBatch[] = batches.map((b) => {
     const ownItems = (items ?? []).filter((i) => i.publish_batch_id === b.id)
+    const pendingItems = ownItems.filter((i) => i.status !== 'migrated_to_production')
     return {
       id: b.id,
       manufacturer_id: b.manufacturer_id,
@@ -68,9 +87,20 @@ export async function getPendingPublishBatches(): Promise<
       status: b.status,
       notes: b.notes,
       created_at: b.created_at,
-      new_count: ownItems.filter((i) => i.change_type === 'new' && i.status !== 'migrated_to_production').length,
-      update_count: ownItems.filter((i) => i.change_type === 'update' && i.status !== 'migrated_to_production').length,
+      new_count: pendingItems.filter((i) => i.change_type === 'new').length,
+      update_count: pendingItems.filter((i) => i.change_type === 'update').length,
       failed_count: ownItems.filter((i) => i.status === 'failed').length,
+      systems: pendingItems.map((i) => {
+        const sys = sysById.get(i.entity_id)
+        return {
+          id: i.entity_id,
+          name: sys?.name ?? 'Unknown system',
+          category: sys?.category ?? null,
+          hero_image_url: sys?.hero_image_url ?? null,
+          change_type: i.change_type,
+          item_status: i.status,
+        }
+      }),
     }
   })
 
