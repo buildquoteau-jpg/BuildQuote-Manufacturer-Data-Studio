@@ -275,7 +275,7 @@ export async function publishSystem(
     const systemPayload = {
       manufacturer_id: productionManufacturerId,
       name: sys.name,
-      product_code: sys.product_code,
+      product_code: sys.product_code ?? slug,
       slug,
       category: sys.category,
       subcategory: sys.subcategory,
