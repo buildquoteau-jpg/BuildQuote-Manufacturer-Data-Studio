@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest } from '@/lib/studio-manufacturer/workspace'
 import { createStudioServiceClient } from '@/lib/supabase/service'
+import { createProductionServiceClient } from '@/lib/supabase/production'
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +13,6 @@ export async function POST(req: NextRequest) {
 
     const { manufacturer_id, widget_id, system_ids, button_config } = await req.json()
 
-    // Guard: ensure the manufacturer_id matches the session
     if (manufacturer_id !== ctx.manufacturerId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -21,10 +21,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'system_ids must be an array' }, { status: 400 })
     }
 
-    // Use service role so admin-impersonation works (auth.uid() is admin, not manufacturer user)
-    const sb = createStudioServiceClient()
+    const sb   = createStudioServiceClient()
+    const prod = createProductionServiceClient()
 
-    // Validate: all provided system_ids must belong to this manufacturer and be approved/live
+    // Validate systems against staged_systems and collect production IDs in order
+    let productionSystemIds: string[] = []
     if (system_ids.length > 0) {
       const { data: systems } = await sb
         .from('staged_systems')
@@ -32,25 +33,49 @@ export async function POST(req: NextRequest) {
         .eq('manufacturer_id', manufacturer_id)
         .in('id', system_ids)
 
-      const valid = new Set(
-        ((systems ?? []) as any[])
-          .filter((s: any) => s.verification_status === 'approved' || s.production_system_id)
-          .map((s: any) => s.id)
-      )
+      const rows = (systems ?? []) as { id: string; verification_status: string | null; production_system_id: string | null }[]
 
-      const invalid = system_ids.filter(id => !valid.has(id))
+      const invalid = system_ids.filter(id => {
+        const s = rows.find(r => r.id === id)
+        return !s || (s.verification_status !== 'approved' && !s.production_system_id)
+      })
       if (invalid.length > 0) {
         return NextResponse.json({ error: 'Some systems are not approved' }, { status: 400 })
       }
+
+      // Map staged IDs → production IDs, preserving the requested sort order
+      productionSystemIds = system_ids
+        .map(id => rows.find(r => r.id === id)?.production_system_id)
+        .filter((id): id is string => id != null)
     }
 
     let resolvedWidgetId = widget_id as string | null
 
-    // Create widget if it doesn't exist yet
     if (!resolvedWidgetId) {
-      const { data: newWidget, error: createErr } = await sb
-        .from('manufacturer_embed_widgets')
-        .insert({ manufacturer_id, status: 'active' })
+      // Bridge data-studio manufacturer → production manufacturer via slug
+      const { data: mfrRow } = await sb
+        .from('data_studio_manufacturers')
+        .select('slug')
+        .eq('id', manufacturer_id)
+        .single()
+
+      if (!mfrRow?.slug) {
+        return NextResponse.json({ error: 'Manufacturer not found' }, { status: 404 })
+      }
+
+      const { data: prodMfr } = await prod
+        .from('manufacturers')
+        .select('id')
+        .eq('slug', (mfrRow as any).slug)
+        .single()
+
+      if (!prodMfr) {
+        return NextResponse.json({ error: 'Manufacturer not yet published to production' }, { status: 400 })
+      }
+
+      const { data: newWidget, error: createErr } = await prod
+        .from('embed_widgets')
+        .insert({ manufacturer_id: (prodMfr as any).id, status: 'active', widget_button_config: button_config ?? null })
         .select('id')
         .single()
 
@@ -59,37 +84,34 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Failed to create widget' }, { status: 500 })
       }
       resolvedWidgetId = (newWidget as any).id
+    } else if (button_config && typeof button_config === 'object') {
+      await prod
+        .from('embed_widgets')
+        .update({ widget_button_config: button_config })
+        .eq('id', resolvedWidgetId)
     }
 
-    // Replace widget systems: delete existing, insert new
-    await sb
-      .from('manufacturer_embed_widget_systems')
+    // Replace widget systems: delete existing, insert new with production system IDs
+    await prod
+      .from('embed_widget_systems')
       .delete()
       .eq('embed_widget_id', resolvedWidgetId)
 
-    if (system_ids.length > 0) {
-      const rows = system_ids.map((id: string, i: number) => ({
-        embed_widget_id:  resolvedWidgetId,
-        staged_system_id: id,
-        sort_order:       i,
-      }))
-
-      const { error: insertErr } = await sb
-        .from('manufacturer_embed_widget_systems')
-        .insert(rows)
+    if (productionSystemIds.length > 0) {
+      const { error: insertErr } = await prod
+        .from('embed_widget_systems')
+        .insert(
+          productionSystemIds.map((id, i) => ({
+            embed_widget_id: resolvedWidgetId,
+            system_id:       id,
+            sort_order:      i,
+          }))
+        )
 
       if (insertErr) {
         console.error('Widget systems insert error:', insertErr)
         return NextResponse.json({ error: 'Failed to save systems' }, { status: 500 })
       }
-    }
-
-    // Save button config to manufacturer (global setting)
-    if (button_config && typeof button_config === 'object') {
-      await sb
-        .from('data_studio_manufacturers')
-        .update({ widget_button_config: button_config })
-        .eq('id', manufacturer_id)
     }
 
     revalidateTag('widget-data')

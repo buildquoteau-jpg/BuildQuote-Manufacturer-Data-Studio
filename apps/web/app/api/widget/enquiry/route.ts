@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createStudioServerClient } from '@/lib/supabase/server'
+import { createProductionServiceClient } from '@/lib/supabase/production'
 import { getRfqServerClient } from '@/lib/supabase/rfq-server'
 
 export async function POST(req: NextRequest) {
@@ -11,12 +11,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const studio = createStudioServerClient()
+    const prod = createProductionServiceClient()
 
-    // Validate the widget token
-    const { data: widget } = await studio
-      .from('manufacturer_embed_widgets')
-      .select('id, manufacturer_id')
+    // Validate token and fetch manufacturer name in one query
+    const { data: widget } = await prod
+      .from('embed_widgets')
+      .select('id, manufacturers(name)')
       .eq('public_token', token)
       .eq('status', 'active')
       .single()
@@ -25,22 +25,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid widget token' }, { status: 403 })
     }
 
-    // system_id is already a production ID (getWidgetData now returns production IDs)
-    const productionSystemId: string | null = system_id ?? null
+    const manufacturerName = (widget as any).manufacturers?.name ?? null
 
-    // Fetch manufacturer name for supplier_name field
-    const { data: mfr } = await studio
-      .from('data_studio_manufacturers')
-      .select('name')
-      .eq('id', (widget as any).manufacturer_id)
-      .single()
-    const manufacturerName = (mfr as any)?.name ?? null
-
-    // Write to RFQ Supabase
     const rfq = getRfqServerClient()
     const { error } = await rfq.from('rfq_enquiries').insert({
       widget_id:     null,
-      system_id:     productionSystemId,
+      system_id:     system_id ?? null,
       system_name:   system_name ?? null,
       product_code:  product_code ?? null,
       supplier_name: manufacturerName,

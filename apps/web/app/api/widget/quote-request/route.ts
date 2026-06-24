@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createStudioServiceClient } from '@/lib/supabase/service'
+import { createProductionServiceClient } from '@/lib/supabase/production'
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? 'rfq@buildquote.com.au'
 
@@ -345,11 +346,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    const prod   = createProductionServiceClient()
     const studio = createStudioServiceClient()
 
-    const { data: widget } = await studio
-      .from('manufacturer_embed_widgets')
-      .select('id, manufacturer_id')
+    // Validate token in production, get manufacturer name + slug in one query
+    const { data: widget } = await prod
+      .from('embed_widgets')
+      .select('id, manufacturers(name, slug)')
       .eq('public_token', token)
       .eq('status', 'active')
       .single()
@@ -358,10 +361,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid widget token' }, { status: 403 })
     }
 
-    const [insertResult, mfrResult, muResult] = await Promise.all([
+    const manufacturerName = (widget as any).manufacturers?.name ?? 'the manufacturer'
+    const manufacturerSlug = (widget as any).manufacturers?.slug as string | null
+
+    // Bridge to data_studio via slug to get manufacturer_id for the studio inbox
+    const { data: mfrRow } = manufacturerSlug
+      ? await studio.from('data_studio_manufacturers').select('id').eq('slug', manufacturerSlug).single()
+      : { data: null }
+    const dataStudioManufacturerId = (mfrRow as any)?.id ?? null
+
+    // Insert quote request + look up manufacturer user in parallel
+    const [insertResult, muResult] = await Promise.all([
       studio.from('widget_quote_requests').insert({
-        manufacturer_id: widget.manufacturer_id,
-        widget_id:       widget.id,
+        manufacturer_id: dataStudioManufacturerId,
+        widget_id:       null,
         system_id,
         system_name:     system_name ?? null,
         selected_items:  Array.isArray(selected_items) ? selected_items : [],
@@ -374,17 +387,9 @@ export async function POST(req: NextRequest) {
         message:         message ?? null,
         status:          'new',
       }),
-      studio
-        .from('data_studio_manufacturers')
-        .select('name')
-        .eq('id', widget.manufacturer_id)
-        .single(),
-      studio
-        .from('manufacturer_users')
-        .select('auth_user_id')
-        .eq('manufacturer_id', widget.manufacturer_id)
-        .limit(1)
-        .maybeSingle(),
+      dataStudioManufacturerId
+        ? studio.from('manufacturer_users').select('auth_user_id').eq('manufacturer_id', dataStudioManufacturerId).limit(1).maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
 
     if (insertResult.error) {
@@ -392,19 +397,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to submit quote request' }, { status: 500 })
     }
 
-    const manufacturerName = mfrResult.data?.name ?? 'the manufacturer'
-
     // Resolve manufacturer email from user profile
     let manufacturerEmail: string | null = null
-    if (muResult.data?.auth_user_id) {
+    if ((muResult as any).data?.auth_user_id) {
       const { data: profile } = await studio
         .from('data_studio_user_profiles')
         .select('company_email_primary, email')
-        .eq('auth_user_id', muResult.data.auth_user_id)
+        .eq('auth_user_id', (muResult as any).data.auth_user_id)
         .maybeSingle()
       manufacturerEmail = profile?.company_email_primary ?? profile?.email ?? null
     }
-    console.log('manufacturer email resolved:', manufacturerEmail)
     const items             = (Array.isArray(selected_items) ? selected_items : []) as SelectedItem[]
     const systemName        = system_name ?? system_id
 
