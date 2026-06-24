@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { previewPublishBatch, runPublishBatch, type PendingBatch, type BatchSystem } from '@/lib/studio-admin/publish-actions'
+import { previewPublishBatch, runPublishBatch, dismissPublishBatch, type PendingBatch, type BatchSystem } from '@/lib/studio-admin/publish-actions'
 import type { PublishBatchResult, PublishItemResult } from '@/lib/studio-admin/publish'
 
 const CHANGE_COLOR: Record<string, { bg: string; color: string }> = {
@@ -149,11 +149,20 @@ function ResultSummary({ result }: { result: PublishBatchResult }) {
 
 // ─── Batch card ────────────────────────────────────────────────────────────────
 
-function BatchCard({ batch }: { batch: PendingBatch }) {
+function BatchCard({ batch, onDismissed }: { batch: PendingBatch; onDismissed: (id: string) => void }) {
   const [previewResult, setPreviewResult] = useState<PublishBatchResult | null>(null)
   const [publishResult, setPublishResult] = useState<PublishBatchResult | null>(null)
   const [confirmingPublish, setConfirmingPublish] = useState(false)
+  const [confirmingDismiss, setConfirmingDismiss] = useState(false)
   const [pending, startTransition] = useTransition()
+  const [dismissPending, startDismissTransition] = useTransition()
+
+  function handleDismiss() {
+    startDismissTransition(async () => {
+      const res = await dismissPublishBatch(batch.id)
+      if (res.ok) onDismissed(batch.id)
+    })
+  }
 
   function handlePreview() {
     startTransition(async () => {
@@ -207,7 +216,7 @@ function BatchCard({ batch }: { batch: PendingBatch }) {
             </span>
           ) : (
             <>
-              <button type="button" onClick={handlePreview} disabled={pending}
+              <button type="button" onClick={handlePreview} disabled={pending || dismissPending}
                 style={{ padding: '6px 14px', borderRadius: '6px', border: '1.5px solid #185D7A', background: '#fff', color: '#185D7A', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
                 {pending && !confirmingPublish ? 'Loading…' : previewResult ? 'Refresh preview' : 'Preview'}
               </button>
@@ -223,12 +232,34 @@ function BatchCard({ batch }: { batch: PendingBatch }) {
                   </button>
                 </>
               ) : (
-                <button type="button" onClick={() => setConfirmingPublish(true)} disabled={pending}
+                <button type="button" onClick={() => setConfirmingPublish(true)} disabled={pending || dismissPending}
                   style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.6 : 1 }}>
                   Publish
                 </button>
               )}
             </>
+          )}
+
+          {/* Dismiss */}
+          {!confirmingPublish && (
+            confirmingDismiss ? (
+              <>
+                <button type="button" onClick={handleDismiss} disabled={dismissPending}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1.5px solid #dc2626', background: '#fff', color: '#dc2626', fontSize: '12px', fontWeight: 700, cursor: dismissPending ? 'not-allowed' : 'pointer', opacity: dismissPending ? 0.6 : 1 }}>
+                  {dismissPending ? 'Deleting…' : 'Confirm delete'}
+                </button>
+                <button type="button" onClick={() => setConfirmingDismiss(false)} disabled={dismissPending}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => setConfirmingDismiss(true)} disabled={pending || dismissPending}
+                title="Delete this batch from the queue"
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', color: '#9ca3af', fontSize: '13px', cursor: 'pointer', lineHeight: 1 }}>
+                ×
+              </button>
+            )
           )}
         </div>
       </div>
@@ -263,7 +294,13 @@ function BatchCard({ batch }: { batch: PendingBatch }) {
 // ─── Main export ───────────────────────────────────────────────────────────────
 
 export function PublishQueueClient({ initialBatches }: { initialBatches: PendingBatch[] }) {
-  if (initialBatches.length === 0) {
+  const [batches, setBatches] = useState(initialBatches)
+
+  function handleDismissed(id: string) {
+    setBatches(prev => prev.filter(b => b.id !== id))
+  }
+
+  if (batches.length === 0) {
     return (
       <div style={{
         background: 'var(--ds-card-bg)', border: '1px solid var(--ds-border)', borderRadius: 8,
@@ -276,7 +313,7 @@ export function PublishQueueClient({ initialBatches }: { initialBatches: Pending
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      {initialBatches.map((b) => <BatchCard key={b.id} batch={b} />)}
+      {batches.map((b) => <BatchCard key={b.id} batch={b} onDismissed={handleDismissed} />)}
       <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', marginTop: '0.25rem' }}>
         Reload the page to refresh this list once you're done — published batches stay visible
         with their result until then so you can see what happened.

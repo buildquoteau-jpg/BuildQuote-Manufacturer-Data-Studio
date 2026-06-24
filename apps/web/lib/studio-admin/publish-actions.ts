@@ -107,6 +107,33 @@ export async function getPendingPublishBatches(): Promise<
   return { ok: true, batches: result }
 }
 
+// ─── dismissPublishBatch ────────────────────────────────────────────────────
+// Removes a batch from the queue by hard-deleting it (items first, then batch).
+// Only applies to batches that have not been fully published.
+
+export async function dismissPublishBatch(
+  batchId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await assertBuildquoteStaff()
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServiceClient()
+
+  const { error: itemsErr } = await supabase
+    .from('publish_batch_items')
+    .delete()
+    .eq('publish_batch_id', batchId)
+  if (itemsErr) return { ok: false, error: itemsErr.message }
+
+  const { error: batchErr } = await supabase
+    .from('publish_batches')
+    .delete()
+    .eq('id', batchId)
+  if (batchErr) return { ok: false, error: batchErr.message }
+
+  return { ok: true }
+}
+
 // ─── previewPublishBatch / runPublishBatch ──────────────────────────────────
 
 export async function previewPublishBatch(batchId: string): Promise<PublishBatchResult> {
