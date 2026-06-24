@@ -632,3 +632,57 @@ export async function createBlankSystem(
   if (error) return { ok: false, error: error.message }
   return { ok: true, id: data.id }
 }
+
+// ─── archiveSystem ────────────────────────────────────────────────────────────
+// Soft-deletes a staged_system by setting verification_status = 'archived'.
+// The staging record is hidden from the UI but not removed — safe for systems
+// that have a production counterpart (production record is untouched).
+
+export async function archiveSystem(
+  systemId: string,
+  manufacturerId: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ verification_status: 'archived', updated_at: new Date().toISOString() })
+    .eq('id', systemId)
+    .eq('manufacturer_id', manufacturerId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ─── deleteSystem ─────────────────────────────────────────────────────────────
+// Hard-deletes a staged_system and its child rows (profiles, colours,
+// component links, field verifications). Only intended for systems that have
+// never been published — the production record (if any) is NOT affected.
+
+export async function deleteSystem(
+  systemId: string,
+  manufacturerId: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+
+  // Delete child records first to avoid FK violations
+  await supabase.from('staged_system_profiles').delete().eq('staged_system_id', systemId)
+  await supabase.from('staged_system_colours').delete().eq('staged_system_id', systemId)
+  await supabase.from('staged_system_components').delete().eq('staged_system_id', systemId)
+  await supabase.from('field_verifications').delete()
+    .eq('entity_type', 'staged_system').eq('entity_id', systemId)
+
+  const { error } = await supabase
+    .from('staged_systems')
+    .delete()
+    .eq('id', systemId)
+    .eq('manufacturer_id', manufacturerId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}

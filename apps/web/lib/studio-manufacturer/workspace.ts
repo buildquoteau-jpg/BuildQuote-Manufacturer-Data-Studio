@@ -657,6 +657,7 @@ export async function getManufacturerVerificationData(
         'production_system_id, last_published_at, updated_at, last_submitted_at',
       )
       .eq('manufacturer_id', manufacturerId)
+      .neq('verification_status', 'archived')
       .order('sort_order')
       .limit(100),
   ])

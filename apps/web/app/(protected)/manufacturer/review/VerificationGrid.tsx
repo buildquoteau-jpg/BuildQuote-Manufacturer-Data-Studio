@@ -23,6 +23,8 @@ import {
   createBlankSystem,
   linkSourceDocument,
   getManufacturerSourceDocuments,
+  archiveSystem,
+  deleteSystem,
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
 import { SubmitForPublication } from './SubmitForPublication'
@@ -1436,6 +1438,7 @@ function ExpandedCardView({
   onClose,
   onStatusChange,
   onSystemFieldUpdate,
+  onRemoved,
 }: {
   system: VerificationSystem
   manufacturerId: string
@@ -1443,6 +1446,7 @@ function ExpandedCardView({
   onClose: () => void
   onStatusChange: (systemId: string, newStatus: string, reviewerNotes: string | null) => void
   onSystemFieldUpdate: (systemId: string, fieldName: string, value: string) => void
+  onRemoved: (systemId: string) => void
 }) {
   const [system, setSystem] = useState(initialSystem)
   const [fieldStates, setFieldStates]   = useState<FieldStateMap>({})
@@ -1452,6 +1456,9 @@ function ExpandedCardView({
   const [verifyPending, startVerifyTransition] = useTransition()
   const [verifyMsg, setVerifyMsg]       = useState<string | null>(null)
   const [verifyErr, setVerifyErr]       = useState<string | null>(null)
+  const [dangerConfirm, setDangerConfirm] = useState<'archive' | 'delete' | null>(null)
+  const [dangerPending, startDangerTransition] = useTransition()
+  const [dangerErr, setDangerErr]       = useState<string | null>(null)
 
   // Resizable panel
   const [leftWidth, setLeftWidth] = useState(440)
@@ -1951,6 +1958,87 @@ function ExpandedCardView({
               </div>
             )}
 
+            {/* Danger zone */}
+            <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px dashed #fecaca' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
+                Danger zone
+              </div>
+              {dangerConfirm === null && (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button type="button"
+                    onClick={() => { setDangerErr(null); setDangerConfirm('archive') }}
+                    style={{ padding: '6px 14px', borderRadius: '6px', border: '1.5px solid #f87171', background: '#fff', color: '#dc2626', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                    Archive system
+                  </button>
+                  {!system.production_system_id && (
+                    <button type="button"
+                      onClick={() => { setDangerErr(null); setDangerConfirm('delete') }}
+                      style={{ padding: '6px 14px', borderRadius: '6px', border: '1.5px solid #f87171', background: '#fff', color: '#dc2626', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                      Delete system
+                    </button>
+                  )}
+                </div>
+              )}
+              {dangerConfirm === 'archive' && (
+                <div style={{ padding: '12px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#dc2626', marginBottom: '4px' }}>Archive this system?</div>
+                  <div style={{ fontSize: '12px', color: '#374151', marginBottom: '10px' }}>
+                    The system card will be hidden from your workspace.
+                    {system.production_system_id && ' The live version on BuildQuote will NOT be affected.'}
+                    {' '}Contact BuildQuote admin to restore it.
+                  </div>
+                  {dangerErr && <div style={{ fontSize: '11px', color: '#dc2626', marginBottom: '8px' }}>{dangerErr}</div>}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" disabled={dangerPending}
+                      onClick={() => {
+                        setDangerErr(null)
+                        startDangerTransition(async () => {
+                          const res = await archiveSystem(system.id, manufacturerId)
+                          if (!res.ok) { setDangerErr(res.error); return }
+                          onRemoved(system.id)
+                          onClose()
+                        })
+                      }}
+                      style={{ padding: '6px 16px', borderRadius: '6px', border: 'none', background: '#dc2626', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: dangerPending ? 'not-allowed' : 'pointer', opacity: dangerPending ? 0.6 : 1 }}>
+                      {dangerPending ? 'Archiving…' : 'Yes, archive it'}
+                    </button>
+                    <button type="button" disabled={dangerPending} onClick={() => setDangerConfirm(null)}
+                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              {dangerConfirm === 'delete' && (
+                <div style={{ padding: '12px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#dc2626', marginBottom: '4px' }}>Permanently delete this system?</div>
+                  <div style={{ fontSize: '12px', color: '#374151', marginBottom: '10px' }}>
+                    This will remove the system card and all its profiles, colours, and components from the staging database. This cannot be undone.
+                  </div>
+                  {dangerErr && <div style={{ fontSize: '11px', color: '#dc2626', marginBottom: '8px' }}>{dangerErr}</div>}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" disabled={dangerPending}
+                      onClick={() => {
+                        setDangerErr(null)
+                        startDangerTransition(async () => {
+                          const res = await deleteSystem(system.id, manufacturerId)
+                          if (!res.ok) { setDangerErr(res.error); return }
+                          onRemoved(system.id)
+                          onClose()
+                        })
+                      }}
+                      style={{ padding: '6px 16px', borderRadius: '6px', border: 'none', background: '#dc2626', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: dangerPending ? 'not-allowed' : 'pointer', opacity: dangerPending ? 0.6 : 1 }}>
+                      {dangerPending ? 'Deleting…' : 'Yes, permanently delete'}
+                    </button>
+                    <button type="button" disabled={dangerPending} onClick={() => setDangerConfirm(null)}
+                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ height: 40 }} />
           </div>
         </div>
@@ -2033,6 +2121,11 @@ export function VerificationGrid({
     setSystems(prev => prev.map(s =>
       s.id === systemId ? { ...s, [fieldName]: value } : s,
     ))
+  }
+
+  function handleRemoved(systemId: string) {
+    setSystems(prev => prev.filter(s => s.id !== systemId))
+    setExpandedId(null)
   }
 
   const statusOrder = { pending_review: 0, in_review: 1, manufacturer_verified: 2 }
@@ -2138,6 +2231,7 @@ export function VerificationGrid({
           onClose={() => setExpandedId(null)}
           onStatusChange={handleStatusChange}
           onSystemFieldUpdate={handleSystemFieldUpdate}
+          onRemoved={handleRemoved}
         />
       )}
 
