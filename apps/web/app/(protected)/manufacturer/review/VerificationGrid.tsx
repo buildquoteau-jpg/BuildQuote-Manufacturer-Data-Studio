@@ -1598,6 +1598,7 @@ function ExpandedCardView({
     source_url:         system.source_url,
     install_guide_urls: system.install_guide_urls,
     design_guide_url:   system.design_guide_url,
+    tech_data_url:      system.tech_data_url,
     profiles: system.profiles.map(p => ({
       product_code: p.product_code, profile_name: p.profile_name,
       dimensions: p.dimensions, length_mm: p.length_mm,
