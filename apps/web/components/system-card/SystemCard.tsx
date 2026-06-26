@@ -56,6 +56,7 @@ export interface SystemCardData {
   source_url: string | null
   install_guide_urls: { label: string; url: string }[] | null
   design_guide_url: string | null
+  tech_data_url: string | null
   profiles: SystemProfile[]
   components: SystemComponent[]
   colours: SystemColour[]
@@ -756,6 +757,17 @@ export function SystemCard({ data }: { data: SystemCardData }) {
               style={{ fontSize: '0.875rem' }}
             >
               Design Guide
+            </a>
+          )}
+          {data.tech_data_url && (
+            <a
+              href={data.tech_data_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="studio-btn studio-btn-ghost"
+              style={{ fontSize: '0.875rem' }}
+            >
+              Technical Data Sheet
             </a>
           )}
         </div>
