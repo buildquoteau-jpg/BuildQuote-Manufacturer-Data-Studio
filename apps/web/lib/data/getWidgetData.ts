@@ -79,6 +79,7 @@ export type WidgetSystem = {
   website_url: string | null
   install_guide_urls: { label: string; url: string }[] | null
   design_guide_url: string | null
+  tech_data_url: string | null
   notes: string | null
   fire_rating: string | null
   acoustic_rating: string | null
@@ -144,7 +145,7 @@ async function fetchWidgetData(token: string): Promise<WidgetData | null> {
       .select(
         'id, name, product_code, category, subcategory, description, dimensions, ' +
         'hero_image_url, hero_image_position_x, hero_image_position_y, ' +
-        'website_url, install_guide_urls, design_guide_url, notes, ' +
+        'website_url, install_guide_urls, design_guide_url, tech_data_url, notes, ' +
         'fire_rating, acoustic_rating, moisture_resistant, structural_grade, ' +
         'bal_rating, australian_made, double_sided'
       )
