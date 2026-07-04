@@ -1,0 +1,124 @@
+// Master System Card renderer types.
+//
+// This is the data contract for the approved BuildQuote v6 System Card
+// experience, ported into Data Studio as the single reusable renderer.
+// Field names deliberately mirror BuildQuote v6's `LibrarySystem` shape
+// (buildquote/lib/data/getSystems.ts) so that:
+//   1. the renderer code stays byte-close to the approved v6 card, and
+//   2. a future static package generator can emit this exact JSON and
+//      render from it with no live Supabase reads.
+//
+// Everything here is plain JSON — no Supabase types, no client instances.
+
+export type SystemCardColour = {
+  colour_name: string
+  image_url: string | null
+  sort_order: number
+  is_stocked: boolean
+}
+
+export type SystemCardProfile = {
+  id: string
+  profile_name: string | null
+  name: string | null
+  product_code: string | null
+  dimensions: string | null
+  length_mm: number | null
+  width_mm: number | null
+  height_mm: number | null
+  thickness_mm: number | null
+  uom: string | null
+  supplier_pack_qty: number | null
+  supplier_pack_uom: string | null
+  sort_order: number
+}
+
+// A component entry on the card. Mirrors v6's link-table shape: `role` is the
+// system role label, `components` holds the component record itself.
+export type SystemCardComponentEntry = {
+  id: string
+  role: string
+  notes: string | null
+  sort_order: number
+  components: {
+    name: string
+    sku: string | null
+    description: string | null
+    category: string | null
+    uom: string | null
+    procurement_route: string | null
+  } | null
+}
+
+export type SystemCardSystem = {
+  id: string
+  name: string
+  product_code: string | null
+  slug: string
+  category: string | null
+  subcategory: string | null
+  description: string | null
+  hero_image_url: string | null
+  hero_image_position_x: number | null
+  hero_image_position_y: number | null
+  australian_made: boolean | null
+  bal_rating: string | null
+  fire_rating: string | null
+  moisture_resistant: boolean | null
+  acoustic_rating: string | null
+  structural_grade: string | null
+  notes: string | null
+  website_url: string | null
+  install_guide_urls: { label: string; url: string }[] | null
+  design_guide_url: string | null
+  tech_data_url: string | null
+  manufacturer: {
+    name: string
+    slug: string
+    logo_url: string | null
+  } | null
+  system_colours: SystemCardColour[]
+  system_profiles: SystemCardProfile[]
+  system_components: SystemCardComponentEntry[]
+}
+
+// Manufacturer info for the v6-style manufacturer landing page (breadcrumb,
+// hero band, description, website CTA, systems grid).
+export type SystemCardManufacturerPage = {
+  name: string
+  slug: string
+  description: string | null
+  website_url: string | null
+  logo_url: string | null
+  hero_image_url: string | null
+  // v6 supports a wide hero variant + vertical position; Data Studio's
+  // manufacturers table doesn't carry these yet, so they default off/50.
+  hero_wide_image_url?: string | null
+  hero_image_position_y?: number | null
+}
+
+// A supplier who stocks the system. Optional — the card renders a
+// "No local stockists listed yet" placeholder when the list is empty.
+export type SystemCardStockist = {
+  id: string
+  name: string
+  suburb: string | null
+  state: string | null
+  region: string | null
+  phone: string | null
+  website_url: string | null
+  google_maps_url: string | null
+  opening_hours: string | null
+  delivery_info: string | null
+  service_postcodes: string[]
+}
+
+// One line on the client-side shopping list (same shape as v6).
+export type ShoppingListItem = {
+  id: string
+  name: string
+  sku: string
+  desc: string
+  uom: string
+  qty: number
+}

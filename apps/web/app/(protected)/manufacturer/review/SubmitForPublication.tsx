@@ -20,10 +20,10 @@ export function SubmitForPublication({
 }) {
   const newCount = verifiedCount - liveCount
   const defaultMessage = updateReadyCount > 0 && newCount === 0
-    ? `Hi Admin, we have updated (${updateReadyCount}) system card${updateReadyCount !== 1 ? 's' : ''}. Ready for publication.`
+    ? `Hi Admin, we have updated (${updateReadyCount}) System Card${updateReadyCount !== 1 ? 's' : ''}. Ready for final approval.`
     : updateReadyCount > 0
-      ? `Hi Admin, we have (${newCount}) new system card${newCount !== 1 ? 's' : ''} and (${updateReadyCount}) updated card${updateReadyCount !== 1 ? 's' : ''}. Ready for publication.`
-      : `Hi Admin, we have verified (${verifiedCount}) system card${verifiedCount !== 1 ? 's' : ''} and would like to publish please.`
+      ? `Hi Admin, we have (${newCount}) new System Card${newCount !== 1 ? 's' : ''} and (${updateReadyCount}) updated card${updateReadyCount !== 1 ? 's' : ''}. Ready for final approval.`
+      : `Hi Admin, we have verified (${verifiedCount}) System Card${verifiedCount !== 1 ? 's' : ''} and would like them approved for our card package please.`
   const [message, setMessage] = useState(defaultMessage)
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<
@@ -62,9 +62,9 @@ export function SubmitForPublication({
           Submitted to BuildQuote
         </div>
         <div style={{ fontSize: '12px', color: '#374151' }}>
-          {result.systemCount} system{result.systemCount !== 1 ? 's' : ''} sent for publication review
-          {breakdown ? ` (${breakdown})` : ''}. BuildQuote will check and publish them — you'll be
-          notified once they go live.
+          {result.systemCount} card{result.systemCount !== 1 ? 's' : ''} sent for final approval
+          {breakdown ? ` (${breakdown})` : ''}. BuildQuote will review and approve them — once
+          approved, they can be included in your System Card website package.
         </div>
       </div>
     )
@@ -76,17 +76,18 @@ export function SubmitForPublication({
       background: '#fff', border: '1.5px solid #185D7A',
     }}>
       <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>
-        Ready to publish?
+        Ready for final approval?
       </div>
       <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '10px' }}>
-        {verifiedCount} of {totalCount} system{totalCount !== 1 ? 's' : ''} verified
+        {verifiedCount} of {totalCount} card{totalCount !== 1 ? 's' : ''} verified
         {(newCount > 0 || updateReadyCount > 0) && (
           <> — {[
             newCount > 0 ? `${newCount} new` : null,
-            updateReadyCount > 0 ? `${updateReadyCount} update${updateReadyCount !== 1 ? 's' : ''} to live systems` : null,
+            updateReadyCount > 0 ? `${updateReadyCount} update${updateReadyCount !== 1 ? 's' : ''} to approved cards` : null,
           ].filter(Boolean).join(', ')} ready to send</>
         )}
-        . Submit your verified cards to BuildQuote for publication — you don't need to wait until every system is done.
+        . Submit your verified cards to BuildQuote for final approval. Once approved, they can be
+        included in your System Card website package — you don&rsquo;t need to wait until every card is done.
       </div>
       <textarea
         value={message}

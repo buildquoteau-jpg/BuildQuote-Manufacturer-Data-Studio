@@ -1,10 +1,64 @@
 /**
  * Standalone system card preview — no auth, no DB.
  * Seeded with James Hardie Axon™ Cladding data from CSV exports.
- * Use this page to iterate on the system card design.
+ * Renders through the master v6 renderer (components/system-card-renderer):
+ * manufacturer landing page → tile grid → full System Card, with the
+ * client-side shopping list drawer and PNG/card sharing.
  */
 
-import { SystemCard, type SystemCardData } from '@/components/system-card/SystemCard'
+import { SystemCardPreviewWrapper } from '@/components/system-card-renderer/SystemCardPreviewWrapper'
+import type {
+  SystemCardSystem,
+  SystemCardManufacturerPage,
+} from '@/components/system-card-renderer/types'
+
+// Old flat seed shape (kept as-is below; converted to renderer props at the end)
+type SystemCardData = {
+  name: string
+  manufacturer_name: string
+  category: string | null
+  subcategory: string | null
+  description: string | null
+  hero_image_url: string | null
+  hero_image_position_x?: number | null
+  hero_image_position_y?: number | null
+  bal_rating: string | null
+  fire_rating: string | null
+  moisture_resistant: boolean | null
+  acoustic_rating: string | null
+  structural_grade: string | null
+  australian_made: boolean | null
+  notes: string | null
+  source_url: string | null
+  install_guide_urls: { label: string; url: string }[] | null
+  design_guide_url: string | null
+  tech_data_url: string | null
+  profiles: {
+    product_code: string | null
+    profile_name: string
+    dimensions: string | null
+    length_mm: number | null
+    height_mm: number | null
+    width_mm: number | null
+    thickness_mm: number | null
+    uom: string | null
+    supplier_pack_qty: number | null
+    supplier_pack_uom: string | null
+    sort_order: number | null
+  }[]
+  components: {
+    sku: string | null
+    name: string
+    description: string | null
+    category: string | null
+    uom: string | null
+    supplier_pack_qty: number | null
+    supplier_pack_uom: string | null
+    sort_order: number | null
+    procurement_route: 'specialist_supplier' | 'trade_merchant' | null
+  }[]
+  colours: { colour_name: string; sku_suffix: string | null; is_stocked: boolean | null }[]
+}
 
 // ─── Seed data: James Hardie Axon™ Cladding ──────────────────────────────────
 // Source: james_hardie_axon_system_card_csv.zip (01–06 CSVs)
@@ -237,11 +291,95 @@ const JDS_REGALFRAME: SystemCardData = {
   colours: [],
 }
 
+// ─── Convert seed data to master renderer props ───────────────────────────────
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+function toRendererSystem(data: SystemCardData, id: string): SystemCardSystem {
+  return {
+    id,
+    name: data.name,
+    product_code: null,
+    slug: slugify(data.name),
+    category: data.category,
+    subcategory: data.subcategory,
+    description: data.description,
+    hero_image_url: data.hero_image_url,
+    hero_image_position_x: data.hero_image_position_x ?? null,
+    hero_image_position_y: data.hero_image_position_y ?? null,
+    australian_made: data.australian_made,
+    bal_rating: data.bal_rating,
+    fire_rating: data.fire_rating,
+    moisture_resistant: data.moisture_resistant,
+    acoustic_rating: data.acoustic_rating,
+    structural_grade: data.structural_grade,
+    notes: data.notes,
+    website_url: data.source_url,
+    install_guide_urls: data.install_guide_urls,
+    design_guide_url: data.design_guide_url,
+    tech_data_url: data.tech_data_url,
+    manufacturer: {
+      name: data.manufacturer_name,
+      slug: slugify(data.manufacturer_name),
+      logo_url: null,
+    },
+    system_colours: data.colours.map((c, i) => ({
+      colour_name: c.colour_name,
+      image_url: null,
+      sort_order: i,
+      is_stocked: c.is_stocked ?? true,
+    })),
+    system_profiles: data.profiles.map((p, i) => ({
+      id: `${id}-profile-${i}`,
+      profile_name: p.profile_name,
+      name: null,
+      product_code: p.product_code,
+      dimensions: p.dimensions,
+      length_mm: p.length_mm,
+      width_mm: p.width_mm,
+      height_mm: p.height_mm,
+      thickness_mm: p.thickness_mm,
+      uom: p.uom,
+      supplier_pack_qty: p.supplier_pack_qty,
+      supplier_pack_uom: p.supplier_pack_uom,
+      sort_order: p.sort_order ?? i,
+    })),
+    system_components: data.components.map((c, i) => ({
+      id: `${id}-comp-${i}`,
+      role: c.category ?? 'Component',
+      notes: null,
+      sort_order: c.sort_order ?? i,
+      components: {
+        name: c.name,
+        sku: c.sku,
+        description: c.description,
+        category: c.category,
+        uom: c.uom,
+        procurement_route: c.procurement_route,
+      },
+    })),
+  }
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const CARDS = [
-  { label: 'James Hardie — Axon™ Cladding', data: AXON_CLADDING },
-  { label: 'JDS Metal Doorframes — RegalFrame', data: JDS_REGALFRAME },
+// Demo landing page uses James Hardie as the manufacturer; the JDS card is kept
+// as a second system so both profile-grouping shapes stay easy to iterate on.
+const DEMO_MANUFACTURER: SystemCardManufacturerPage = {
+  name: 'James Hardie®',
+  slug: 'james-hardie',
+  description:
+    'Static demo data. This page renders the master System Card experience — manufacturer landing page, system tiles, full cards, shopping list and sharing — with no auth and no database.',
+  website_url: null,
+  logo_url: null,
+  hero_image_url: null,
+}
+
+const SYSTEMS: SystemCardSystem[] = [
+  toRendererSystem(AXON_CLADDING, 'demo-axon'),
+  toRendererSystem(JDS_REGALFRAME, 'demo-regalframe'),
 ]
 
 export default function SystemCardPreviewPage() {
@@ -260,30 +398,13 @@ export default function SystemCardPreviewPage() {
       }}>
         <span style={{ fontWeight: 700 }}>BuildQuote</span>
         <span style={{ opacity: 0.5 }}>·</span>
-        <span style={{ opacity: 0.8 }}>System cards</span>
+        <span style={{ opacity: 0.8 }}>System cards · master v6 renderer</span>
         <span style={{ marginLeft: 'auto', opacity: 0.5, fontSize: '0.7rem' }}>
           Preview · Static data
         </span>
       </div>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem 1rem 4rem' }}>
-        <div style={{ marginBottom: '1.25rem' }}>
-          <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--ds-navy)', margin: '0 0 0.2rem' }}>
-            System cards
-          </h1>
-          <p style={{ fontSize: '0.8rem', color: 'var(--ds-text-muted)', margin: 0 }}>
-            {CARDS.length} systems · tap a card to explore profiles and accessories
-          </p>
-        </div>
-
-        <div className="sc-card-grid">
-          {CARDS.map(({ label, data }) => (
-            <div key={label}>
-              <SystemCard data={data} />
-            </div>
-          ))}
-        </div>
-      </div>
+      <SystemCardPreviewWrapper manufacturer={DEMO_MANUFACTURER} systems={SYSTEMS} />
     </div>
   )
 }

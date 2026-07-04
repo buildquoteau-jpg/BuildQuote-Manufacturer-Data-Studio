@@ -1,14 +1,22 @@
 // Studio-only internal preview — not a public customer-facing route.
-// The future public manufacturer page (/manufacturers/[slug]) is customer-facing
-// and will NOT require manufacturer login. This route is the Studio preview only.
+// Renders each staged system through the master System Card renderer
+// (components/system-card-renderer), so what the manufacturer approves here
+// is exactly what the public System Card will look like.
+//
+// Shopping list + PNG share run client-side only in the wrapper; nothing on
+// this page writes to Supabase.
 
 import { getStudioSession } from '@/lib/studio-auth/session'
 import {
   resolveWorkspaceContextFromRequest,
-  getManufacturerPreviewData,
+  getManufacturerVerificationData,
+  getManufacturerInfo,
 } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { StudioStatusBadge } from '@/components/studio/StudioStatusBadge'
+import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
+import { SystemCardPreviewWrapper } from '@/components/system-card-renderer/SystemCardPreviewWrapper'
+import type { SystemCardManufacturerPage } from '@/components/system-card-renderer/types'
 
 export default async function ManufacturerPreviewPage() {
   const session = await getStudioSession()
@@ -17,7 +25,7 @@ export default async function ManufacturerPreviewPage() {
   if (!ctx.found) {
     return (
       <StudioShell role="manufacturer" subtitle="Preview">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Preview public page</h1>
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Preview public System Cards</h1>
         <div className="studio-info">
           {ctx.reason === 'admin_no_context'
             ? 'Admin support access. Select a manufacturer workspace from the admin panel first.'
@@ -27,18 +35,31 @@ export default async function ManufacturerPreviewPage() {
     )
   }
 
-  const result = await getManufacturerPreviewData(ctx.manufacturerId)
+  const result = await getManufacturerVerificationData(ctx.manufacturerId)
 
   if (!result.ok) {
     return (
       <StudioShell role="manufacturer" subtitle="Preview">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Preview public page</h1>
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Preview public System Cards</h1>
         <div className="studio-warn">Could not load preview data: {result.error}</div>
       </StudioShell>
     )
   }
 
   const { manufacturer, systems } = result
+  const cardSystems = systems.map((sys) => adaptStagedSystem(sys, manufacturer))
+
+  // Hero image lives on data_studio_manufacturers but isn't part of the
+  // verification payload — fetch it so the landing-page hero matches v6.
+  const infoResult = await getManufacturerInfo(ctx.manufacturerId)
+  const manufacturerPage: SystemCardManufacturerPage = {
+    name: manufacturer.name,
+    slug: manufacturer.slug,
+    description: manufacturer.description,
+    website_url: manufacturer.websiteUrl,
+    logo_url: null,
+    hero_image_url: infoResult.ok ? infoResult.manufacturer.heroImageUrl : null,
+  }
 
   return (
     <StudioShell role="manufacturer" subtitle="Preview">
@@ -51,19 +72,20 @@ export default async function ManufacturerPreviewPage() {
           marginBottom: '1.25rem',
         }}
       >
-        <h1 style={{ fontSize: '1.25rem' }}>Preview public page</h1>
+        <h1 style={{ fontSize: '1.25rem' }}>Preview public System Cards</h1>
         <span className="studio-badge studio-badge-draft">Studio only</span>
       </div>
 
       <div className="studio-info" style={{ marginBottom: '0.75rem' }}>
-        Private Studio preview only. Public manufacturer pages are published later by BuildQuote
-        admin. Nothing shown here is live.
+        This is exactly what the public will see once published — your manufacturer page, and each
+        System Card with selectable line items, shopping list and share behaviour. Click a system
+        tile to open its card. Nothing here is live, and interactions in this preview are not saved.
       </div>
 
       <div style={{ marginBottom: '1.25rem' }}>
         <StudioStatusBadge
           current="draft"
-          note="— Approved and Published states require BuildQuote admin action."
+          note="— BuildQuote approval and package generation require BuildQuote admin action."
         />
       </div>
 
@@ -71,170 +93,16 @@ export default async function ManufacturerPreviewPage() {
         <div className="studio-preview-bar">
           <span>🔍 Studio preview — not live</span>
           <span style={{ marginLeft: 'auto' }}>
-            {manufacturer.status} · Not published
+            {manufacturer.status} · Preview only
           </span>
         </div>
 
-        <div style={{ padding: '1.5rem' }}>
-          {/* Manufacturer header */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              marginBottom: '1.25rem',
-              paddingBottom: '1.25rem',
-              borderBottom: '1px solid var(--ds-border-soft)',
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                background: 'var(--ds-page-bg)',
-                border: '1px solid var(--ds-border)',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.3rem',
-                flexShrink: 0,
-              }}
-            >
-              🏭
-            </div>
-            <div>
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.2rem' }}>
-                {manufacturer.name}
-              </h2>
-              {manufacturer.description && (
-                <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: 0 }}>
-                  {manufacturer.description}
-                </p>
-              )}
-              {manufacturer.websiteUrl && (
-                <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', margin: '0.2rem 0 0' }}>
-                  {manufacturer.websiteUrl}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Systems */}
-          <h3
-            style={{
-              fontSize: '0.85rem',
-              color: 'var(--ds-text-sub)',
-              fontWeight: 700,
-              marginBottom: '0.75rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}
-          >
-            Systems
-          </h3>
-
-          {systems.length === 0 ? (
-            <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', marginBottom: '1.25rem' }}>
-              No staged systems yet.
-            </p>
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
-                gap: '0.75rem',
-                marginBottom: '1.25rem',
-              }}
-            >
-              {systems.map((sys) => (
-                <div key={sys.id} className="studio-system-card">
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: '0.4rem',
-                    }}
-                  >
-                    <strong style={{ fontSize: '0.88rem', color: 'var(--ds-navy)' }}>
-                      {sys.name}
-                    </strong>
-                    <span className="studio-badge studio-badge-draft">
-                      {sys.verificationStatus.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                  {sys.category && (
-                    <div
-                      style={{
-                        fontSize: '0.78rem',
-                        color: 'var(--ds-text-muted)',
-                        marginBottom: '0.4rem',
-                      }}
-                    >
-                      {sys.category}
-                    </div>
-                  )}
-                  {sys.colours.length > 0 && (
-                    <div
-                      style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--ds-text-faint)',
-                        marginBottom: '0.65rem',
-                      }}
-                    >
-                      {sys.colours.join(', ')}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    <button
-                      disabled
-                      className="studio-btn studio-btn-ghost"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem' }}
-                    >
-                      View system
-                    </button>
-                    <button
-                      disabled
-                      className="studio-btn studio-btn-primary"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem' }}
-                    >
-                      Add to RFQ
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* CTA */}
-          <div
-            style={{
-              background: 'var(--ds-page-bg)',
-              borderRadius: 8,
-              padding: '1rem',
-              textAlign: 'center',
-            }}
-          >
-            <p
-              style={{
-                fontSize: '0.82rem',
-                color: 'var(--ds-text-muted)',
-                marginBottom: '0.6rem',
-              }}
-            >
-              Preview of public CTA — disabled in Studio preview.
-            </p>
-            <button disabled className="studio-btn studio-btn-primary" style={{ fontSize: '0.85rem' }}>
-              Request quote — preview only
-            </button>
-          </div>
-        </div>
+        <SystemCardPreviewWrapper manufacturer={manufacturerPage} systems={cardSystems} />
       </div>
 
       <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--ds-text-faint)' }}>
-        To publish your page, all staged data must be verified and approved by BuildQuote admin.
-        Production publish is not available from this screen.
+        Cards must be manufacturer verified and BuildQuote approved before they can be included
+        in your System Card website package. Package generation is not available from this screen.
       </div>
     </StudioShell>
   )

@@ -113,6 +113,26 @@ a:hover {
   background: var(--ds-card-bg);
   border-bottom: 1px solid var(--ds-border);
   display: flex;
+  position: relative;
+}
+
+/* Mobile: the tab row scrolls sideways — fade the right edge so it's clear
+   there are more tabs off-screen, and tighten padding so more tabs fit. */
+@media (max-width: 720px) {
+  .studio-nav::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 1px;
+    width: 28px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--ds-card-bg));
+  }
+  .studio-nav a {
+    padding: 0.65rem 0.7rem;
+    font-size: 0.83rem;
+  }
 }
 
 .studio-nav-inner {

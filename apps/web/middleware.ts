@@ -6,6 +6,13 @@ export async function middleware(request: NextRequest) {
     request,
   })
 
+  // No Supabase env (e.g. a fresh clone without .env.local): don't crash every
+  // request — pass through. Auth-gated pages will still fail to load data, but
+  // static routes like /system-card-preview stay usable for local dev.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

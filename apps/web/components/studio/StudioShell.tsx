@@ -10,7 +10,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Home', href: '/dashboard' },
   { label: 'Manufacturers', href: '/admin/manufacturers' },
   { label: 'Messages', href: '/admin/messages' },
-  { label: 'Publish queue', href: '/admin/publish' },
+  { label: 'Approval queue', href: '/admin/publish' },
   { label: 'User profile', href: '/manufacturer/account' },
 ]
 
@@ -23,8 +23,10 @@ const MFR_NAV: NavItem[] = [
   { label: 'Brand profile',   href: '/manufacturer/profile' },
   { label: 'User profile',    href: '/manufacturer/account' },
   { label: 'Documents',       href: '/manufacturer/documents' },
+  { label: 'Assets',          href: '/manufacturer/assets' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
-  { label: 'Widgets',         href: '/manufacturer/widgets' },
+  { label: 'Packages',        href: '/manufacturer/packages' },
+  { label: 'Embeds & Links',  href: '/manufacturer/widgets' },
   { label: 'Inbox',           href: '/manufacturer/inbox' },
   { label: 'Help',            href: '/manufacturer/help' },
 ]

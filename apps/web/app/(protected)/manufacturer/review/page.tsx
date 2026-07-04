@@ -72,8 +72,8 @@ export default async function ManufacturerReviewPage() {
         </div>
 
         <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0 0 1rem', lineHeight: 1.65 }}>
-          Review each product system card below — check every field, correct errors, and mark the card verified when you are happy with it.
-          Verified cards are reviewed by BuildQuote before publishing.{' '}
+          Review each System Card below — check every field, correct errors, and mark the card verified when you are happy with it.
+          Verified cards are reviewed by BuildQuote before being approved for your System Card package.{' '}
           <span style={{ color: 'var(--ds-text-faint)' }}>For best results, use a desktop or laptop — the detail on these cards is easy to overlook on a small screen.</span>
         </p>
 
@@ -109,7 +109,7 @@ export default async function ManufacturerReviewPage() {
               )}
               {publishedCount > 0 && (
                 <span style={{ color: '#0d9488', fontWeight: 600 }}>
-                  {publishedCount} live
+                  {publishedCount} approved
                 </span>
               )}
               {submittedCount > 0 && (

@@ -23,7 +23,7 @@ const VERIF_STAGES: VerifStage[] = [
   { key: 'submitted',    label: 'Submitted',              color: '#3b82f6', dimColor: '#e2e8f0' },
   { key: 'under_review', label: 'Under Review',           color: '#f59e0b', dimColor: '#e2e8f0' },
   { key: 'verified',     label: 'Manufacturer Verified',  color: '#4FCBB0', dimColor: '#e2e8f0' },
-  { key: 'published',    label: 'BuildQuote Published',   color: '#22c55e', dimColor: '#e2e8f0' },
+  { key: 'approved',     label: 'BuildQuote Approved',    color: '#22c55e', dimColor: '#e2e8f0' },
 ]
 
 /**
@@ -37,13 +37,13 @@ function resolveStages(
   const needsAttention = status === 'rejected' || status === 'needs_source_check'
   const inReview = status === 'in_review' || status === 'manufacturer_verified' || needsAttention
   const verified = status === 'manufacturer_verified'
-  const published = productionSystemId !== null
+  const approved = productionSystemId !== null
 
   return [
     'lit',                                        // always submitted
     inReview ? (needsAttention ? 'warning' : 'lit') : 'dim',
     verified ? 'lit' : 'dim',
-    published ? 'lit' : 'dim',
+    approved ? 'lit' : 'dim',
   ]
 }
 
@@ -414,9 +414,9 @@ export default async function ManufacturerPortalPage() {
   }
 
   const { manufacturer, documents, systems } = result.data
-  const publishedCount = systems.filter((s) => s.productionSystemId !== null).length
-  const verifiedCount  = systems.filter((s) => s.verificationStatus === 'approved').length
-  const pendingCount   = systems.filter(
+  const approvedCount = systems.filter((s) => s.productionSystemId !== null).length
+  const verifiedCount = systems.filter((s) => s.verificationStatus === 'manufacturer_verified').length
+  const pendingCount  = systems.filter(
     (s) => s.verificationStatus === 'pending_review' || s.verificationStatus === 'in_review',
   ).length
 
@@ -472,10 +472,10 @@ export default async function ManufacturerPortalPage() {
         {/* Quick-stat row */}
         <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
           {[
-            { label: 'Catalogues',       value: documents.length },
-            { label: 'Systems staged',   value: systems.length },
-            { label: 'Verified',         value: verifiedCount },
-            { label: 'Published to BQ',  value: publishedCount },
+            { label: 'Catalogues',           value: documents.length },
+            { label: 'Cards staged',         value: systems.length },
+            { label: 'Verified',             value: verifiedCount },
+            { label: 'BuildQuote approved',  value: approvedCount },
           ].map((s) => (
             <div key={s.label} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>
@@ -489,6 +489,50 @@ export default async function ManufacturerPortalPage() {
         </div>
         </div>{/* end position:relative content wrapper */}
       </div>
+
+      {/* ── System Card Website Package ── */}
+      <section
+        style={{
+          background: '#fff',
+          border: '1.5px solid #b8d9e8',
+          borderRadius: 14,
+          padding: '1.4rem 1.6rem',
+          marginBottom: '2.5rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+          <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#185D7A', margin: 0 }}>
+            System Card Website Package
+          </h2>
+          {approvedCount > 0 && (
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', background: '#dcfce7', borderRadius: 20, padding: '0.15rem 0.6rem' }}>
+              {approvedCount} card{approvedCount !== 1 ? 's' : ''} approved
+            </span>
+          )}
+        </div>
+        <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 1rem', lineHeight: 1.6, maxWidth: 640 }}>
+          Your approved System Cards can be exported as a website-ready package for your own
+          website — hosted by you, under your own URLs (for example{' '}
+          <code style={{ fontSize: '0.78rem' }}>yoursite.com.au/system-cards/</code>).
+        </p>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <a href="/manufacturer/preview" className="studio-btn studio-btn-ghost" style={{ fontSize: '0.83rem' }}>
+            Preview final cards
+          </a>
+          <a href="/manufacturer/packages" className="studio-btn studio-btn-primary" style={{ fontSize: '0.83rem' }}>
+            Generate package
+          </a>
+          <a href="/manufacturer/packages" className="studio-btn studio-btn-ghost" style={{ fontSize: '0.83rem' }}>
+            Download package
+          </a>
+          <a href="/manufacturer/packages#install-guide" className="studio-btn studio-btn-ghost" style={{ fontSize: '0.83rem' }}>
+            View install guide
+          </a>
+          <a href="/manufacturer/widgets" className="studio-btn studio-btn-ghost" style={{ fontSize: '0.83rem' }}>
+            Get embed / link options
+          </a>
+        </div>
+      </section>
 
       {/* ── Catalogues ── */}
       <section style={{ marginBottom: '2.5rem' }}>

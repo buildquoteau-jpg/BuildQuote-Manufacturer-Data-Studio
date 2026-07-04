@@ -9,10 +9,12 @@ export default async function AdminPublishPage() {
 
   return (
     <StudioShell role="admin" subtitle="Publish queue">
-      <h1 style={{ fontSize: '1.25rem', marginBottom: '0.4rem' }}>Publish queue</h1>
+      <h1 style={{ fontSize: '1.25rem', marginBottom: '0.4rem' }}>Approval queue</h1>
       <p style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', marginBottom: '1.25rem' }}>
-        Verified systems manufacturers have submitted for publication. Preview a batch to see exactly
-        what would be created or updated in the live RFQ/MFP catalogue before publishing for real.
+        Verified System Cards waiting for BuildQuote review and approval. Approving a batch promotes
+        the cards into the approved source data, ready for package generation (and the optional
+        BuildQuote-hosted embed). Preview a batch to see exactly what would be created or updated
+        before approving for real.
       </p>
 
       {!result.ok ? (

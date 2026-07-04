@@ -2,8 +2,8 @@ type State = 'draft' | 'approved' | 'published'
 
 const LABELS: Record<State, string> = {
   draft: 'Draft',
-  approved: 'Approved',
-  published: 'Published',
+  approved: 'BuildQuote Approved',
+  published: 'Package Generated',
 }
 
 const STATES: State[] = ['draft', 'approved', 'published']
