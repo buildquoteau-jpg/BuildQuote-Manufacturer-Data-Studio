@@ -76,7 +76,61 @@ export default async function ManufacturerWidgetsPage() {
   const origin = process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au'
 
   return (
-    <StudioShell role="manufacturer" workspaceName={manufacturerName}>
+    <StudioShell role="manufacturer" workspaceName={manufacturerName} subtitle="Embeds & Links">
+      <div style={{ maxWidth: '760px' }}>
+        <h1 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.25rem' }}>
+          Embeds &amp; Links
+        </h1>
+        <p style={{ color: '#64748b', fontSize: '0.875rem', margin: '0 0 1.5rem' }}>
+          Ways to get your System Cards in front of customers. The preferred home for your cards is
+          your own website — BuildQuote-hosted embeds are the compatibility path.
+        </p>
+
+        {/* Option 1 — Website Package (preferred) */}
+        <div style={{
+          background: '#fff', border: '1.5px solid #185D7A', borderRadius: '14px',
+          padding: '18px 20px', marginBottom: '16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Website Package</span>
+            <span style={{
+              fontSize: '10px', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+              background: '#185D7A', color: '#fff', padding: '2px 8px', borderRadius: 999,
+            }}>
+              Recommended
+            </span>
+          </div>
+          <p style={{ fontSize: '0.83rem', color: '#64748b', margin: '0 0 10px', lineHeight: 1.55 }}>
+            A self-contained static website installed on your own site at <code>/system-cards/</code>.
+            You own the URLs, pages load from your domain, and every card works without BuildQuote —
+            selectable line items, shopping list and PNG sharing included. The ZIP also contains
+            ready-made link buttons and iframe snippets (<code>embed-snippets.html</code>), a card
+            URL list (<code>card-link-list.csv</code>) and a print-ready QR code per card.
+          </p>
+          <a href="/manufacturer/packages" className="studio-btn studio-btn-primary" style={{ fontSize: '0.83rem' }}>
+            Go to Packages
+          </a>
+        </div>
+
+        {/* Option 2 — static snippets note */}
+        <div style={{
+          background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '14px',
+          padding: '16px 20px', marginBottom: '28px',
+        }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
+            Static embed &amp; link snippets
+          </div>
+          <p style={{ fontSize: '0.83rem', color: '#64748b', margin: 0, lineHeight: 1.55 }}>
+            Once your package is installed on your website, use the snippets from the ZIP to link or
+            iframe individual cards anywhere — quotes, emails, landing pages, other sites. No
+            BuildQuote hosting involved. On Wix and similar builders that can&apos;t host uploaded
+            folders, use the BuildQuote-hosted widget below instead.
+          </p>
+        </div>
+
+        <div style={{ borderTop: '1px solid #e2e8f0', marginBottom: '28px' }} />
+      </div>
+
       <WidgetManager
         manufacturerId={ctx.manufacturerId}
         manufacturerName={manufacturerName}

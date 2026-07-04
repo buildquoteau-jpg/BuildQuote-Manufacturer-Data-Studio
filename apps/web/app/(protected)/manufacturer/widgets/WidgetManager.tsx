@@ -188,11 +188,16 @@ export function WidgetManager({
 
   return (
     <div style={{ maxWidth: '760px' }}>
-      <h1 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.25rem' }}>
-        Product Widget
-      </h1>
+      <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.25rem' }}>
+        BuildQuote-hosted widget
+      </h2>
       <p style={{ color: '#64748b', fontSize: '0.875rem', margin: '0 0 2rem' }}>
-        Pick which approved systems appear in your embeddable widget, then copy the embed code to your website.
+        A live iframe widget hosted by BuildQuote — the compatibility path for Wix and other site
+        builders that can&apos;t host the website package. Pick which approved systems appear, then
+        copy the embed code to your website.
+        {/* TODO(static-embeds): render this widget from the generated package's feed.json /
+            card.json instead of live Supabase relational queries, so embeds work from the same
+            static card data as the website package. */}
       </p>
 
       {/* System picker */}
