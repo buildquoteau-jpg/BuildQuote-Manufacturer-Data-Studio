@@ -1,8 +1,10 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerInfo } from '@/lib/studio-manufacturer/workspace'
+import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { BrandProfileForm } from './BrandProfileForm'
+import type { SlotAsset } from './AssetSlotControl'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,27 +15,46 @@ type ManufacturerProfile = {
   hero_wide_image_url: string | null; hero_wide_image_position_y: number | null
   logo_url: string | null
   phone: string | null; abn: string | null
+  logo_asset_id: string | null
+  hero_image_asset_id: string | null
+  hero_wide_image_asset_id: string | null
 }
 
+const ASSET_ID_COLUMNS = ', logo_asset_id, hero_image_asset_id, hero_wide_image_asset_id'
 const FULL_COLUMNS =
   'id, name, slug, status, description, website_url, hero_image_url, hero_image_position_y, hero_wide_image_url, hero_wide_image_position_y, logo_url, phone, abn'
 const BASE_COLUMNS =
   'id, name, slug, status, description, website_url, hero_image_url, logo_url, phone, abn'
+
+const NULL_ASSET_IDS = {
+  logo_asset_id: null,
+  hero_image_asset_id: null,
+  hero_wide_image_asset_id: null,
+}
 
 async function getFullManufacturerProfile(manufacturerId: string): Promise<ManufacturerProfile | null> {
   try {
     const supabase = createStudioServerClient()
     const { data, error } = await supabase
       .from('data_studio_manufacturers')
-      .select(FULL_COLUMNS)
+      .select(FULL_COLUMNS + ASSET_ID_COLUMNS)
       .eq('id', manufacturerId)
       .single()
 
-    if (!error) return data as ManufacturerProfile
+    if (!error) return data as unknown as ManufacturerProfile
 
-    // Migrations 031/034 may not be applied yet — fall back to a query without
-    // the hero-position / wide-image columns and default them to null.
-    if (error.code === '42703' || /hero_(image|wide_image)/.test(error.message ?? '')) {
+    // Migration 046 may not be applied yet — retry without the asset-id columns.
+    if (error.code === '42703' || /_asset_id/.test(error.message ?? '')) {
+      const { data: no046, error: no046Err } = await supabase
+        .from('data_studio_manufacturers')
+        .select(FULL_COLUMNS)
+        .eq('id', manufacturerId)
+        .single()
+      if (!no046Err && no046) {
+        return { ...(no046 as unknown as Omit<ManufacturerProfile, keyof typeof NULL_ASSET_IDS>), ...NULL_ASSET_IDS }
+      }
+      // Migrations 031/034 may not be applied yet either — fall back to a query
+      // without the hero-position / wide-image columns and default them to null.
       const { data: fallback, error: fbErr } = await supabase
         .from('data_studio_manufacturers')
         .select(BASE_COLUMNS)
@@ -41,10 +62,14 @@ async function getFullManufacturerProfile(manufacturerId: string): Promise<Manuf
         .single()
       if (fbErr || !fallback) return null
       return {
-        ...(fallback as Omit<ManufacturerProfile, 'hero_image_position_y' | 'hero_wide_image_url' | 'hero_wide_image_position_y'>),
+        ...(fallback as unknown as Omit<
+          ManufacturerProfile,
+          'hero_image_position_y' | 'hero_wide_image_url' | 'hero_wide_image_position_y' | keyof typeof NULL_ASSET_IDS
+        >),
         hero_image_position_y: null,
         hero_wide_image_url: null,
         hero_wide_image_position_y: null,
+        ...NULL_ASSET_IDS,
       }
     }
 
@@ -71,7 +96,22 @@ export default async function ManufacturerProfilePage() {
     )
   }
 
-  const profile = await getFullManufacturerProfile(ctx.manufacturerId)
+  const [profile, assetsResult] = await Promise.all([
+    getFullManufacturerProfile(ctx.manufacturerId),
+    getManufacturerAssets(ctx.manufacturerId),
+  ])
+
+  const assetsAvailable = assetsResult.ok
+  const slotAssets: SlotAsset[] = assetsResult.ok
+    ? assetsResult.assets.map((a) => ({
+        id: a.id,
+        assetType: a.assetType,
+        title: a.title,
+        displayUrl: a.displayUrl,
+        publicUrl: a.publicUrl,
+        approvedForPublication: a.approvedForPublication,
+      }))
+    : []
 
   if (!profile) {
     return (
@@ -103,9 +143,14 @@ export default async function ManufacturerProfilePage() {
           logo_url:       profile.logo_url,
           phone:          profile.phone,
           abn:            profile.abn,
+          logo_asset_id:            profile.logo_asset_id,
+          hero_image_asset_id:      profile.hero_image_asset_id,
+          hero_wide_image_asset_id: profile.hero_wide_image_asset_id,
         }}
         manufacturerName={profile.name}
         slug={profile.slug}
+        assets={slotAssets}
+        assetsAvailable={assetsAvailable}
       />
     </StudioShell>
   )

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { saveBrandProfile, type BrandProfileFields } from '@/lib/studio-manufacturer/brand-actions'
+import { AssetSlotControl, type SlotAsset, type SlotPick } from './AssetSlotControl'
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -198,11 +199,17 @@ export function BrandProfileForm({
   manufacturerName,
   slug,
   initialValues,
+  assets = [],
+  assetsAvailable = false,
 }: {
   manufacturerId: string
   manufacturerName: string
   slug: string
   initialValues: BrandProfileFields
+  /** Asset library images for the choose-from-assets pickers. */
+  assets?: SlotAsset[]
+  /** False when migration 046 isn't applied — hides the asset controls. */
+  assetsAvailable?: boolean
 }) {
   const [fields, setFields] = useState<BrandProfileFields>({
     description:    initialValues.description    ?? '',
@@ -214,11 +221,57 @@ export function BrandProfileForm({
     logo_url:       initialValues.logo_url       ?? '',
     phone:          initialValues.phone          ?? '',
     abn:            initialValues.abn            ?? '',
+    logo_asset_id:            initialValues.logo_asset_id ?? null,
+    hero_image_asset_id:      initialValues.hero_image_asset_id ?? null,
+    hero_wide_image_asset_id: initialValues.hero_wide_image_asset_id ?? null,
   })
+
+  // Session-local preview URLs for freshly picked assets whose durable public
+  // URL isn't configured (presigned links must not be written to *_url columns).
+  const [previewOverrides, setPreviewOverrides] = useState<{
+    logo?: string; hero?: string; banner?: string
+  }>({})
 
   const [saved, setSaved]   = useState(false)
   const [error, setError]   = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  function pickAsset(slot: 'logo' | 'hero' | 'banner') {
+    const idKey = slot === 'logo' ? 'logo_asset_id'
+      : slot === 'hero' ? 'hero_image_asset_id'
+      : 'hero_wide_image_asset_id'
+    const urlKey = slot === 'logo' ? 'logo_url'
+      : slot === 'hero' ? 'hero_image_url'
+      : 'hero_wide_image_url'
+    return (pick: SlotPick) => {
+      setFields(prev => ({
+        ...prev,
+        [idKey]: pick.assetId,
+        // Only overwrite the legacy URL column with a durable public URL —
+        // presigned links expire and must not be persisted.
+        ...(pick.publicUrl ? { [urlKey]: pick.publicUrl } : {}),
+      }))
+      if (pick.displayUrl) {
+        setPreviewOverrides(prev => ({ ...prev, [slot]: pick.displayUrl! }))
+      }
+      setSaved(false)
+    }
+  }
+
+  function clearAsset(slot: 'logo' | 'hero' | 'banner') {
+    const idKey = slot === 'logo' ? 'logo_asset_id'
+      : slot === 'hero' ? 'hero_image_asset_id'
+      : 'hero_wide_image_asset_id'
+    return () => {
+      setFields(prev => ({ ...prev, [idKey]: null }))
+      setPreviewOverrides(prev => {
+        const next = { ...prev }
+        delete next[slot]
+        return next
+      })
+      setSaved(false)
+    }
+  }
 
   function set(key: keyof BrandProfileFields) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -254,6 +307,9 @@ export function BrandProfileForm({
         logo_url:       fields.logo_url       || null,
         phone:          fields.phone          || null,
         abn:            fields.abn            || null,
+        logo_asset_id:            fields.logo_asset_id ?? null,
+        hero_image_asset_id:      fields.hero_image_asset_id ?? null,
+        hero_wide_image_asset_id: fields.hero_wide_image_asset_id ?? null,
       }
       const res = await saveBrandProfile(manufacturerId, payload)
       if (!res.ok) { setError(res.error); return }
@@ -262,10 +318,16 @@ export function BrandProfileForm({
     })
   }
 
+  // Preview URLs prefer the session-local override (freshly picked asset with
+  // no durable public URL), then the stored URL field.
+  const logoPreviewUrl = previewOverrides.logo || fields.logo_url || null
+  const heroPreviewUrl = previewOverrides.hero || fields.hero_image_url || null
+  const widePreviewUrl = previewOverrides.banner || fields.hero_wide_image_url || null
+
   // The full-width banner uses the dedicated wide image when set, otherwise it
   // falls back to the hero image (and its crop position) — matching the live page.
-  const bannerUsesWide = !!fields.hero_wide_image_url
-  const bannerUrl = fields.hero_wide_image_url || fields.hero_image_url
+  const bannerUsesWide = !!widePreviewUrl
+  const bannerUrl = widePreviewUrl || heroPreviewUrl
   const bannerPositionY = bannerUsesWide ? fields.hero_wide_image_position_y : fields.hero_image_position_y
 
   return (
@@ -288,7 +350,7 @@ export function BrandProfileForm({
 
         <Field
           label="Logo"
-          hint="Paste the URL of your logo PNG. Ideally transparent background, horizontal orientation."
+          hint="Upload or import your logo — ideally transparent background, horizontal orientation. You can still paste a URL directly."
         >
           <input
             type="url"
@@ -298,7 +360,18 @@ export function BrandProfileForm({
             placeholder="https://cdn.yourbrand.com.au/logo.png"
             style={inputStyle}
           />
-          <ImagePreview url={fields.logo_url || null} alt={`${manufacturerName} logo`} />
+          {assetsAvailable && (
+            <AssetSlotControl
+              manufacturerId={manufacturerId}
+              uploadAssetType="logo"
+              pickerAssetTypes={['logo', 'icon']}
+              assets={assets}
+              currentAssetId={fields.logo_asset_id ?? null}
+              onPick={pickAsset('logo')}
+              onClear={clearAsset('logo')}
+            />
+          )}
+          <ImagePreview url={logoPreviewUrl} alt={`${manufacturerName} logo`} />
         </Field>
 
         <Field
@@ -313,17 +386,28 @@ export function BrandProfileForm({
             placeholder="https://cdn.yourbrand.com.au/hero.jpg"
             style={inputStyle}
           />
+          {assetsAvailable && (
+            <AssetSlotControl
+              manufacturerId={manufacturerId}
+              uploadAssetType="brand_hero"
+              pickerAssetTypes={['brand_hero', 'banner', 'card_hero', 'product']}
+              assets={assets}
+              currentAssetId={fields.hero_image_asset_id ?? null}
+              onPick={pickAsset('hero')}
+              onClear={clearAsset('hero')}
+            />
+          )}
         </Field>
 
         {/* Grid card preview + crop (driven by the hero image) */}
-        {fields.hero_image_url && (
+        {heroPreviewUrl && (
           <PreviewFrame
             title="Showroom grid card"
             caption="As it appears in the showroom grid. Drag to set which part of the hero image stays in frame."
           >
             <CropSlider value={fields.hero_image_position_y} onChange={setPosition('hero_image_position_y')} />
             <CardPreview
-              url={fields.hero_image_url}
+              url={heroPreviewUrl}
               positionY={fields.hero_image_position_y}
               manufacturerName={manufacturerName}
               description={fields.description || null}
@@ -344,6 +428,17 @@ export function BrandProfileForm({
             placeholder="https://cdn.yourbrand.com.au/banner.jpg"
             style={inputStyle}
           />
+          {assetsAvailable && (
+            <AssetSlotControl
+              manufacturerId={manufacturerId}
+              uploadAssetType="banner"
+              pickerAssetTypes={['banner', 'brand_hero']}
+              assets={assets}
+              currentAssetId={fields.hero_wide_image_asset_id ?? null}
+              onPick={pickAsset('banner')}
+              onClear={clearAsset('banner')}
+            />
+          )}
         </Field>
 
         {/* Banner preview + crop (wide image when set, else hero fallback) */}
@@ -362,7 +457,7 @@ export function BrandProfileForm({
             <BannerPreview
               url={bannerUrl}
               positionY={bannerPositionY}
-              logoUrl={fields.logo_url || null}
+              logoUrl={logoPreviewUrl}
               manufacturerName={manufacturerName}
               description={fields.description || null}
               websiteUrl={fields.website_url || null}

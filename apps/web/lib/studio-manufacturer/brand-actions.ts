@@ -31,6 +31,12 @@ export type BrandProfileFields = {
   logo_url: string | null
   phone: string | null
   abn: string | null
+  // Asset-library links (migration 046). Saved alongside the *_url columns —
+  // the URLs keep working for everything that reads them today, while the
+  // package generator uses the asset ids to bundle local files.
+  logo_asset_id?: string | null
+  hero_image_asset_id?: string | null
+  hero_wide_image_asset_id?: string | null
 }
 
 export type BrandActionResult = { ok: true } | { ok: false; error: string }
@@ -63,6 +69,9 @@ export async function saveBrandProfile(
     logo_url:       fields.logo_url?.trim()       || null,
     phone:          fields.phone?.trim()           || null,
     abn:            fields.abn?.trim()             || null,
+    logo_asset_id:            fields.logo_asset_id ?? null,
+    hero_image_asset_id:      fields.hero_image_asset_id ?? null,
+    hero_wide_image_asset_id: fields.hero_wide_image_asset_id ?? null,
     updated_at:     new Date().toISOString(),
   }
 
@@ -73,21 +82,37 @@ export async function saveBrandProfile(
 
   if (!error) return { ok: true }
 
-  // Migrations 031/034 may not be applied yet — retry without whichever
-  // hero-position / wide-image columns the live schema is missing.
-  if (error.code === '42703' || /hero_(image|wide_image)/.test(error.message ?? '')) {
+  // Migration 046 may not be applied yet — retry without the asset-id columns.
+  if (error.code === '42703' || /_asset_id/.test(error.message ?? '')) {
     const {
-      hero_image_position_y: _p1,
-      hero_wide_image_url: _w1,
-      hero_wide_image_position_y: _w2,
-      ...payloadWithout
+      logo_asset_id: _a1,
+      hero_image_asset_id: _a2,
+      hero_wide_image_asset_id: _a3,
+      ...payloadNoAssets
     } = payload
-    const { error: retryErr } = await supabase
+    const { error: retry046Err } = await supabase
       .from('data_studio_manufacturers')
-      .update(payloadWithout)
+      .update(payloadNoAssets)
       .eq('id', manufacturerId)
-    if (!retryErr) return { ok: true }
-    return { ok: false, error: retryErr.message }
+    if (!retry046Err) return { ok: true }
+
+    // Migrations 031/034 may not be applied yet either — retry again without
+    // whichever hero-position / wide-image columns the live schema is missing.
+    if (retry046Err.code === '42703' || /hero_(image|wide_image)/.test(retry046Err.message ?? '')) {
+      const {
+        hero_image_position_y: _p1,
+        hero_wide_image_url: _w1,
+        hero_wide_image_position_y: _w2,
+        ...payloadMinimal
+      } = payloadNoAssets
+      const { error: retryErr } = await supabase
+        .from('data_studio_manufacturers')
+        .update(payloadMinimal)
+        .eq('id', manufacturerId)
+      if (!retryErr) return { ok: true }
+      return { ok: false, error: retryErr.message }
+    }
+    return { ok: false, error: retry046Err.message }
   }
 
   return { ok: false, error: error.message }

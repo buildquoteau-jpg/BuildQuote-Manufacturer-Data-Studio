@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
-import { createPresignedUploadUrl, uploadObjectToR2 } from '@/lib/r2'
+import { createPresignedUploadUrl, createPresignedDownloadUrl, uploadObjectToR2 } from '@/lib/r2'
 import { ASSET_TYPES } from './asset-types'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
@@ -110,8 +110,24 @@ export type RecordAssetUploadInput = {
 }
 
 export type RecordAssetResult =
-  | { ok: true; assetId: string }
+  | {
+      ok: true
+      assetId: string
+      /** Durable public URL when the R2 bucket exposes one, else null. */
+      publicUrl: string | null
+      /** Browser-viewable URL for immediate preview (public or presigned). */
+      displayUrl: string | null
+    }
   | { ok: false; error: string }
+
+async function resolveAssetDisplayUrl(
+  publicUrl: string | null,
+  storageKey: string,
+): Promise<string | null> {
+  if (publicUrl) return publicUrl
+  const presigned = await createPresignedDownloadUrl({ storageKey, expiresInSeconds: 3600 })
+  return presigned.ok ? presigned.downloadUrl : null
+}
 
 export async function recordAssetUpload(
   input: RecordAssetUploadInput,
@@ -154,7 +170,12 @@ export async function recordAssetUpload(
   }
 
   revalidatePath('/manufacturer/assets')
-  return { ok: true, assetId: (data as { id: string }).id }
+  return {
+    ok: true,
+    assetId: (data as { id: string }).id,
+    publicUrl,
+    displayUrl: await resolveAssetDisplayUrl(publicUrl, input.storageKey),
+  }
 }
 
 // ─── importAssetFromUrl ───────────────────────────────────────────────────────
@@ -258,7 +279,12 @@ export async function importAssetFromUrl(
   }
 
   revalidatePath('/manufacturer/assets')
-  return { ok: true, assetId: (data as { id: string }).id }
+  return {
+    ok: true,
+    assetId: (data as { id: string }).id,
+    publicUrl,
+    displayUrl: await resolveAssetDisplayUrl(publicUrl, storageKey),
+  }
 }
 
 // ─── updateAssetMeta ──────────────────────────────────────────────────────────
