@@ -4,6 +4,7 @@ import { getPackagesPageData } from '@/lib/studio-manufacturer/packages'
 import { CARD_READINESS_LABELS, type CardReadiness } from '@/lib/packages/readiness'
 import { packageStatusLabel } from '@/lib/statuses'
 import { StudioShell } from '@/components/studio/StudioShell'
+import { GeneratePackageButton, DownloadZipButton } from './PackagesClient'
 
 // The Packages page is the handover product of the whole Studio: a static
 // System Card website ZIP the manufacturer installs on their own site
@@ -173,19 +174,15 @@ export default async function ManufacturerPackagesPage() {
         <p style={{ fontSize: '0.83rem', color: 'var(--ds-text-muted)', marginBottom: '0.75rem', maxWidth: 720 }}>
           Generating bundles every <strong>Ready to package</strong> card into one downloadable ZIP.
           Cards with blockers are left out — fix the blockers above and regenerate to include them.
+          You can check the final card experience first on the{' '}
+          <a href="/manufacturer/preview" style={{ color: 'var(--ds-teal)' }}>preview page</a>.
         </p>
-        <button
-          className="studio-btn studio-btn-primary"
-          disabled
-          title="Package generation is being rolled out — readiness checks are live now."
-          style={{ opacity: 0.55, cursor: 'not-allowed' }}
-        >
-          Generate package
-        </button>
-        <p style={{ fontSize: '0.76rem', color: 'var(--ds-text-faint)', marginTop: '0.5rem' }}>
-          Package generation is being rolled out — readiness checks are live now, and the generate
-          button will activate here shortly.
-        </p>
+        <GeneratePackageButton
+          manufacturerId={ctx.manufacturerId}
+          canGenerate={readiness.canGenerate && !packagesMigrationMissing}
+          readyCount={readiness.readyCount}
+          hasExistingPackage={packages.length > 0}
+        />
       </div>
 
       {/* ── Generated packages ── */}
@@ -193,8 +190,9 @@ export default async function ManufacturerPackagesPage() {
         <div className="studio-section-heading">Generated packages</div>
         {packages.length === 0 ? (
           <div className="studio-info">
-            No packages generated yet. Once your first package is generated it appears here with
-            download links for the ZIP, QR pack, link list and embed snippets.
+            No packages generated yet. Once your first package is generated it appears here with a
+            ZIP download — the ZIP contains the full static website plus the QR code pack, card
+            link list, embed snippets and install guide.
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -207,17 +205,30 @@ export default async function ManufacturerPackagesPage() {
                   <th style={{ padding: '0.4rem 0.6rem' }}>Size</th>
                   <th style={{ padding: '0.4rem 0.6rem' }}>Generated</th>
                   <th style={{ padding: '0.4rem 0.6rem' }}>By</th>
+                  <th style={{ padding: '0.4rem 0.6rem' }}></th>
                 </tr>
               </thead>
               <tbody>
                 {packages.map((pkg) => (
                   <tr key={pkg.id} style={{ borderTop: '1px solid var(--ds-border-soft)' }}>
                     <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600 }}>v{pkg.packageVersion}</td>
-                    <td style={{ padding: '0.5rem 0.6rem' }}>{packageStatusLabel(pkg.status)}</td>
+                    <td style={{ padding: '0.5rem 0.6rem' }}>
+                      {packageStatusLabel(pkg.status)}
+                      {pkg.errorMessage && (
+                        <span style={{ display: 'block', fontSize: '0.72rem', color: '#b91c1c' }}>
+                          {pkg.errorMessage}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: '0.5rem 0.6rem' }}>{pkg.cardCount}</td>
                     <td style={{ padding: '0.5rem 0.6rem' }}>{formatBytes(pkg.fileSizeBytes)}</td>
                     <td style={{ padding: '0.5rem 0.6rem' }}>{formatDate(pkg.generatedAt ?? pkg.createdAt)}</td>
                     <td style={{ padding: '0.5rem 0.6rem' }}>{pkg.generatedByName ?? '—'}</td>
+                    <td style={{ padding: '0.5rem 0.6rem' }}>
+                      {pkg.hasZip && (
+                        <DownloadZipButton packageId={pkg.id} manufacturerId={ctx.manufacturerId} />
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

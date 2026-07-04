@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build-static-card-bundle.mjs && next build",
+    "bundle:static-card": "node scripts/build-static-card-bundle.mjs",
+    "package:fixture": "node scripts/build-static-card-bundle.mjs && tsx scripts/build-package-fixture.ts",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -28,7 +30,9 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "csv-parse": "^6.2.1",
+    "jszip": "^3.10.1",
     "next": "14.2.29",
+    "qrcode": "^1.5.4",
     "react": "^18",
     "react-dom": "^18",
     "resend": "^6.12.4"
@@ -36,8 +40,10 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.55.0",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "esbuild": "^0.28.1",
     "openai": "^6.37.0",
     "pdf-parse": "^2.4.5",
     "tsx": "^4.19.3",

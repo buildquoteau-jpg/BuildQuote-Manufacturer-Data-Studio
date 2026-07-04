@@ -13,10 +13,8 @@ import type {
 } from '@/lib/studio-manufacturer/workspace'
 import type { SystemCardSystem, SystemCardComponentEntry } from './types'
 
-// Staged systems don't carry a slug (it's assigned on publish), so derive a
-// stable one from the name for display/share purposes.
-// TODO(publish): replace with the real production slug once the system is
-// promoted — the static package generator must use the published slug.
+// Prefer the stored staged_systems.slug; fall back to a stable slug derived
+// from the name (matches lib/packages/readiness.ts resolveCardSlug).
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -54,7 +52,7 @@ export function adaptStagedSystem(
     id: system.id,
     name: system.name,
     product_code: system.product_code,
-    slug: slugify(system.name),
+    slug: (system.slug && system.slug.trim()) || slugify(system.name),
     category: system.category,
     subcategory: system.subcategory,
     description: system.description,

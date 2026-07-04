@@ -45,3 +45,6 @@ supabase/.temp/
 .local/
 .vercel
 .env*.local
+
+# Package generator fixture output (rebuild with: corepack pnpm package:fixture)
+apps/web/.package-fixture/

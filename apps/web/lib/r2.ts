@@ -89,6 +89,27 @@ export async function uploadObjectToR2(opts: {
   }
 }
 
+export type GetObjectResult =
+  | { ok: true; bytes: Uint8Array; contentType: string | null }
+  | { ok: false; error: string }
+
+// Server-side GET — used by the package generator to pull asset bytes into
+// the ZIP. Not for large files; assets are capped at 25 MB on upload.
+export async function getObjectFromR2(storageKey: string): Promise<GetObjectResult> {
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET_NAME
+  if (!bucket) return { ok: false, error: 'CLOUDFLARE_R2_BUCKET_NAME not configured.' }
+
+  try {
+    const client = makeR2Client()
+    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: storageKey }))
+    if (!response.Body) return { ok: false, error: 'Empty object body.' }
+    const bytes = await response.Body.transformToByteArray()
+    return { ok: true, bytes, contentType: response.ContentType ?? null }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 export type PresignedDownloadResult =
   | { ok: true; downloadUrl: string }
   | { ok: false; error: string }
