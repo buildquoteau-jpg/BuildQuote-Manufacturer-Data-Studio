@@ -598,6 +598,7 @@ export type VerificationSystemColour = {
 export type VerificationSystem = {
   id: string
   name: string
+  slug: string | null
   product_code: string | null
   category: string | null
   subcategory: string | null
@@ -649,7 +650,7 @@ export async function getManufacturerVerificationData(
     c.supabase
       .from('staged_systems')
       .select(
-        'id, name, product_code, category, subcategory, description, hero_image_url, ' +
+        'id, name, slug, product_code, category, subcategory, description, hero_image_url, ' +
         'hero_image_position_x, hero_image_position_y, ' +
         'australian_made, bal_rating, fire_rating, acoustic_rating, moisture_resistant, ' +
         'structural_grade, website_url, source_url, install_guide_urls, design_guide_url, tech_data_url, ' +
@@ -675,7 +676,7 @@ export async function getManufacturerVerificationData(
   }
 
   type SysRow = {
-    id: string; name: string; product_code: string | null
+    id: string; name: string; slug: string | null; product_code: string | null
     category: string | null; subcategory: string | null; description: string | null
     hero_image_url: string | null; hero_image_position_x: number | null; hero_image_position_y: number | null
     australian_made: boolean | null

@@ -61,6 +61,34 @@ export async function createPresignedUploadUrl(opts: {
   }
 }
 
+export type UploadObjectResult =
+  | { ok: true; storageKey: string }
+  | { ok: false; error: string }
+
+// Server-side direct PUT — used when the server already holds the bytes
+// (e.g. importing an asset from a URL), so no presigned browser upload needed.
+export async function uploadObjectToR2(opts: {
+  storageKey: string
+  body: Uint8Array
+  contentType: string
+}): Promise<UploadObjectResult> {
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET_NAME
+  if (!bucket) return { ok: false, error: 'CLOUDFLARE_R2_BUCKET_NAME not configured.' }
+
+  try {
+    const client = makeR2Client()
+    await client.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: opts.storageKey,
+      Body: opts.body,
+      ContentType: opts.contentType,
+    }))
+    return { ok: true, storageKey: opts.storageKey }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 export type PresignedDownloadResult =
   | { ok: true; downloadUrl: string }
   | { ok: false; error: string }

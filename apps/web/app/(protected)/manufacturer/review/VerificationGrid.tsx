@@ -2072,6 +2072,7 @@ export function VerificationGrid({
       const blankSystem: VerificationSystem = {
         id: res.id,
         name: 'New system',
+        slug: null,
         product_code: null,
         category: null,
         subcategory: null,
