@@ -48,6 +48,12 @@ export default async function HostedCardVersionPage({ params }: { params: { mfr:
       superseded={superseded}
       version={card.version}
       storageKey={`bq-shopping-list:${card.manufacturerSlug}`}
+      tracking={{
+        apiBase: ORIGIN,
+        manufacturerSlug: card.manufacturerSlug,
+        cardSlug: card.cardSlug,
+        version: card.version,
+      }}
     />
   )
 }

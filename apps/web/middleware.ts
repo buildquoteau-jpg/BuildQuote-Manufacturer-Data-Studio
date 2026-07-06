@@ -52,7 +52,12 @@ export async function middleware(request: NextRequest) {
     // Tokenised no-login stockist confirmation links
     !request.nextUrl.pathname.startsWith('/stockist-confirm') &&
     // Sitemap of canonical card URLs
-    request.nextUrl.pathname !== '/sitemap.xml'
+    request.nextUrl.pathname !== '/sitemap.xml' &&
+    // Share links, view beacon, share creation, doc click-through tracking
+    !request.nextUrl.pathname.startsWith('/s/') &&
+    !request.nextUrl.pathname.startsWith('/api/beacon') &&
+    !request.nextUrl.pathname.startsWith('/api/share') &&
+    !request.nextUrl.pathname.startsWith('/api/doc-click')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'

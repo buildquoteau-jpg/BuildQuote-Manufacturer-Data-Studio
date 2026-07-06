@@ -127,6 +127,17 @@ export type SystemCardValidation = {
   version: number | null        // package/card version this render represents
 }
 
+// Share/analytics wiring for a card render. When present the card can mint
+// tokenised share links (copy/SMS/email), send the view beacon and route doc
+// clicks through the tracking redirect. Everything fails soft — cards work
+// identically with tracking absent or unreachable.
+export type SystemCardTracking = {
+  apiBase: string           // studio origin, e.g. https://studio.buildquote.com.au
+  manufacturerSlug: string
+  cardSlug: string
+  version: number | null
+}
+
 // One line on the client-side shopping list (same shape as v6).
 export type ShoppingListItem = {
   id: string

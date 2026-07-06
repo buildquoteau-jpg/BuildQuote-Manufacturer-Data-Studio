@@ -8,10 +8,11 @@
 // Renders a card_versions snapshot through the master renderer. The shopping
 // list works but is scoped per manufacturer like the static package.
 
+import { useEffect } from 'react'
 import { ShoppingListProvider, useShoppingList } from './ShoppingListProvider'
 import { ShoppingListDrawer } from './ShoppingListDrawer'
 import { SystemCardRenderer } from './SystemCardRenderer'
-import type { SystemCardSystem, SystemCardStockist, SystemCardValidation } from './types'
+import type { SystemCardSystem, SystemCardStockist, SystemCardTracking, SystemCardValidation } from './types'
 
 const FONT_BODY = "'Barlow', -apple-system, 'Segoe UI', sans-serif"
 const FONTS_HREF =
@@ -29,10 +30,32 @@ export type HostedCardPageProps = {
   /** Version being viewed (shown in the banner). */
   version: number | null
   storageKey: string
+  /** Share/analytics wiring (share links, view beacon, doc-click tracking). */
+  tracking?: SystemCardTracking | null
 }
 
 function Body({ data }: { data: HostedCardPageProps }) {
   const { addItems } = useShoppingList()
+
+  // View beacon — same contract as the static package. Silent on failure.
+  useEffect(() => {
+    const t = data.tracking
+    if (!t) return
+    try {
+      fetch(`${t.apiBase}/api/beacon`, {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          m: t.manufacturerSlug,
+          slug: t.cardSlug,
+          version: t.version,
+          host: window.location.hostname,
+        }),
+      }).catch(() => { /* silent */ })
+    } catch { /* silent */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div style={{ fontFamily: FONT_BODY, background: '#f5f7f9', minHeight: '100vh', paddingBottom: '64px' }}>
@@ -66,6 +89,7 @@ function Body({ data }: { data: HostedCardPageProps }) {
           onAddToList={addItems}
           cardUrl={data.canonicalUrl}
           validation={data.validation}
+          tracking={data.tracking ?? null}
         />
       </div>
 

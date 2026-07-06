@@ -49,6 +49,12 @@ export default async function HostedCardCanonicalPage({ params }: { params: { mf
       superseded={false}
       version={card.version}
       storageKey={`bq-shopping-list:${card.manufacturerSlug}`}
+      tracking={{
+        apiBase: ORIGIN,
+        manufacturerSlug: card.manufacturerSlug,
+        cardSlug: card.cardSlug,
+        version: card.version,
+      }}
     />
     </>
   )

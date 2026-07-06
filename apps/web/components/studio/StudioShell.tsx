@@ -28,6 +28,7 @@ const MFR_NAV: NavItem[] = [
   { label: 'Verify systems',  href: '/manufacturer/review' },
   { label: 'Packages',        href: '/manufacturer/packages' },
   { label: 'Embeds & Links',  href: '/manufacturer/widgets' },
+  { label: 'Analytics',       href: '/manufacturer/analytics' },
   { label: 'Inbox',           href: '/manufacturer/inbox' },
   { label: 'Help',            href: '/manufacturer/help' },
 ]

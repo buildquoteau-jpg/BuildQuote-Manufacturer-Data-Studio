@@ -21,6 +21,7 @@ import type {
   SystemCardColour,
   SystemCardComponentEntry,
   SystemCardStockist,
+  SystemCardTracking,
   SystemCardValidation,
   ShoppingListItem,
 } from './types'
@@ -46,6 +47,8 @@ type Props = {
   cardUrl?: string
   // Footer line "Validated by <manufacturer> · <date> · v<n>"; hidden when absent.
   validation?: SystemCardValidation | null
+  // Share/analytics wiring (tokenised share links, tracked doc clicks).
+  tracking?: SystemCardTracking | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -569,7 +572,7 @@ function ColoursSection({ colours, selected, onSelect }: {
 
 // ── Main card ─────────────────────────────────────────────────────────────────
 
-export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequestQuote, cardUrl, validation }: Props) {
+export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequestQuote, cardUrl, validation, tracking }: Props) {
   const [selectedProfiles,   setSelectedProfiles]   = useState<Set<number>>(new Set())
   const [selectedComponents, setSelectedComponents] = useState<Set<number>>(new Set())
   const [selectedColour,     setSelectedColour]     = useState<string | null>(null)
@@ -577,6 +580,7 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
   const [postcode,           setPostcode]           = useState('')
   const [justAdded,          setJustAdded]          = useState(0)
   const [cardLinkCopied,     setCardLinkCopied]     = useState(false)
+  const [shareChannelDone,   setShareChannelDone]   = useState<string | null>(null)
 
   const posX = system.hero_image_position_x ?? 50
   const posY = system.hero_image_position_y ?? 50
@@ -640,6 +644,59 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
       setJustAdded(items.length)
       window.setTimeout(() => setJustAdded(0), 2000)
     }
+  }
+
+  // Mint a tokenised /s/<token> share URL (records channel + share opens).
+  // Falls back to the canonical/current URL when tracking is absent or the
+  // endpoint is unreachable — sharing always works.
+  async function mintShareUrl(channel: 'copy' | 'sms' | 'email'): Promise<string> {
+    const fallback = tracking
+      ? `${tracking.apiBase}/cards/${tracking.manufacturerSlug}/${tracking.cardSlug}`
+      : (cardUrl ?? window.location.href).trim()
+    if (!tracking) return fallback
+    try {
+      const res = await fetch(`${tracking.apiBase}/api/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ m: tracking.manufacturerSlug, slug: tracking.cardSlug, channel }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        if (typeof json.url === 'string') return json.url
+      }
+    } catch { /* untracked fallback */ }
+    return fallback
+  }
+
+  function shareText(): string {
+    const title = stripSystem(system.name)
+    return system.manufacturer ? `${title} — ${system.manufacturer.name}` : title
+  }
+
+  async function shareViaChannel(channel: 'copy' | 'sms' | 'email') {
+    const url = await mintShareUrl(channel)
+    if (channel === 'copy') {
+      try {
+        await navigator.clipboard.writeText(url)
+        setShareChannelDone('copy')
+        window.setTimeout(() => setShareChannelDone(null), 2000)
+      } catch { /* clipboard unavailable */ }
+    } else if (channel === 'sms') {
+      window.location.href = `sms:?&body=${encodeURIComponent(`${shareText()} ${url}`)}`
+    } else {
+      window.location.href = `mailto:?subject=${encodeURIComponent(shareText())}&body=${encodeURIComponent(`${shareText()}\n${url}`)}`
+    }
+  }
+
+  // Route document links through the tracking redirect when wired; the
+  // redirect endpoint only accepts this card's known URLs.
+  function docHref(url: string, label: string): string {
+    if (!tracking) return url
+    return `${tracking.apiBase}/api/doc-click` +
+      `?m=${encodeURIComponent(tracking.manufacturerSlug)}` +
+      `&slug=${encodeURIComponent(tracking.cardSlug)}` +
+      `&label=${encodeURIComponent(label)}` +
+      `&u=${encodeURIComponent(url)}`
   }
 
   // Share the whole System Card (distinct from the shopping-list PNG share):
@@ -830,6 +887,26 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
             )}
           </button>
 
+          {/* Tokenised share links (copy / SMS / email) — only when the card
+              is wired for tracking; each mints a /s/<token> URL. */}
+          {tracking && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" onClick={() => shareViaChannel('copy')}
+                style={{ ...ghostLinkStyle, flex: 1, cursor: 'pointer', padding: '9px 10px', fontSize: '12.5px',
+                  ...(shareChannelDone === 'copy' ? { color: '#166534', background: '#f0fdf4', border: '1.5px solid #86efac' } : {}) }}>
+                {shareChannelDone === 'copy' ? 'Link copied ✓' : 'Copy link'}
+              </button>
+              <button type="button" onClick={() => shareViaChannel('sms')}
+                style={{ ...ghostLinkStyle, flex: 1, cursor: 'pointer', padding: '9px 10px', fontSize: '12.5px' }}>
+                SMS
+              </button>
+              <button type="button" onClick={() => shareViaChannel('email')}
+                style={{ ...ghostLinkStyle, flex: 1, cursor: 'pointer', padding: '9px 10px', fontSize: '12.5px' }}>
+                Email
+              </button>
+            </div>
+          )}
+
           {/* See local stockists */}
           {stockists.length === 0 ? (
             <span style={{ ...ghostLinkStyle, opacity: 0.5, cursor: 'default', userSelect: 'none' }}>
@@ -931,22 +1008,22 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
           {/* Manufacturer website — only when the column holds a real URL
               (guard against NULL and whitespace-only/dirty values). */}
           {system.website_url?.trim() && (
-            <GuideLink href={system.website_url.trim()} context={`View ${mfrName}`} label="Website" />
+            <GuideLink href={docHref(system.website_url.trim(), 'Website')} context={`View ${mfrName}`} label="Website" />
           )}
 
           {/* Install guides */}
           {(system.install_guide_urls ?? []).map((guide, i) => (
-            <GuideLink key={i} href={guide.url} context={`View ${mfrName}`} label="Installation guide" />
+            <GuideLink key={i} href={docHref(guide.url, 'Installation guide')} context={`View ${mfrName}`} label="Installation guide" />
           ))}
 
           {/* Design guide */}
           {system.design_guide_url && (
-            <GuideLink href={system.design_guide_url} context={`View ${mfrName}`} label="Design guide" />
+            <GuideLink href={docHref(system.design_guide_url, 'Design guide')} context={`View ${mfrName}`} label="Design guide" />
           )}
 
           {/* Tech data */}
           {system.tech_data_url && (
-            <GuideLink href={system.tech_data_url} context={`View ${mfrName}`} label="Technical guide" />
+            <GuideLink href={docHref(system.tech_data_url, 'Technical guide')} context={`View ${mfrName}`} label="Technical guide" />
           )}
 
         </div>

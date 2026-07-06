@@ -12,7 +12,7 @@ import { ShoppingListProvider, useShoppingList } from '../ShoppingListProvider'
 import { ShoppingListDrawer } from '../ShoppingListDrawer'
 import { SystemCardRenderer } from '../SystemCardRenderer'
 import { SystemCardTile } from '../SystemCardTile'
-import type { SystemCardSystem, SystemCardManufacturerPage, SystemCardStockist, SystemCardValidation } from '../types'
+import type { SystemCardSystem, SystemCardManufacturerPage, SystemCardStockist, SystemCardTracking, SystemCardValidation } from '../types'
 
 const FONT_BODY    = "'Barlow', -apple-system, 'Segoe UI', sans-serif"
 const FONT_HEADING = "'Barlow Condensed', 'Barlow', sans-serif"
@@ -36,6 +36,8 @@ export type StaticCardData = {
   stockistsUrl?: string | null
   /** Footer "Validated by <manufacturer> · <date> · v<n>". */
   validation?: SystemCardValidation | null
+  /** Share/analytics wiring (share links, view beacon, doc-click tracking). */
+  tracking?: SystemCardTracking | null
 }
 
 export type StaticPageData = StaticCollectionData | StaticCardData
@@ -157,6 +159,27 @@ function CardPageBody({ data }: { data: StaticCardData }) {
     return () => { cancelled = true }
   }, [data.stockistsUrl])
 
+  // View beacon — card slug, version, host domain. No cookies, no personal
+  // data; fails silently when offline or blocked.
+  useEffect(() => {
+    const t = data.tracking
+    if (!t) return
+    try {
+      fetch(`${t.apiBase}/api/beacon`, {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          m: t.manufacturerSlug,
+          slug: t.cardSlug,
+          version: t.version,
+          host: window.location.hostname || 'file',
+        }),
+      }).catch(() => { /* silent */ })
+    } catch { /* silent */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div style={{ fontFamily: FONT_BODY, background: '#f5f7f9', minHeight: '100vh', paddingBottom: '64px' }}>
 
@@ -181,7 +204,13 @@ function CardPageBody({ data }: { data: StaticCardData }) {
 
       {/* Card */}
       <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px 20px' }}>
-        <SystemCardRenderer system={system} stockists={stockists} onAddToList={addItems} validation={data.validation ?? null} />
+        <SystemCardRenderer
+          system={system}
+          stockists={stockists}
+          onAddToList={addItems}
+          validation={data.validation ?? null}
+          tracking={data.tracking ?? null}
+        />
 
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <a href={backHref} style={{

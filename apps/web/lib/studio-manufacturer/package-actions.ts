@@ -346,6 +346,14 @@ export async function generateCardPackage(
     const studioOrigin = process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au'
     for (const card of cards) {
       card.stockistsUrl = `${studioOrigin}/api/cards/${encodeURIComponent(card.slug)}/stockists.json?m=${encodeURIComponent(verification.manufacturer.slug)}`
+      // Share links + view beacon + doc-click tracking (050). All fail soft
+      // in the wild, so wiring is safe even before the migration is applied.
+      card.tracking = {
+        apiBase: studioOrigin,
+        manufacturerSlug: verification.manufacturer.slug,
+        cardSlug: card.slug,
+        version: nextVersion,
+      }
     }
 
     // URL PERMANENCE: lock the resolved slug into staged_systems for any card

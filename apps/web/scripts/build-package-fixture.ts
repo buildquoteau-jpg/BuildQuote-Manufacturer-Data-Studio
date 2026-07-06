@@ -67,6 +67,14 @@ async function main() {
         validated_at: '2026-06-17T00:00:00Z',
         version: 1,
       },
+      // Share buttons + view beacon + doc-click tracking — endpoints are
+      // unreachable in the fixture, proving everything fails soft.
+      tracking: {
+        apiBase: 'https://studio.buildquote.com.au',
+        manufacturerSlug: 'james-hardie',
+        cardSlug: system.slug,
+        version: 1,
+      },
     })),
     logoAsset: null,
     brandHeroAsset: null,
