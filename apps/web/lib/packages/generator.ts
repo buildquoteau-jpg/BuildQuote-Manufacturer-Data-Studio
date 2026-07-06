@@ -33,6 +33,7 @@ import type {
   SystemCardSystem,
   SystemCardManufacturerPage,
   SystemCardStockist,
+  SystemCardValidation,
 } from '@/components/system-card-renderer/types'
 import type { StaticCardData, StaticCollectionData } from '@/components/system-card-renderer/static/StaticPages'
 
@@ -56,6 +57,8 @@ export type PackageCardInput = {
    * Falls back silently to the embedded list when offline/blocked.
    */
   stockistsUrl?: string | null
+  /** Footer "Validated by <manufacturer> · <date> · v<n>". */
+  validation?: SystemCardValidation | null
 }
 
 export type PackageBuildInput = {
@@ -236,6 +239,7 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       storageKey,
       stockists: card.stockists ?? [],
       stockistsUrl: card.stockistsUrl ?? null,
+      validation: card.validation ?? null,
     }
     dir.file('index.html', pageHtml({
       title: `${card.system.name} — ${input.manufacturer.name} System Card`,

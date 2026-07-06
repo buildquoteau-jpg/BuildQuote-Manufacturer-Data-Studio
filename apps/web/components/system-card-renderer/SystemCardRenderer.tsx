@@ -21,6 +21,7 @@ import type {
   SystemCardColour,
   SystemCardComponentEntry,
   SystemCardStockist,
+  SystemCardValidation,
   ShoppingListItem,
 } from './types'
 
@@ -43,6 +44,8 @@ type Props = {
   // Absolute URL used by "Share System Card"; falls back to the current page
   // URL when not provided.
   cardUrl?: string
+  // Footer line "Validated by <manufacturer> · <date> · v<n>"; hidden when absent.
+  validation?: SystemCardValidation | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -566,7 +569,7 @@ function ColoursSection({ colours, selected, onSelect }: {
 
 // ── Main card ─────────────────────────────────────────────────────────────────
 
-export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequestQuote, cardUrl }: Props) {
+export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequestQuote, cardUrl, validation }: Props) {
   const [selectedProfiles,   setSelectedProfiles]   = useState<Set<number>>(new Set())
   const [selectedComponents, setSelectedComponents] = useState<Set<number>>(new Set())
   const [selectedColour,     setSelectedColour]     = useState<string | null>(null)
@@ -947,6 +950,22 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
           )}
 
         </div>
+
+        {/* Validation footer — who stands behind this data, when, which version */}
+        {validation && (validation.validated_by || validation.validated_at || validation.version != null) && (
+          <div style={{
+            marginTop: '18px', paddingTop: '12px', borderTop: '1px solid #e2e8f0',
+            fontSize: '11.5px', color: '#7d97a3', textAlign: 'center', lineHeight: 1.6,
+          }}>
+            {validation.validated_by && <>Validated by <strong style={{ color: '#64748b' }}>{validation.validated_by}</strong></>}
+            {validation.validated_at && (
+              <>{validation.validated_by ? ' · ' : ''}{new Date(validation.validated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>
+            )}
+            {validation.version != null && (
+              <>{(validation.validated_by || validation.validated_at) ? ' · ' : ''}v{validation.version}</>
+            )}
+          </div>
+        )}
 
       </div>
     </div>

@@ -5,6 +5,7 @@ import { CARD_READINESS_LABELS, type CardReadiness } from '@/lib/packages/readin
 import { packageStatusLabel } from '@/lib/statuses'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { GeneratePackageButton, DownloadZipButton } from './PackagesClient'
+import { ExportsClient } from './ExportsClient'
 
 // The Packages page is the handover product of the whole Studio: a static
 // System Card website ZIP the manufacturer installs on their own site
@@ -264,6 +265,15 @@ export default async function ManufacturerPackagesPage() {
           <a href="/manufacturer/widgets" style={{ color: 'var(--ds-teal)' }}>Embeds &amp; Links</a>{' '}
           instead.
         </p>
+      </div>
+
+      {/* ── Validation & audit exports ── */}
+      <div className="studio-section">
+        <div className="studio-section-heading">Validation &amp; audit exports</div>
+        <ExportsClient
+          manufacturerId={ctx.manufacturerId}
+          cards={result.data.systems.map((s) => ({ id: s.id, name: s.name }))}
+        />
       </div>
     </StudioShell>
   )

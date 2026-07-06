@@ -12,7 +12,7 @@ import { ShoppingListProvider, useShoppingList } from '../ShoppingListProvider'
 import { ShoppingListDrawer } from '../ShoppingListDrawer'
 import { SystemCardRenderer } from '../SystemCardRenderer'
 import { SystemCardTile } from '../SystemCardTile'
-import type { SystemCardSystem, SystemCardManufacturerPage, SystemCardStockist } from '../types'
+import type { SystemCardSystem, SystemCardManufacturerPage, SystemCardStockist, SystemCardValidation } from '../types'
 
 const FONT_BODY    = "'Barlow', -apple-system, 'Segoe UI', sans-serif"
 const FONT_HEADING = "'Barlow Condensed', 'Barlow', sans-serif"
@@ -34,6 +34,8 @@ export type StaticCardData = {
   stockists?: SystemCardStockist[]
   /** Public endpoint for CURRENT stockists — fetched on load, silent on failure. */
   stockistsUrl?: string | null
+  /** Footer "Validated by <manufacturer> · <date> · v<n>". */
+  validation?: SystemCardValidation | null
 }
 
 export type StaticPageData = StaticCollectionData | StaticCardData
@@ -179,7 +181,7 @@ function CardPageBody({ data }: { data: StaticCardData }) {
 
       {/* Card */}
       <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px 20px' }}>
-        <SystemCardRenderer system={system} stockists={stockists} onAddToList={addItems} />
+        <SystemCardRenderer system={system} stockists={stockists} onAddToList={addItems} validation={data.validation ?? null} />
 
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <a href={backHref} style={{

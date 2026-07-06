@@ -119,6 +119,14 @@ export type SystemCardStockist = {
   confirmed_at?: string | null
 }
 
+// Validation line shown in the card footer: "Validated by <manufacturer> ·
+// <date> · v<n>". All parts optional — the footer renders whatever is known.
+export type SystemCardValidation = {
+  validated_by: string | null   // manufacturer name (the validating party)
+  validated_at: string | null   // ISO date of manufacturer verification
+  version: number | null        // package/card version this render represents
+}
+
 // One line on the client-side shopping list (same shape as v6).
 export type ShoppingListItem = {
   id: string

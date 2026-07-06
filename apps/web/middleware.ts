@@ -47,6 +47,8 @@ export async function middleware(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/api/widget') &&
     // Public card data (stockist refresh for travelling cards)
     !request.nextUrl.pathname.startsWith('/api/cards') &&
+    // Public hosted card pages (canonical + versioned URLs)
+    !request.nextUrl.pathname.startsWith('/cards') &&
     // Tokenised no-login stockist confirmation links
     !request.nextUrl.pathname.startsWith('/stockist-confirm')
   ) {

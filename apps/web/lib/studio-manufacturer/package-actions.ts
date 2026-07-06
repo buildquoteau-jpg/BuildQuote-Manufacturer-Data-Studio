@@ -320,6 +320,13 @@ export async function generateCardPackage(
         system: adaptStagedSystem(system, verification.manufacturer),
         heroAsset,
         stockists: stockistsForCard(stockistData.rows, stockistData.linkedCardIds, system.id),
+        // Footer: the manufacturer stands behind the data, dated to their
+        // verification, versioned to this package.
+        validation: {
+          validated_by: verification.manufacturer.name,
+          validated_at: system.verified_at,
+          version: nextVersion,
+        },
       })
     }
 
@@ -412,6 +419,34 @@ export async function generateCardPackage(
       await supabase
         .from('card_packages')
         .update({ build_log: `${fullLog.join('\n')}\nWARN: card_package_items insert failed: ${itemsError.message}` })
+        .eq('id', packageId)
+    }
+
+    // Immutable version history (049): one snapshot per card per package
+    // version — the record behind versioned card URLs, the validation footer
+    // and the audit/certificate exports. Insert-only; degrades to a log note
+    // when the migration isn't applied.
+    const versionRows = result.items.map((item, i) => {
+      const { system } = readyCards[i]
+      const card = cards[i]
+      return {
+        manufacturer_id: manufacturerId,
+        card_id: system.id,
+        package_id: packageId,
+        version: nextVersion,
+        slug: item.slug,
+        name: system.name,
+        card_json: card.system,          // original asset URLs, not localised
+        stockists_json: card.stockists ?? [],
+        validated_by: system.reviewer_notes,
+        validated_at: system.verified_at,
+      }
+    })
+    const { error: versionsError } = await supabase.from('card_versions').insert(versionRows)
+    if (versionsError) {
+      await supabase
+        .from('card_packages')
+        .update({ build_log: `${fullLog.join('\n')}\nNote: card_versions snapshot skipped (${versionsError.message})` })
         .eq('id', packageId)
     }
 

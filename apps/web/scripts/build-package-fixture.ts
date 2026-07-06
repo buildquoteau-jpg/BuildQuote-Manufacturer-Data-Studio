@@ -61,6 +61,12 @@ async function main() {
       // Deliberately unreachable in the fixture — proves the silent fallback
       // to the embedded list.
       stockistsUrl: `https://studio.buildquote.com.au/api/cards/${system.slug}/stockists.json?m=james-hardie`,
+      // Footer "Validated by … · date · v1"
+      validation: {
+        validated_by: 'James Hardie®',
+        validated_at: '2026-06-17T00:00:00Z',
+        version: 1,
+      },
     })),
     logoAsset: null,
     brandHeroAsset: null,
