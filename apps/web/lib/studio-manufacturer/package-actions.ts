@@ -348,6 +348,23 @@ export async function generateCardPackage(
       card.stockistsUrl = `${studioOrigin}/api/cards/${encodeURIComponent(card.slug)}/stockists.json?m=${encodeURIComponent(verification.manufacturer.slug)}`
     }
 
+    // URL PERMANENCE: lock the resolved slug into staged_systems for any card
+    // that doesn't have one stored yet. Without this, a card's URL derives
+    // from its NAME, and a later rename would silently move every QR code,
+    // share link and backlink. First publish makes the slug permanent.
+    for (let i = 0; i < cards.length; i++) {
+      const { system } = readyCards[i]
+      if (!system.slug?.trim()) {
+        const { error: slugError } = await supabase
+          .from('staged_systems')
+          .update({ slug: cards[i].slug, updated_at: new Date().toISOString() })
+          .eq('id', system.id)
+          .or('slug.is.null,slug.eq.')
+        if (slugError) log.push(`Note: could not persist slug "${cards[i].slug}" for ${system.name}: ${slugError.message}`)
+        else log.push(`Locked permanent slug "${cards[i].slug}" for ${system.name}.`)
+      }
+    }
+
     // ── Build the ZIP ──
     const generatedAtIso = new Date().toISOString()
     const result = await buildPackageZip({
