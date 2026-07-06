@@ -36,6 +36,7 @@ import type {
   SystemCardValidation,
 } from '@/components/system-card-renderer/types'
 import type { StaticCardData, StaticCollectionData } from '@/components/system-card-renderer/static/StaticPages'
+import { buildCardJsonLd } from './jsonld'
 
 export type PackageFile = {
   /** File name inside the owning assets folder, e.g. "hero.webp". */
@@ -135,6 +136,8 @@ function pageHtml(opts: {
   description: string | null
   assetsPrefix: string  // "./" (collection) or "../../" (card pages)
   data: StaticCollectionData | StaticCardData
+  /** schema.org JSON-LD object embedded as application/ld+json (card pages). */
+  jsonLd?: Record<string, unknown> | null
 }): string {
   return `<!doctype html>
 <html lang="en">
@@ -146,6 +149,7 @@ ${opts.description ? `<meta name="description" content="${escapeHtml(opts.descri
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="${FONTS_HREF}">
 <link rel="stylesheet" href="${opts.assetsPrefix}assets/site.css">
+${opts.jsonLd ? `<script type="application/ld+json">${inlineJson(opts.jsonLd)}</script>` : ''}
 </head>
 <body>
 <div id="root"><noscript><div class="bq-noscript">This System Card needs JavaScript enabled. The same product data is available in <a href="card.json">card.json</a>.</div></noscript></div>
@@ -246,6 +250,9 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       description: card.system.description,
       assetsPrefix: '../../',
       data: cardData,
+      // Machine readability: schema.org Product (original card, so external
+      // image URLs survive; local package paths are omitted).
+      jsonLd: buildCardJsonLd(card.system, publicUrl),
     }))
 
     // card.json — same local-path shape the page uses (portable data contract),

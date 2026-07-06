@@ -10,6 +10,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getHostedCard } from '@/lib/data/getHostedCard'
 import { HostedCardPage } from '@/components/system-card-renderer/HostedCardPage'
+import { buildCardJsonLd } from '@/lib/packages/jsonld'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,16 +30,26 @@ export default async function HostedCardCanonicalPage({ params }: { params: { mf
   const card = await getHostedCard(params.mfr, params.slug)
   if (!card) notFound()
 
+  const canonicalUrl = `${ORIGIN}/cards/${card.manufacturerSlug}/${card.cardSlug}`
+  const jsonLd = buildCardJsonLd(card.system, canonicalUrl)
+
   return (
+    <>
+    <script
+      type="application/ld+json"
+      // JSON.stringify + < escaping — same guard as the package generator
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+    />
     <HostedCardPage
       system={card.system}
       stockists={card.stockists}
       validation={card.validation}
       manufacturerName={card.manufacturerName}
-      canonicalUrl={`${ORIGIN}/cards/${card.manufacturerSlug}/${card.cardSlug}`}
+      canonicalUrl={canonicalUrl}
       superseded={false}
       version={card.version}
       storageKey={`bq-shopping-list:${card.manufacturerSlug}`}
     />
+    </>
   )
 }

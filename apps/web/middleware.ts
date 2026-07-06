@@ -50,7 +50,9 @@ export async function middleware(request: NextRequest) {
     // Public hosted card pages (canonical + versioned URLs)
     !request.nextUrl.pathname.startsWith('/cards') &&
     // Tokenised no-login stockist confirmation links
-    !request.nextUrl.pathname.startsWith('/stockist-confirm')
+    !request.nextUrl.pathname.startsWith('/stockist-confirm') &&
+    // Sitemap of canonical card URLs
+    request.nextUrl.pathname !== '/sitemap.xml'
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
