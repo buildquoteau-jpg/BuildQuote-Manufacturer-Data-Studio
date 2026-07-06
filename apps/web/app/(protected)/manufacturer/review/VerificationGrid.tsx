@@ -1628,11 +1628,31 @@ function ExpandedCardView({
 
   return (
     <>
+      {/* Responsive behaviour: below 900px the preview/editor split stacks
+          vertically and the drag handle disappears; on phones the modal goes
+          full-screen. !important beats the inline resize styles. */}
+      <style>{`
+        @media (max-width: 899px) {
+          .vsplit { flex-direction: column; }
+          .vsplit-left {
+            flex: 0 0 auto !important;
+            width: auto !important;
+            max-width: none !important;
+            max-height: 38vh;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .vsplit-handle { display: none !important; }
+        }
+        @media (max-width: 640px) {
+          .vmodal { inset: 0 !important; border-radius: 0 !important; }
+        }
+      `}</style>
+
       {/* Backdrop */}
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 10000, backdropFilter: 'blur(2px)' }} />
 
       {/* Modal */}
-      <div style={{
+      <div className="vmodal" style={{
         position: 'fixed', inset: '16px', zIndex: 10001,
         background: '#f8fafc', borderRadius: '16px',
         display: 'flex', flexDirection: 'column',
@@ -1663,10 +1683,10 @@ function ExpandedCardView({
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#9ca3af', padding: '4px', lineHeight: 1 }}>×</button>
         </div>
 
-        {/* Body — two columns (resizable) */}
-        <div style={{ flex: 1, display: 'flex', gap: 0, overflow: 'hidden' }}>
+        {/* Body — two columns (resizable), stacks vertically below 900px */}
+        <div className="vsplit" style={{ flex: 1, display: 'flex', gap: 0, overflow: 'hidden' }}>
           {/* Left: system card preview */}
-          <div style={{ flex: `0 0 ${leftWidth}px`, minWidth: '280px', maxWidth: '680px', overflowY: 'auto', padding: '20px', background: '#f0f4f8' }}>
+          <div className="vsplit-left" style={{ flex: `0 0 ${leftWidth}px`, minWidth: '280px', maxWidth: '680px', overflowY: 'auto', padding: '20px', background: '#f0f4f8' }}>
             <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
               Final card preview
             </div>
@@ -1675,6 +1695,7 @@ function ExpandedCardView({
 
           {/* Drag handle */}
           <div
+            className="vsplit-handle"
             onMouseDown={onDragHandleMouseDown}
             style={{
               width: '6px', flexShrink: 0, cursor: 'col-resize',
@@ -2164,7 +2185,8 @@ export function VerificationGrid({
   return (
     <>
       <style>{`
-        .vgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        .vgrid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        @media (min-width: 560px)  { .vgrid { grid-template-columns: repeat(2, 1fr); } }
         @media (min-width: 900px)  { .vgrid { grid-template-columns: repeat(3, 1fr); } }
         @media (min-width: 1280px) { .vgrid { grid-template-columns: repeat(4, 1fr); } }
       `}</style>
