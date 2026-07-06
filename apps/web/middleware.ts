@@ -44,7 +44,11 @@ export async function middleware(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/auth') &&
     !request.nextUrl.pathname.startsWith('/widget') &&
-    !request.nextUrl.pathname.startsWith('/api/widget')
+    !request.nextUrl.pathname.startsWith('/api/widget') &&
+    // Public card data (stockist refresh for travelling cards)
+    !request.nextUrl.pathname.startsWith('/api/cards') &&
+    // Tokenised no-login stockist confirmation links
+    !request.nextUrl.pathname.startsWith('/stockist-confirm')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'

@@ -7,11 +7,12 @@
 // from inline JSON (see entry.tsx), and the shopping list persists across
 // pages via localStorage (storageKey).
 
+import { useEffect, useState } from 'react'
 import { ShoppingListProvider, useShoppingList } from '../ShoppingListProvider'
 import { ShoppingListDrawer } from '../ShoppingListDrawer'
 import { SystemCardRenderer } from '../SystemCardRenderer'
 import { SystemCardTile } from '../SystemCardTile'
-import type { SystemCardSystem, SystemCardManufacturerPage } from '../types'
+import type { SystemCardSystem, SystemCardManufacturerPage, SystemCardStockist } from '../types'
 
 const FONT_BODY    = "'Barlow', -apple-system, 'Segoe UI', sans-serif"
 const FONT_HEADING = "'Barlow Condensed', 'Barlow', sans-serif"
@@ -29,6 +30,10 @@ export type StaticCardData = {
   system: SystemCardSystem
   backHref: string
   storageKey: string
+  /** Local stockists embedded at build time (offline fallback). */
+  stockists?: SystemCardStockist[]
+  /** Public endpoint for CURRENT stockists — fetched on load, silent on failure. */
+  stockistsUrl?: string | null
 }
 
 export type StaticPageData = StaticCollectionData | StaticCardData
@@ -130,6 +135,26 @@ function CardPageBody({ data }: { data: StaticCardData }) {
   const { addItems } = useShoppingList()
   const { manufacturer, system, backHref } = data
 
+  // Local stockists: start from the list embedded at build time, then refresh
+  // from the public endpoint so travelling cards stay current without a
+  // rebuild. Any failure (offline, blocked, file://) silently keeps the
+  // embedded data.
+  const [stockists, setStockists] = useState<SystemCardStockist[]>(data.stockists ?? [])
+  useEffect(() => {
+    const url = data.stockistsUrl
+    if (!url) return
+    let cancelled = false
+    fetch(url, { mode: 'cors' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(json => {
+        if (!cancelled && json && Array.isArray(json.stockists)) {
+          setStockists(json.stockists as SystemCardStockist[])
+        }
+      })
+      .catch(() => { /* offline / blocked — keep embedded list */ })
+    return () => { cancelled = true }
+  }, [data.stockistsUrl])
+
   return (
     <div style={{ fontFamily: FONT_BODY, background: '#f5f7f9', minHeight: '100vh', paddingBottom: '64px' }}>
 
@@ -154,7 +179,7 @@ function CardPageBody({ data }: { data: StaticCardData }) {
 
       {/* Card */}
       <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px 20px' }}>
-        <SystemCardRenderer system={system} onAddToList={addItems} />
+        <SystemCardRenderer system={system} stockists={stockists} onAddToList={addItems} />
 
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <a href={backHref} style={{

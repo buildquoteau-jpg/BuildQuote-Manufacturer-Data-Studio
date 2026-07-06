@@ -853,13 +853,23 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
 
               {stockistsOpen && (() => {
                 const validPostcode = /^\d{4}$/.test(postcode)
-                // Show every stockist; just float the ones servicing the
-                // entered postcode to the top (never hide any).
-                const ordered = validPostcode
-                  ? [...stockists].sort((a, b) =>
-                      Number(b.service_postcodes.includes(postcode)) -
-                      Number(a.service_postcodes.includes(postcode)))
-                  : stockists
+                // Group by state — WA first, then the rest alphabetically,
+                // no-state stockists last. Within a state, the ones servicing
+                // the entered postcode float to the top (never hidden).
+                const groups = new Map<string, SystemCardStockist[]>()
+                for (const s of stockists) {
+                  const key = (s.state ?? '').trim().toUpperCase() || 'OTHER'
+                  if (!groups.has(key)) groups.set(key, [])
+                  groups.get(key)!.push(s)
+                }
+                const stateOrder = Array.from(groups.keys()).sort((a, b) => {
+                  if (a === b) return 0
+                  if (a === 'WA') return -1
+                  if (b === 'WA') return 1
+                  if (a === 'OTHER') return 1
+                  if (b === 'OTHER') return -1
+                  return a.localeCompare(b)
+                })
                 return (
                   <div style={{ marginTop: '12px' }}>
                     <input
@@ -877,17 +887,37 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
                       onBlur={e => { e.currentTarget.style.borderColor = '#d1d9e0' }}
                     />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      {ordered.map(s => (
-                        <StockistRow
-                          key={s.id}
-                          stockist={s}
-                          hasSelections={hasSelections}
-                          servesPostcode={validPostcode && s.service_postcodes.includes(postcode)}
-                          onRequestQuote={onRequestQuote
-                            ? () => onRequestQuote(s, buildSelectedItems())
-                            : undefined}
-                        />
-                      ))}
+                      {stateOrder.map(stateKey => {
+                        const inState = groups.get(stateKey)!
+                        const ordered = validPostcode
+                          ? [...inState].sort((a, b) =>
+                              Number(b.service_postcodes.includes(postcode)) -
+                              Number(a.service_postcodes.includes(postcode)))
+                          : inState
+                        return (
+                          <div key={stateKey}>
+                            <div style={{
+                              fontSize: '11px', fontWeight: 800, letterSpacing: '0.08em',
+                              textTransform: 'uppercase', color: '#64748b', margin: '2px 0 8px',
+                            }}>
+                              {stateKey === 'OTHER' ? 'Other locations' : stateKey}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                              {ordered.map(s => (
+                                <StockistRow
+                                  key={s.id}
+                                  stockist={s}
+                                  hasSelections={hasSelections}
+                                  servesPostcode={validPostcode && s.service_postcodes.includes(postcode)}
+                                  onRequestQuote={onRequestQuote
+                                    ? () => onRequestQuote(s, buildSelectedItems())
+                                    : undefined}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )
@@ -1012,6 +1042,14 @@ function StockistRow({
                 ✓ Services your area
               </span>
             )}
+            {stockist.confirmed_at && (
+              <span
+                title="This stockist confirmed they stock or can supply this system"
+                style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 9px' }}
+              >
+                ✓ Confirmed {new Date(stockist.confirmed_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+            )}
             {regionLabel && (
               <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#185D7A', background: '#eef6fa', border: '1px solid #b6dcea', borderRadius: '20px', padding: '2px 9px' }}>
                 {regionLabel}
@@ -1035,7 +1073,7 @@ function StockistRow({
         )}
 
         {/* Contact chips */}
-        {(stockist.phone || stockist.website_url) && (
+        {(stockist.phone || stockist.website_url || stockist.trade_desk_email) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
             {stockist.phone && (
               <a href={`tel:${stockist.phone.replace(/\s+/g, '')}`} style={contactChipStyle}>
@@ -1046,6 +1084,11 @@ function StockistRow({
               <a href={normaliseUrl(stockist.website_url)} target="_blank" rel="noopener noreferrer" style={contactChipStyle}>
                 Website
                 <ExternalIcon />
+              </a>
+            )}
+            {stockist.trade_desk_email && (
+              <a href={`mailto:${stockist.trade_desk_email}`} style={contactChipStyle}>
+                Trade desk
               </a>
             )}
           </div>

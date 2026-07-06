@@ -32,6 +32,7 @@ import { createHash } from 'crypto'
 import type {
   SystemCardSystem,
   SystemCardManufacturerPage,
+  SystemCardStockist,
 } from '@/components/system-card-renderer/types'
 import type { StaticCardData, StaticCollectionData } from '@/components/system-card-renderer/static/StaticPages'
 
@@ -47,6 +48,14 @@ export type PackageCardInput = {
   system: SystemCardSystem
   /** Downloaded hero image, if the card has one the package should bundle. */
   heroAsset: PackageFile | null
+  /** Local stockists embedded at build time (may go stale — see stockistsUrl). */
+  stockists?: SystemCardStockist[]
+  /**
+   * Public endpoint the static page fetches on load for CURRENT stockists
+   * (e.g. https://studio.buildquote.com.au/api/cards/<slug>/stockists.json?m=<mfr>).
+   * Falls back silently to the embedded list when offline/blocked.
+   */
+  stockistsUrl?: string | null
 }
 
 export type PackageBuildInput = {
@@ -225,6 +234,8 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       system: cardPageSystem,
       backHref: '../../index.html',
       storageKey,
+      stockists: card.stockists ?? [],
+      stockistsUrl: card.stockistsUrl ?? null,
     }
     dir.file('index.html', pageHtml({
       title: `${card.system.name} — ${input.manufacturer.name} System Card`,
@@ -233,8 +244,12 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       data: cardData,
     }))
 
-    // card.json — same local-path shape the page uses (portable data contract).
-    dir.file('card.json', JSON.stringify(cardPageSystem, null, 2))
+    // card.json — same local-path shape the page uses (portable data contract),
+    // plus the stockist list embedded at build time.
+    dir.file('card.json', JSON.stringify(
+      { ...cardPageSystem, local_stockists: card.stockists ?? [] },
+      null, 2,
+    ))
 
     // QR code → the card's public URL on the manufacturer's website.
     const qrTarget = publicUrl ?? `${effectiveBase}${installPath}cards/${card.slug}/`

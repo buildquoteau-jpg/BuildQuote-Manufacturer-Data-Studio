@@ -23,6 +23,7 @@ import {
   type CardAssetInfo,
 } from '@/lib/packages/readiness'
 import { buildPackageZip, type PackageCardInput, type PackageFile } from '@/lib/packages/generator'
+import { getManufacturerStockists, stockistsForCard } from '@/lib/data/getCardStockists'
 import { SYSTEM_CARD_BUNDLE_JS } from '@/lib/packages/generated/system-card-bundle'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
@@ -295,6 +296,14 @@ export async function generateCardPackage(
       label: 'Brand hero',
     })
 
+    // ── Local stockists (048) — embedded at build time; degrades to none ──
+    let stockistData: Awaited<ReturnType<typeof getManufacturerStockists>> = { rows: [], linkedCardIds: new Map() }
+    try {
+      stockistData = await getManufacturerStockists(supabase, manufacturerId)
+    } catch (err) {
+      log.push(`Note: stockists unavailable (${err instanceof Error ? err.message : 'error'}) — cards ship without embedded stockists.`)
+    }
+
     // ── Resolve cards ──
     const cards: PackageCardInput[] = []
     for (const { system, readiness: cardReadiness } of readyCards) {
@@ -310,6 +319,7 @@ export async function generateCardPackage(
         slug: cardReadiness.slug,
         system: adaptStagedSystem(system, verification.manufacturer),
         heroAsset,
+        stockists: stockistsForCard(stockistData.rows, stockistData.linkedCardIds, system.id),
       })
     }
 
@@ -322,6 +332,13 @@ export async function generateCardPackage(
       if (slug !== card.slug) log.push(`Note: duplicate slug "${card.slug}" — using "${slug}".`)
       card.slug = slug
       seen.add(slug)
+    }
+
+    // Stockist refresh endpoint — built from the FINAL slug (post-dedupe) so
+    // the travelling card fetches the list for the right card.
+    const studioOrigin = process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au'
+    for (const card of cards) {
+      card.stockistsUrl = `${studioOrigin}/api/cards/${encodeURIComponent(card.slug)}/stockists.json?m=${encodeURIComponent(verification.manufacturer.slug)}`
     }
 
     // ── Build the ZIP ──

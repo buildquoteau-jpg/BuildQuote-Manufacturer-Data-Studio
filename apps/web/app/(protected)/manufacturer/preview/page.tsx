@@ -17,6 +17,8 @@ import { StudioStatusBadge } from '@/components/studio/StudioStatusBadge'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
 import { SystemCardPreviewWrapper } from '@/components/system-card-renderer/SystemCardPreviewWrapper'
 import type { SystemCardManufacturerPage } from '@/components/system-card-renderer/types'
+import { createStudioServerClient } from '@/lib/supabase/server'
+import { getManufacturerStockists, stockistsForCard } from '@/lib/data/getCardStockists'
 
 export default async function ManufacturerPreviewPage() {
   const session = await getStudioSession()
@@ -48,6 +50,19 @@ export default async function ManufacturerPreviewPage() {
 
   const { manufacturer, systems } = result
   const cardSystems = systems.map((sys) => adaptStagedSystem(sys, manufacturer))
+
+  // Local stockists (migration 048) — same data the public/static cards show.
+  // Degrades to empty when the tables aren't set up yet.
+  let stockistsBySystemId: Record<string, ReturnType<typeof stockistsForCard>> = {}
+  try {
+    const supabase = createStudioServerClient()
+    const { rows, linkedCardIds } = await getManufacturerStockists(supabase, ctx.manufacturerId)
+    stockistsBySystemId = Object.fromEntries(
+      cardSystems.map((sys) => [sys.id, stockistsForCard(rows, linkedCardIds, sys.id)]),
+    )
+  } catch {
+    // Non-fatal — preview just shows "No local stockists listed yet".
+  }
 
   // Hero image lives on data_studio_manufacturers but isn't part of the
   // verification payload — fetch it so the landing-page hero matches v6.
@@ -97,7 +112,11 @@ export default async function ManufacturerPreviewPage() {
           </span>
         </div>
 
-        <SystemCardPreviewWrapper manufacturer={manufacturerPage} systems={cardSystems} />
+        <SystemCardPreviewWrapper
+          manufacturer={manufacturerPage}
+          systems={cardSystems}
+          stockistsBySystemId={stockistsBySystemId}
+        />
       </div>
 
       <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--ds-text-faint)' }}>

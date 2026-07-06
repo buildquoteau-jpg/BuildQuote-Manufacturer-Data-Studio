@@ -19,7 +19,7 @@ import { ShoppingListProvider, useShoppingList } from './ShoppingListProvider'
 import { ShoppingListDrawer } from './ShoppingListDrawer'
 import { SystemCardRenderer } from './SystemCardRenderer'
 import { SystemCardTile } from './SystemCardTile'
-import type { SystemCardSystem, SystemCardManufacturerPage } from './types'
+import type { SystemCardSystem, SystemCardManufacturerPage, SystemCardStockist } from './types'
 
 const FONT_BODY    = "'Barlow', -apple-system, 'Segoe UI', sans-serif"
 const FONT_HEADING = "'Barlow Condensed', 'Barlow', sans-serif"
@@ -127,9 +127,10 @@ function ManufacturerPageView({ manufacturer, systems, onOpenSystem }: {
 
 // ── View 2: per-system page ───────────────────────────────────────────────────
 
-function SystemPageView({ manufacturer, system, onBack }: {
+function SystemPageView({ manufacturer, system, stockists, onBack }: {
   manufacturer: SystemCardManufacturerPage
   system: SystemCardSystem
+  stockists: SystemCardStockist[]
   onBack: () => void
 }) {
   const { addItems } = useShoppingList()
@@ -162,7 +163,7 @@ function SystemPageView({ manufacturer, system, onBack }: {
 
       {/* Card */}
       <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px 80px' }}>
-        <SystemCardRenderer system={system} onAddToList={addItems} />
+        <SystemCardRenderer system={system} stockists={stockists} onAddToList={addItems} />
 
         {/* Back link */}
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
@@ -181,9 +182,10 @@ function SystemPageView({ manufacturer, system, onBack }: {
 
 // ── Wrapper ───────────────────────────────────────────────────────────────────
 
-function Experience({ manufacturer, systems }: {
+function Experience({ manufacturer, systems, stockistsBySystemId }: {
   manufacturer: SystemCardManufacturerPage
   systems: SystemCardSystem[]
+  stockistsBySystemId?: Record<string, SystemCardStockist[]>
 }) {
   const [openSystemId, setOpenSystemId] = useState<string | null>(null)
   const openSystem = systems.find(s => s.id === openSystemId) ?? null
@@ -192,6 +194,7 @@ function Experience({ manufacturer, systems }: {
     <SystemPageView
       manufacturer={manufacturer}
       system={openSystem}
+      stockists={stockistsBySystemId?.[openSystem.id] ?? []}
       onBack={() => setOpenSystemId(null)}
     />
   ) : (
@@ -203,9 +206,10 @@ function Experience({ manufacturer, systems }: {
   )
 }
 
-export function SystemCardPreviewWrapper({ manufacturer, systems }: {
+export function SystemCardPreviewWrapper({ manufacturer, systems, stockistsBySystemId }: {
   manufacturer: SystemCardManufacturerPage
   systems: SystemCardSystem[]
+  stockistsBySystemId?: Record<string, SystemCardStockist[]>
 }) {
   return (
     <ShoppingListProvider>
@@ -213,7 +217,7 @@ export function SystemCardPreviewWrapper({ manufacturer, systems }: {
       <link rel="stylesheet" href={FONTS_HREF} />
       {/* Room so the fixed bottom drawer bar never hides the last row of content */}
       <div style={{ paddingBottom: '64px' }}>
-        <Experience manufacturer={manufacturer} systems={systems} />
+        <Experience manufacturer={manufacturer} systems={systems} stockistsBySystemId={stockistsBySystemId} />
       </div>
       <ShoppingListDrawer />
     </ShoppingListProvider>

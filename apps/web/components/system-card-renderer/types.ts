@@ -111,6 +111,12 @@ export type SystemCardStockist = {
   opening_hours: string | null
   delivery_info: string | null
   service_postcodes: string[]
+  // Workspace-managed stockists (manufacturer_stockists) — both optional so
+  // the RFQ supplier shape keeps working unchanged.
+  trade_desk_email?: string | null
+  // Set when the stockist confirmed via the tokenised link; renders the
+  // "Confirmed supplier · <date>" tag.
+  confirmed_at?: string | null
 }
 
 // One line on the client-side shopping list (same shape as v6).

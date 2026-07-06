@@ -35,6 +35,32 @@ async function main() {
       slug: system.slug,
       system,
       heroAsset: null, // seed data has no hero images — tiles use the gradient fallback
+      // Fixture stockists — exercise the "Local stockists" section, state
+      // grouping (WA first) and the confirmed tag on the static pages.
+      stockists: [
+        {
+          id: 'fx-1', name: 'Midland Building Supplies', suburb: 'Midland', state: 'WA',
+          region: null, phone: '(08) 9250 1234', website_url: 'https://example.com.au',
+          google_maps_url: null, opening_hours: null, delivery_info: null,
+          service_postcodes: [], trade_desk_email: 'trade@example.com.au',
+          confirmed_at: '2026-07-01T00:00:00Z',
+        },
+        {
+          id: 'fx-2', name: 'Southern Timber & Hardware', suburb: 'Bunbury', state: 'WA',
+          region: null, phone: '(08) 9721 5678', website_url: null,
+          google_maps_url: null, opening_hours: null, delivery_info: null,
+          service_postcodes: [], trade_desk_email: null, confirmed_at: null,
+        },
+        {
+          id: 'fx-3', name: 'Eastside Trade Centre', suburb: 'Penrith', state: 'NSW',
+          region: null, phone: '(02) 4700 9012', website_url: null,
+          google_maps_url: null, opening_hours: null, delivery_info: null,
+          service_postcodes: [], trade_desk_email: null, confirmed_at: null,
+        },
+      ],
+      // Deliberately unreachable in the fixture — proves the silent fallback
+      // to the embedded list.
+      stockistsUrl: `https://studio.buildquote.com.au/api/cards/${system.slug}/stockists.json?m=james-hardie`,
     })),
     logoAsset: null,
     brandHeroAsset: null,
