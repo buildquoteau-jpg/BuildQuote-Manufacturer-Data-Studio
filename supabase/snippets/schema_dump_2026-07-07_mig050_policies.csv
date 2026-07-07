@@ -1,0 +1,214 @@
+tablename,policyname,cmd,roles,qual,with_check
+card_events,buildquote staff can read all card events,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+card_events,manufacturer_user can read own card events,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_events.manufacturer_id) AND (mu.status = 'active'::text))))",null
+card_package_items,buildquote staff can create package items,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+card_package_items,manufacturer_user can create own package items,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM (card_packages cp
+     JOIN manufacturer_users mu ON ((mu.manufacturer_id = cp.manufacturer_id)))
+  WHERE ((cp.id = card_package_items.package_id) AND (mu.auth_user_id = auth.uid()) AND (mu.status = 'active'::text))))"
+card_package_items,buildquote staff can read all package items,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+card_package_items,manufacturer_user can read own package items,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM (card_packages cp
+     JOIN manufacturer_users mu ON ((mu.manufacturer_id = cp.manufacturer_id)))
+  WHERE ((cp.id = card_package_items.package_id) AND (mu.auth_user_id = auth.uid()) AND (mu.status = 'active'::text))))",null
+card_packages,buildquote staff can create packages,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+card_packages,manufacturer_user can create own packages,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_packages.manufacturer_id) AND (mu.status = 'active'::text))))"
+card_packages,buildquote staff can read all packages,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+card_packages,manufacturer_user can read own packages,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_packages.manufacturer_id) AND (mu.status = 'active'::text))))",null
+card_packages,buildquote staff can update packages,UPDATE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))","(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+card_packages,manufacturer_user can update own packages,UPDATE,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_packages.manufacturer_id) AND (mu.status = 'active'::text))))","(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_packages.manufacturer_id) AND (mu.status = 'active'::text))))"
+card_share_links,buildquote staff can create share links,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+card_share_links,manufacturer_user can create own share links,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_share_links.manufacturer_id) AND (mu.status = 'active'::text))))"
+card_share_links,buildquote staff can read all share links,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+card_share_links,manufacturer_user can read own share links,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_share_links.manufacturer_id) AND (mu.status = 'active'::text))))",null
+card_versions,buildquote staff can create card versions,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+card_versions,manufacturer_user can create own card versions,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_versions.manufacturer_id) AND (mu.status = 'active'::text))))"
+card_versions,buildquote staff can read all card versions,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+card_versions,manufacturer_user can read own card versions,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = card_versions.manufacturer_id) AND (mu.status = 'active'::text))))",null
+data_studio_manufacturers,buildquote_admin can insert manufacturer,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM data_studio_user_profiles p
+  WHERE ((p.auth_user_id = auth.uid()) AND (p.global_role = 'buildquote_admin'::text))))"
+data_studio_manufacturers,anon can read manufacturers,SELECT,{anon},true,null
+data_studio_manufacturers,authenticated can read manufacturers,SELECT,{authenticated},true,null
+data_studio_manufacturers,buildquote_admin can update any manufacturer,UPDATE,{authenticated},"(EXISTS ( SELECT 1
+   FROM data_studio_user_profiles p
+  WHERE ((p.auth_user_id = auth.uid()) AND (p.global_role = 'buildquote_admin'::text))))",true
+data_studio_manufacturers,manufacturer_user can update own workspace,UPDATE,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = data_studio_manufacturers.id) AND (mu.status = 'active'::text))))","(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = data_studio_manufacturers.id) AND (mu.status = 'active'::text))))"
+data_studio_user_profiles,buildquote staff can read all profiles,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+data_studio_user_profiles,user can read own profile,SELECT,{authenticated},(auth_user_id = auth.uid()),null
+data_studio_user_profiles,users can read own profile,SELECT,{public},(auth.uid() = auth_user_id),null
+data_studio_user_profiles,user can update own profile,UPDATE,{authenticated},(auth_user_id = auth.uid()),(auth_user_id = auth.uid())
+document_chunks,anon can read document chunks,SELECT,{anon},true,null
+document_chunks,authenticated can read document chunks,SELECT,{authenticated},true,null
+document_pages,anon can read document pages,SELECT,{anon},true,null
+document_pages,authenticated can read document pages,SELECT,{authenticated},true,null
+extraction_runs,anon can read extraction runs,SELECT,{anon},true,null
+extraction_runs,authenticated can read extraction runs,SELECT,{authenticated},true,null
+field_verifications,authenticated can delete field verifications,DELETE,{authenticated},true,null
+field_verifications,authenticated can insert field verifications,INSERT,{authenticated},null,true
+field_verifications,anon can read field verifications,SELECT,{anon},true,null
+field_verifications,authenticated can read field verifications,SELECT,{authenticated},true,null
+field_verifications,authenticated can update field verifications,UPDATE,{authenticated},true,true
+manufacturer_assets,buildquote staff can create assets,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+manufacturer_assets,manufacturer_user can create own assets,INSERT,{authenticated},null,"((created_by = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_assets.manufacturer_id) AND (mu.status = 'active'::text)))))"
+manufacturer_assets,buildquote staff can read all assets,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+manufacturer_assets,manufacturer_user can read own assets,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_assets.manufacturer_id) AND (mu.status = 'active'::text))))",null
+manufacturer_assets,buildquote staff can update assets,UPDATE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))","(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+manufacturer_assets,manufacturer_user can update own assets,UPDATE,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_assets.manufacturer_id) AND (mu.status = 'active'::text))))","(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_assets.manufacturer_id) AND (mu.status = 'active'::text))))"
+manufacturer_embed_widget_systems,manufacturer_embed_widget_systems_write,ALL,{public},"(embed_widget_id IN ( SELECT manufacturer_embed_widgets.id
+   FROM manufacturer_embed_widgets
+  WHERE (manufacturer_embed_widgets.manufacturer_id IN ( SELECT manufacturer_users.manufacturer_id
+           FROM manufacturer_users
+          WHERE ((manufacturer_users.auth_user_id = auth.uid()) AND (manufacturer_users.status = 'active'::text))))))",null
+manufacturer_embed_widget_systems,manufacturer_embed_widget_systems_read,SELECT,{public},true,null
+manufacturer_embed_widgets,manufacturer_embed_widgets_write,ALL,{public},"(manufacturer_id IN ( SELECT manufacturer_users.manufacturer_id
+   FROM manufacturer_users
+  WHERE ((manufacturer_users.auth_user_id = auth.uid()) AND (manufacturer_users.status = 'active'::text))))",null
+manufacturer_embed_widgets,manufacturer_embed_widgets_public_read,SELECT,{public},(status = 'active'::text),null
+manufacturer_embed_widgets,manufacturer_embed_widgets_read,SELECT,{public},"(manufacturer_id IN ( SELECT manufacturer_users.manufacturer_id
+   FROM manufacturer_users
+  WHERE ((manufacturer_users.auth_user_id = auth.uid()) AND (manufacturer_users.status = 'active'::text))))",null
+manufacturer_messages,buildquote staff can send messages,INSERT,{authenticated},null,"((sender_type = 'buildquote'::text) AND (get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text])))"
+manufacturer_messages,manufacturer_user can send own messages,INSERT,{authenticated},null,"((sender_type = 'manufacturer'::text) AND (sender_user_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_messages.manufacturer_id) AND (mu.status = 'active'::text)))))"
+manufacturer_messages,buildquote staff can read all messages,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+manufacturer_messages,manufacturer_user can read own messages,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_messages.manufacturer_id) AND (mu.status = 'active'::text))))",null
+manufacturer_messages,manufacturer_user can acknowledge buildquote messages,UPDATE,{authenticated},"((sender_type = 'buildquote'::text) AND (EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_messages.manufacturer_id) AND (mu.status = 'active'::text)))))","((sender_type = 'buildquote'::text) AND (EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_messages.manufacturer_id) AND (mu.status = 'active'::text)))))"
+manufacturer_stockist_cards,buildquote staff can delete stockist cards,DELETE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+manufacturer_stockist_cards,manufacturer_user can delete own stockist cards,DELETE,{authenticated},"(EXISTS ( SELECT 1
+   FROM (manufacturer_stockists ms
+     JOIN manufacturer_users mu ON ((mu.manufacturer_id = ms.manufacturer_id)))
+  WHERE ((ms.id = manufacturer_stockist_cards.stockist_id) AND (mu.auth_user_id = auth.uid()) AND (mu.status = 'active'::text))))",null
+manufacturer_stockist_cards,buildquote staff can create stockist cards,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+manufacturer_stockist_cards,manufacturer_user can create own stockist cards,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM (manufacturer_stockists ms
+     JOIN manufacturer_users mu ON ((mu.manufacturer_id = ms.manufacturer_id)))
+  WHERE ((ms.id = manufacturer_stockist_cards.stockist_id) AND (mu.auth_user_id = auth.uid()) AND (mu.status = 'active'::text))))"
+manufacturer_stockist_cards,buildquote staff can read all stockist cards,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+manufacturer_stockist_cards,manufacturer_user can read own stockist cards,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM (manufacturer_stockists ms
+     JOIN manufacturer_users mu ON ((mu.manufacturer_id = ms.manufacturer_id)))
+  WHERE ((ms.id = manufacturer_stockist_cards.stockist_id) AND (mu.auth_user_id = auth.uid()) AND (mu.status = 'active'::text))))",null
+manufacturer_stockists,buildquote staff can delete stockists,DELETE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+manufacturer_stockists,manufacturer_user can delete own stockists,DELETE,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_stockists.manufacturer_id) AND (mu.status = 'active'::text))))",null
+manufacturer_stockists,buildquote staff can create stockists,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+manufacturer_stockists,manufacturer_user can create own stockists,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_stockists.manufacturer_id) AND (mu.status = 'active'::text))))"
+manufacturer_stockists,buildquote staff can read all stockists,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+manufacturer_stockists,manufacturer_user can read own stockists,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_stockists.manufacturer_id) AND (mu.status = 'active'::text))))",null
+manufacturer_stockists,buildquote staff can update stockists,UPDATE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))","(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+manufacturer_stockists,manufacturer_user can update own stockists,UPDATE,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_stockists.manufacturer_id) AND (mu.status = 'active'::text))))","(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = manufacturer_stockists.manufacturer_id) AND (mu.status = 'active'::text))))"
+manufacturer_users,users can read own membership,SELECT,{authenticated},(auth_user_id = auth.uid()),null
+parser_field_evidence,anon can read parser field evidence,SELECT,{anon},true,null
+parser_field_evidence,authenticated can read parser field evidence,SELECT,{authenticated},true,null
+pipeline_jobs,service role full access,ALL,{service_role},true,true
+pipeline_jobs,authenticated can read own manufacturer jobs,SELECT,{authenticated},true,null
+publish_batch_items,buildquote staff can delete publish batch items,DELETE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+publish_batch_items,buildquote staff can insert publish batch items,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+publish_batch_items,manufacturer_user can insert own publish batch items,INSERT,{authenticated},null,"((EXISTS ( SELECT 1
+   FROM (publish_batches pb
+     JOIN manufacturer_users mu ON ((mu.manufacturer_id = pb.manufacturer_id)))
+  WHERE ((pb.id = publish_batch_items.publish_batch_id) AND (mu.auth_user_id = auth.uid()) AND (mu.status = 'active'::text)))) AND (status = 'pending'::text) AND (production_table IS NULL) AND (production_id IS NULL))"
+publish_batch_items,buildquote staff can read all publish batch items,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+publish_batch_items,manufacturer_user can read own publish batch items,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM (publish_batches pb
+     JOIN manufacturer_users mu ON ((mu.manufacturer_id = pb.manufacturer_id)))
+  WHERE ((pb.id = publish_batch_items.publish_batch_id) AND (mu.auth_user_id = auth.uid()) AND (mu.status = 'active'::text))))",null
+publish_batch_items,buildquote staff can update publish batch items,UPDATE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))","(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+publish_batches,buildquote staff can delete publish batches,DELETE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+publish_batches,buildquote staff can insert publish batches,INSERT,{authenticated},null,"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+publish_batches,manufacturer_user can submit own publish batches,INSERT,{authenticated},null,"((EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = publish_batches.manufacturer_id) AND (mu.status = 'active'::text)))) AND (status = 'submitted'::text) AND (approved_at IS NULL) AND (published_at IS NULL))"
+publish_batches,buildquote staff can read all publish batches,SELECT,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))",null
+publish_batches,manufacturer_user can read own publish batches,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = publish_batches.manufacturer_id) AND (mu.status = 'active'::text))))",null
+publish_batches,buildquote staff can update publish batches,UPDATE,{authenticated},"(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))","(get_my_global_role() = ANY (ARRAY['buildquote_admin'::text, 'buildquote_reviewer'::text]))"
+source_documents,buildquote_admin can insert source_documents,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM data_studio_user_profiles p
+  WHERE ((p.auth_user_id = auth.uid()) AND (p.global_role = 'buildquote_admin'::text))))"
+source_documents,manufacturer_user can insert own source_documents,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = source_documents.manufacturer_id) AND (mu.status = 'active'::text))))"
+source_documents,anon can read source documents,SELECT,{anon},true,null
+source_documents,authenticated can read source documents,SELECT,{authenticated},true,null
+staged_components,authenticated can insert staged components,INSERT,{authenticated},null,true
+staged_components,anon can read staged components,SELECT,{anon},true,null
+staged_components,authenticated can read staged components,SELECT,{authenticated},true,null
+staged_components,authenticated can update staged components,UPDATE,{authenticated},true,true
+staged_system_colours,authenticated can insert staged system colours,INSERT,{authenticated},null,true
+staged_system_colours,anon can read staged system colours,SELECT,{anon},true,null
+staged_system_colours,authenticated can read staged system colours,SELECT,{authenticated},true,null
+staged_system_colours,authenticated can update staged system colours,UPDATE,{authenticated},true,true
+staged_system_components,authenticated can insert staged system components,INSERT,{authenticated},null,true
+staged_system_components,anon can read staged system components,SELECT,{anon},true,null
+staged_system_components,authenticated can read staged system components,SELECT,{authenticated},true,null
+staged_system_profiles,authenticated can insert staged system profiles,INSERT,{authenticated},null,true
+staged_system_profiles,anon can read staged system profiles,SELECT,{anon},true,null
+staged_system_profiles,authenticated can read staged system profiles,SELECT,{authenticated},true,null
+staged_system_profiles,authenticated can update staged system profiles,UPDATE,{authenticated},true,true
+staged_systems,buildquote_admin can insert staged_systems,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM data_studio_user_profiles p
+  WHERE ((p.auth_user_id = auth.uid()) AND (p.global_role = 'buildquote_admin'::text))))"
+staged_systems,manufacturer_user can insert own staged_systems,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM manufacturer_users mu
+  WHERE ((mu.auth_user_id = auth.uid()) AND (mu.manufacturer_id = staged_systems.manufacturer_id) AND (mu.status = 'active'::text))))"
+staged_systems,anon can read staged systems,SELECT,{anon},true,null
+staged_systems,authenticated can read staged systems,SELECT,{authenticated},true,null
+staged_systems,authenticated can update staged systems verification,UPDATE,{authenticated},true,true
+widget_quote_requests,admin read all quote requests,SELECT,{public},"(EXISTS ( SELECT 1
+   FROM data_studio_user_profiles
+  WHERE ((data_studio_user_profiles.auth_user_id = auth.uid()) AND (data_studio_user_profiles.global_role = 'buildquote_admin'::text))))",null
+widget_quote_requests,manufacturer read own quote requests,SELECT,{public},"(manufacturer_id IN ( SELECT manufacturer_users.manufacturer_id
+   FROM manufacturer_users
+  WHERE ((manufacturer_users.auth_user_id = auth.uid()) AND (manufacturer_users.status = 'active'::text))))",null
+widget_quote_requests,manufacturer update own quote request status,UPDATE,{public},"(manufacturer_id IN ( SELECT manufacturer_users.manufacturer_id
+   FROM manufacturer_users
+  WHERE ((manufacturer_users.auth_user_id = auth.uid()) AND (manufacturer_users.status = 'active'::text))))",null

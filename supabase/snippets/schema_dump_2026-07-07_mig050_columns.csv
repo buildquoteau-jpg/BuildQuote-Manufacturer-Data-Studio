@@ -1,0 +1,473 @@
+table_name,ordinal_position,column_name,data_type,udt_name,is_nullable,column_default
+card_events,1,id,uuid,uuid,NO,gen_random_uuid()
+card_events,2,manufacturer_id,uuid,uuid,NO,null
+card_events,3,card_id,uuid,uuid,YES,null
+card_events,4,card_slug,text,text,NO,null
+card_events,5,version,integer,int4,YES,null
+card_events,6,event_type,text,text,NO,null
+card_events,7,channel,text,text,YES,null
+card_events,8,sender_tag,text,text,YES,null
+card_events,9,share_token,text,text,YES,null
+card_events,10,host_domain,text,text,YES,null
+card_events,11,doc_label,text,text,YES,null
+card_events,12,doc_url,text,text,YES,null
+card_events,13,device_hash,text,text,YES,null
+card_events,14,created_at,timestamp with time zone,timestamptz,NO,now()
+card_package_items,1,id,uuid,uuid,NO,gen_random_uuid()
+card_package_items,2,package_id,uuid,uuid,NO,null
+card_package_items,3,card_id,uuid,uuid,NO,null
+card_package_items,4,package_slug,text,text,NO,null
+card_package_items,5,generated_card_path,text,text,YES,null
+card_package_items,6,generated_json_path,text,text,YES,null
+card_package_items,7,qr_code_path,text,text,YES,null
+card_package_items,8,status,text,text,NO,'included'::text
+card_package_items,9,error_message,text,text,YES,null
+card_package_items,10,created_at,timestamp with time zone,timestamptz,NO,now()
+card_packages,1,id,uuid,uuid,NO,gen_random_uuid()
+card_packages,2,manufacturer_id,uuid,uuid,NO,null
+card_packages,3,package_version,integer,int4,NO,1
+card_packages,4,status,text,text,NO,'generating'::text
+card_packages,5,intended_install_path,text,text,NO,'/system-cards/'::text
+card_packages,6,zip_storage_key,text,text,YES,null
+card_packages,7,zip_url,text,text,YES,null
+card_packages,8,manifest_url,text,text,YES,null
+card_packages,9,feed_url,text,text,YES,null
+card_packages,10,preview_url,text,text,YES,null
+card_packages,11,checksum,text,text,YES,null
+card_packages,12,file_size_bytes,bigint,int8,YES,null
+card_packages,13,card_count,integer,int4,NO,0
+card_packages,14,error_message,text,text,YES,null
+card_packages,15,build_log,text,text,YES,null
+card_packages,16,generated_at,timestamp with time zone,timestamptz,YES,null
+card_packages,17,generated_by,uuid,uuid,YES,null
+card_packages,18,downloaded_at,timestamp with time zone,timestamptz,YES,null
+card_packages,19,created_at,timestamp with time zone,timestamptz,NO,now()
+card_packages,20,updated_at,timestamp with time zone,timestamptz,NO,now()
+card_share_links,1,id,uuid,uuid,NO,gen_random_uuid()
+card_share_links,2,manufacturer_id,uuid,uuid,NO,null
+card_share_links,3,card_id,uuid,uuid,YES,null
+card_share_links,4,card_slug,text,text,NO,null
+card_share_links,5,token,text,text,NO,null
+card_share_links,6,channel,text,text,NO,'copy'::text
+card_share_links,7,sender_tag,text,text,YES,null
+card_share_links,8,created_at,timestamp with time zone,timestamptz,NO,now()
+card_versions,1,id,uuid,uuid,NO,gen_random_uuid()
+card_versions,2,manufacturer_id,uuid,uuid,NO,null
+card_versions,3,card_id,uuid,uuid,NO,null
+card_versions,4,package_id,uuid,uuid,YES,null
+card_versions,5,version,integer,int4,NO,null
+card_versions,6,slug,text,text,NO,null
+card_versions,7,name,text,text,NO,null
+card_versions,8,card_json,jsonb,jsonb,NO,null
+card_versions,9,stockists_json,jsonb,jsonb,YES,null
+card_versions,10,validated_by,text,text,YES,null
+card_versions,11,validated_at,timestamp with time zone,timestamptz,YES,null
+card_versions,12,created_at,timestamp with time zone,timestamptz,NO,now()
+data_studio_manufacturers,1,id,uuid,uuid,NO,gen_random_uuid()
+data_studio_manufacturers,2,production_manufacturer_id,uuid,uuid,YES,null
+data_studio_manufacturers,3,name,text,text,NO,null
+data_studio_manufacturers,4,slug,text,text,NO,null
+data_studio_manufacturers,5,website_url,text,text,YES,null
+data_studio_manufacturers,6,logo_url,text,text,YES,null
+data_studio_manufacturers,7,hero_image_url,text,text,YES,null
+data_studio_manufacturers,8,description,text,text,YES,null
+data_studio_manufacturers,9,abn,text,text,YES,null
+data_studio_manufacturers,10,phone,text,text,YES,null
+data_studio_manufacturers,11,status,text,text,NO,'draft'::text
+data_studio_manufacturers,12,created_at,timestamp with time zone,timestamptz,NO,now()
+data_studio_manufacturers,13,updated_at,timestamp with time zone,timestamptz,NO,now()
+data_studio_manufacturers,14,hero_image_position_y,smallint,int2,NO,50
+data_studio_manufacturers,15,pending_contact_full_name,text,text,YES,null
+data_studio_manufacturers,16,pending_contact_email_primary,text,text,YES,null
+data_studio_manufacturers,17,pending_contact_email_secondary,text,text,YES,null
+data_studio_manufacturers,18,pending_contact_login_preference,text,text,NO,'primary'::text
+data_studio_manufacturers,19,hero_wide_image_url,text,text,YES,null
+data_studio_manufacturers,20,hero_wide_image_position_y,smallint,int2,NO,50
+data_studio_manufacturers,21,widget_button_config,jsonb,jsonb,NO,"'{""show_find_stockist"": true, ""show_request_quote"": true, ""show_general_enquiry"": true}'::jsonb"
+data_studio_manufacturers,22,logo_asset_id,uuid,uuid,YES,null
+data_studio_manufacturers,23,hero_image_asset_id,uuid,uuid,YES,null
+data_studio_manufacturers,24,hero_wide_image_asset_id,uuid,uuid,YES,null
+data_studio_user_profiles,1,id,uuid,uuid,NO,gen_random_uuid()
+data_studio_user_profiles,2,auth_user_id,uuid,uuid,NO,null
+data_studio_user_profiles,3,email,text,text,NO,null
+data_studio_user_profiles,4,full_name,text,text,YES,null
+data_studio_user_profiles,5,global_role,text,text,NO,'manufacturer_user'::text
+data_studio_user_profiles,6,status,text,text,NO,'active'::text
+data_studio_user_profiles,7,created_at,timestamp with time zone,timestamptz,NO,now()
+data_studio_user_profiles,8,updated_at,timestamp with time zone,timestamptz,NO,now()
+data_studio_user_profiles,9,company_email_primary,text,text,YES,null
+data_studio_user_profiles,10,company_email_secondary,text,text,YES,null
+data_studio_user_profiles,11,login_email_preference,text,text,NO,'primary'::text
+document_chunks,1,id,uuid,uuid,NO,gen_random_uuid()
+document_chunks,2,source_document_id,uuid,uuid,NO,null
+document_chunks,3,document_page_id,uuid,uuid,YES,null
+document_chunks,4,extraction_run_id,uuid,uuid,YES,null
+document_chunks,5,page_number,integer,int4,YES,null
+document_chunks,6,chunk_index,integer,int4,NO,null
+document_chunks,7,heading,text,text,YES,null
+document_chunks,8,chunk_type,text,text,YES,null
+document_chunks,9,raw_text,text,text,YES,null
+document_chunks,10,table_json,jsonb,jsonb,YES,null
+document_chunks,11,docling_json,jsonb,jsonb,YES,null
+document_chunks,12,confidence,numeric,numeric,YES,null
+document_chunks,13,created_at,timestamp with time zone,timestamptz,NO,now()
+document_pages,1,id,uuid,uuid,NO,gen_random_uuid()
+document_pages,2,source_document_id,uuid,uuid,NO,null
+document_pages,3,page_number,integer,int4,NO,null
+document_pages,4,page_image_storage_key,text,text,YES,null
+document_pages,5,page_text,text,text,YES,null
+document_pages,6,docling_json,jsonb,jsonb,YES,null
+document_pages,7,created_at,timestamp with time zone,timestamptz,NO,now()
+extraction_runs,1,id,uuid,uuid,NO,gen_random_uuid()
+extraction_runs,2,source_document_id,uuid,uuid,NO,null
+extraction_runs,3,run_type,text,text,NO,null
+extraction_runs,4,status,text,text,NO,'queued'::text
+extraction_runs,5,tool_name,text,text,YES,null
+extraction_runs,6,tool_version,text,text,YES,null
+extraction_runs,7,model_name,text,text,YES,null
+extraction_runs,8,started_at,timestamp with time zone,timestamptz,YES,null
+extraction_runs,9,completed_at,timestamp with time zone,timestamptz,YES,null
+extraction_runs,10,error_message,text,text,YES,null
+extraction_runs,11,created_at,timestamp with time zone,timestamptz,NO,now()
+field_verifications,1,id,uuid,uuid,NO,gen_random_uuid()
+field_verifications,2,entity_type,text,text,NO,null
+field_verifications,3,entity_id,uuid,uuid,NO,null
+field_verifications,4,field_name,text,text,NO,null
+field_verifications,5,extracted_value,text,text,YES,null
+field_verifications,6,verified_value,text,text,YES,null
+field_verifications,7,source_document_id,uuid,uuid,YES,null
+field_verifications,8,source_page_id,uuid,uuid,YES,null
+field_verifications,9,source_chunk_id,uuid,uuid,YES,null
+field_verifications,10,source_page_number,integer,int4,YES,null
+field_verifications,11,status,text,text,NO,'pending'::text
+field_verifications,12,confidence,numeric,numeric,YES,null
+field_verifications,13,reviewer_id,uuid,uuid,YES,null
+field_verifications,14,reviewed_at,timestamp with time zone,timestamptz,YES,null
+field_verifications,15,notes,text,text,YES,null
+field_verifications,16,created_at,timestamp with time zone,timestamptz,NO,now()
+field_verifications,17,updated_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_assets,1,id,uuid,uuid,NO,gen_random_uuid()
+manufacturer_assets,2,manufacturer_id,uuid,uuid,NO,null
+manufacturer_assets,3,asset_type,text,text,NO,null
+manufacturer_assets,4,title,text,text,YES,null
+manufacturer_assets,5,alt_text,text,text,YES,null
+manufacturer_assets,6,caption,text,text,YES,null
+manufacturer_assets,7,storage_key,text,text,YES,null
+manufacturer_assets,8,source_url,text,text,YES,null
+manufacturer_assets,9,public_url,text,text,YES,null
+manufacturer_assets,10,mime_type,text,text,YES,null
+manufacturer_assets,11,file_size_bytes,bigint,int8,YES,null
+manufacturer_assets,12,width,integer,int4,YES,null
+manufacturer_assets,13,height,integer,int4,YES,null
+manufacturer_assets,14,focal_x,smallint,int2,NO,50
+manufacturer_assets,15,focal_y,smallint,int2,NO,50
+manufacturer_assets,16,approved_for_publication,boolean,bool,NO,false
+manufacturer_assets,17,archived,boolean,bool,NO,false
+manufacturer_assets,18,created_by,uuid,uuid,YES,null
+manufacturer_assets,19,created_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_assets,20,updated_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_embed_widget_systems,1,id,uuid,uuid,NO,gen_random_uuid()
+manufacturer_embed_widget_systems,2,embed_widget_id,uuid,uuid,NO,null
+manufacturer_embed_widget_systems,3,staged_system_id,uuid,uuid,NO,null
+manufacturer_embed_widget_systems,4,sort_order,integer,int4,NO,0
+manufacturer_embed_widgets,1,id,uuid,uuid,NO,gen_random_uuid()
+manufacturer_embed_widgets,2,manufacturer_id,uuid,uuid,NO,null
+manufacturer_embed_widgets,3,public_token,text,text,NO,"encode(gen_random_bytes(24), 'hex'::text)"
+manufacturer_embed_widgets,4,status,text,text,NO,'active'::text
+manufacturer_embed_widgets,5,created_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_embed_widgets,6,updated_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_messages,1,id,uuid,uuid,NO,gen_random_uuid()
+manufacturer_messages,2,manufacturer_id,uuid,uuid,NO,null
+manufacturer_messages,3,sender_type,text,text,NO,null
+manufacturer_messages,4,sender_user_id,uuid,uuid,YES,null
+manufacturer_messages,5,sender_label,text,text,YES,null
+manufacturer_messages,6,body,text,text,NO,null
+manufacturer_messages,7,message_type,text,text,NO,'general'::text
+manufacturer_messages,8,related_publish_batch_id,uuid,uuid,YES,null
+manufacturer_messages,9,created_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_messages,10,acknowledged_at,timestamp with time zone,timestamptz,YES,null
+manufacturer_stockist_cards,1,id,uuid,uuid,NO,gen_random_uuid()
+manufacturer_stockist_cards,2,stockist_id,uuid,uuid,NO,null
+manufacturer_stockist_cards,3,card_id,uuid,uuid,NO,null
+manufacturer_stockist_cards,4,created_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_stockists,1,id,uuid,uuid,NO,gen_random_uuid()
+manufacturer_stockists,2,manufacturer_id,uuid,uuid,NO,null
+manufacturer_stockists,3,business_name,text,text,NO,null
+manufacturer_stockists,4,suburb,text,text,YES,null
+manufacturer_stockists,5,state,text,text,YES,null
+manufacturer_stockists,6,phone,text,text,YES,null
+manufacturer_stockists,7,website_url,text,text,YES,null
+manufacturer_stockists,8,trade_desk_email,text,text,YES,null
+manufacturer_stockists,9,all_cards,boolean,bool,NO,true
+manufacturer_stockists,10,confirm_token,uuid,uuid,NO,gen_random_uuid()
+manufacturer_stockists,11,confirm_status,text,text,NO,'unconfirmed'::text
+manufacturer_stockists,12,confirmed_at,timestamp with time zone,timestamptz,YES,null
+manufacturer_stockists,13,archived,boolean,bool,NO,false
+manufacturer_stockists,14,sort_order,integer,int4,NO,0
+manufacturer_stockists,15,created_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_stockists,16,updated_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_users,1,id,uuid,uuid,NO,gen_random_uuid()
+manufacturer_users,2,manufacturer_id,uuid,uuid,NO,null
+manufacturer_users,3,auth_user_id,uuid,uuid,YES,null
+manufacturer_users,4,email,text,text,NO,null
+manufacturer_users,5,role,text,text,NO,'manufacturer_reviewer'::text
+manufacturer_users,6,status,text,text,NO,'invited'::text
+manufacturer_users,7,created_at,timestamp with time zone,timestamptz,NO,now()
+manufacturer_users,8,user_profile_id,uuid,uuid,YES,null
+manufacturer_users,9,invited_by,uuid,uuid,YES,null
+manufacturer_users,10,invited_at,timestamp with time zone,timestamptz,YES,now()
+manufacturer_users,11,accepted_at,timestamp with time zone,timestamptz,YES,null
+manufacturer_users,12,last_active_at,timestamp with time zone,timestamptz,YES,null
+manufacturer_users,13,updated_at,timestamp with time zone,timestamptz,NO,now()
+parser_field_evidence,1,id,uuid,uuid,NO,gen_random_uuid()
+parser_field_evidence,2,extraction_run_id,uuid,uuid,NO,null
+parser_field_evidence,3,entity_type,text,text,NO,null
+parser_field_evidence,4,entity_id,uuid,uuid,NO,null
+parser_field_evidence,5,field_name,text,text,NO,null
+parser_field_evidence,6,extracted_value,text,text,YES,null
+parser_field_evidence,7,source_document_id,uuid,uuid,YES,null
+parser_field_evidence,8,source_page_number,integer,int4,YES,null
+parser_field_evidence,9,source_chunk_id,uuid,uuid,YES,null
+parser_field_evidence,10,confidence,numeric,numeric,YES,null
+parser_field_evidence,11,is_uncertain,boolean,bool,NO,false
+parser_field_evidence,12,parser_note,text,text,YES,null
+parser_field_evidence,13,created_at,timestamp with time zone,timestamptz,NO,now()
+pipeline_jobs,1,id,uuid,uuid,NO,gen_random_uuid()
+pipeline_jobs,2,manufacturer_id,uuid,uuid,NO,null
+pipeline_jobs,3,document_id,uuid,uuid,YES,null
+pipeline_jobs,4,job_type,text,text,NO,null
+pipeline_jobs,5,status,text,text,NO,'pending'::text
+pipeline_jobs,6,payload,jsonb,jsonb,NO,'{}'::jsonb
+pipeline_jobs,7,result,jsonb,jsonb,YES,null
+pipeline_jobs,8,error_message,text,text,YES,null
+pipeline_jobs,9,log_lines,ARRAY,_text,YES,'{}'::text[]
+pipeline_jobs,10,progress,jsonb,jsonb,YES,null
+pipeline_jobs,11,created_at,timestamp with time zone,timestamptz,NO,now()
+pipeline_jobs,12,started_at,timestamp with time zone,timestamptz,YES,null
+pipeline_jobs,13,completed_at,timestamp with time zone,timestamptz,YES,null
+pipeline_jobs,14,worker_id,text,text,YES,null
+publish_batch_items,1,id,uuid,uuid,NO,gen_random_uuid()
+publish_batch_items,2,publish_batch_id,uuid,uuid,NO,null
+publish_batch_items,3,entity_type,text,text,NO,null
+publish_batch_items,4,entity_id,uuid,uuid,NO,null
+publish_batch_items,5,production_table,text,text,YES,null
+publish_batch_items,6,production_id,uuid,uuid,YES,null
+publish_batch_items,7,status,text,text,NO,'pending'::text
+publish_batch_items,8,error_message,text,text,YES,null
+publish_batch_items,9,created_at,timestamp with time zone,timestamptz,NO,now()
+publish_batch_items,10,change_type,text,text,NO,'new'::text
+publish_batches,1,id,uuid,uuid,NO,gen_random_uuid()
+publish_batches,2,manufacturer_id,uuid,uuid,YES,null
+publish_batches,3,status,text,text,NO,'draft'::text
+publish_batches,4,export_type,text,text,NO,'csv'::text
+publish_batches,5,production_project_ref,text,text,YES,null
+publish_batches,6,created_by,uuid,uuid,YES,null
+publish_batches,7,created_at,timestamp with time zone,timestamptz,NO,now()
+publish_batches,8,approved_at,timestamp with time zone,timestamptz,YES,null
+publish_batches,9,published_at,timestamp with time zone,timestamptz,YES,null
+publish_batches,10,notes,text,text,YES,null
+source_documents,1,id,uuid,uuid,NO,gen_random_uuid()
+source_documents,2,manufacturer_id,uuid,uuid,NO,null
+source_documents,3,original_filename,text,text,NO,null
+source_documents,4,document_name,text,text,NO,null
+source_documents,5,document_type,text,text,YES,null
+source_documents,6,document_date,text,text,YES,null
+source_documents,7,storage_provider,text,text,NO,'cloudflare_r2'::text
+source_documents,8,storage_bucket,text,text,YES,null
+source_documents,9,storage_key,text,text,YES,null
+source_documents,10,public_url,text,text,YES,null
+source_documents,11,file_mime_type,text,text,YES,null
+source_documents,12,file_size_bytes,bigint,int8,YES,null
+source_documents,13,status,text,text,NO,'uploaded'::text
+source_documents,14,uploaded_by,uuid,uuid,YES,null
+source_documents,15,uploaded_at,timestamp with time zone,timestamptz,NO,now()
+source_documents,16,notes,text,text,YES,null
+source_documents,17,production_catalogue_source_id,uuid,uuid,YES,null
+staged_components,1,id,uuid,uuid,NO,gen_random_uuid()
+staged_components,2,manufacturer_id,uuid,uuid,NO,null
+staged_components,3,source_document_id,uuid,uuid,YES,null
+staged_components,4,source_chunk_id,uuid,uuid,YES,null
+staged_components,5,production_component_id,uuid,uuid,YES,null
+staged_components,6,sku,text,text,YES,null
+staged_components,7,name,text,text,NO,null
+staged_components,8,description,text,text,YES,null
+staged_components,9,category,text,text,YES,null
+staged_components,10,uom,text,text,YES,null
+staged_components,11,length_mm,numeric,numeric,YES,null
+staged_components,12,width_mm,numeric,numeric,YES,null
+staged_components,13,height_mm,numeric,numeric,YES,null
+staged_components,14,thickness_mm,numeric,numeric,YES,null
+staged_components,15,depth_mm,numeric,numeric,YES,null
+staged_components,16,gauge_mm,numeric,numeric,YES,null
+staged_components,17,diameter_mm,numeric,numeric,YES,null
+staged_components,18,roll_m,numeric,numeric,YES,null
+staged_components,19,weight_kg,numeric,numeric,YES,null
+staged_components,20,pieces,integer,int4,YES,null
+staged_components,21,material,text,text,YES,null
+staged_components,22,finish,text,text,YES,null
+staged_components,23,colour,text,text,YES,null
+staged_components,24,profile,text,text,YES,null
+staged_components,25,texture,text,text,YES,null
+staged_components,26,coverage_m2,numeric,numeric,YES,null
+staged_components,27,sort_order,integer,int4,NO,0
+staged_components,28,extraction_confidence,numeric,numeric,YES,null
+staged_components,29,verification_status,text,text,NO,'pending_review'::text
+staged_components,30,verified_by,uuid,uuid,YES,null
+staged_components,31,verified_at,timestamp with time zone,timestamptz,YES,null
+staged_components,32,reviewer_notes,text,text,YES,null
+staged_components,33,created_at,timestamp with time zone,timestamptz,NO,now()
+staged_components,34,updated_at,timestamp with time zone,timestamptz,NO,now()
+staged_components,35,volume_ml,numeric,numeric,YES,null
+staged_components,36,weight_g,numeric,numeric,YES,null
+staged_components,37,pack_format,text,text,YES,null
+staged_components,38,supplier_pack_qty,numeric,numeric,YES,null
+staged_components,39,supplier_pack_uom,text,text,YES,null
+staged_components,40,supplier_pack_note,text,text,YES,null
+staged_components,41,parser_notes,jsonb,jsonb,YES,null
+staged_components,42,image_url,text,text,YES,null
+staged_components,43,website_url,text,text,YES,null
+staged_components,44,extracted_at,timestamp with time zone,timestamptz,YES,null
+staged_components,45,procurement_route,text,text,YES,null
+staged_system_colours,1,id,uuid,uuid,NO,gen_random_uuid()
+staged_system_colours,2,staged_system_id,uuid,uuid,NO,null
+staged_system_colours,3,colour_name,text,text,NO,null
+staged_system_colours,4,sku,text,text,YES,null
+staged_system_colours,5,image_url,text,text,YES,null
+staged_system_colours,6,is_stocked,boolean,bool,NO,true
+staged_system_colours,7,sort_order,integer,int4,NO,0
+staged_system_colours,8,verification_status,text,text,NO,'pending_review'::text
+staged_system_colours,9,reviewer_notes,text,text,YES,null
+staged_system_colours,10,created_at,timestamp with time zone,timestamptz,NO,now()
+staged_system_colours,11,parser_notes,jsonb,jsonb,YES,null
+staged_system_colours,12,sku_suffix,text,text,YES,null
+staged_system_colours,13,extracted_at,timestamp with time zone,timestamptz,YES,null
+staged_system_colours,14,production_colour_id,uuid,uuid,YES,null
+staged_system_components,1,id,uuid,uuid,NO,gen_random_uuid()
+staged_system_components,2,staged_system_id,uuid,uuid,NO,null
+staged_system_components,3,staged_component_id,uuid,uuid,NO,null
+staged_system_components,4,role,text,text,NO,'component'::text
+staged_system_components,5,notes,text,text,YES,null
+staged_system_components,6,sort_order,integer,int4,NO,0
+staged_system_components,7,extraction_confidence,numeric,numeric,YES,null
+staged_system_components,8,verification_status,text,text,NO,'pending_review'::text
+staged_system_components,9,verified_by,uuid,uuid,YES,null
+staged_system_components,10,verified_at,timestamp with time zone,timestamptz,YES,null
+staged_system_components,11,reviewer_notes,text,text,YES,null
+staged_system_components,12,created_at,timestamp with time zone,timestamptz,NO,now()
+staged_system_components,13,parser_notes,jsonb,jsonb,YES,null
+staged_system_components,14,extracted_at,timestamp with time zone,timestamptz,YES,null
+staged_system_profiles,1,id,uuid,uuid,NO,gen_random_uuid()
+staged_system_profiles,2,staged_system_id,uuid,uuid,NO,null
+staged_system_profiles,3,name,text,text,YES,null
+staged_system_profiles,4,product_code,text,text,YES,null
+staged_system_profiles,5,dimensions,text,text,YES,null
+staged_system_profiles,6,length_m,numeric,numeric,YES,null
+staged_system_profiles,7,sheet_format,text,text,YES,null
+staged_system_profiles,8,sort_order,integer,int4,NO,0
+staged_system_profiles,9,verification_status,text,text,NO,'pending_review'::text
+staged_system_profiles,10,reviewer_notes,text,text,YES,null
+staged_system_profiles,11,created_at,timestamp with time zone,timestamptz,NO,now()
+staged_system_profiles,12,profile_name,text,text,YES,null
+staged_system_profiles,13,length_mm,numeric,numeric,YES,null
+staged_system_profiles,14,width_mm,numeric,numeric,YES,null
+staged_system_profiles,15,height_mm,numeric,numeric,YES,null
+staged_system_profiles,16,thickness_mm,numeric,numeric,YES,null
+staged_system_profiles,17,depth_mm,numeric,numeric,YES,null
+staged_system_profiles,18,gauge_mm,numeric,numeric,YES,null
+staged_system_profiles,19,diameter_mm,numeric,numeric,YES,null
+staged_system_profiles,20,roll_m,numeric,numeric,YES,null
+staged_system_profiles,21,weight_kg,numeric,numeric,YES,null
+staged_system_profiles,22,pieces,numeric,numeric,YES,null
+staged_system_profiles,23,volume_ml,numeric,numeric,YES,null
+staged_system_profiles,24,weight_g,numeric,numeric,YES,null
+staged_system_profiles,25,pack_format,text,text,YES,null
+staged_system_profiles,26,supplier_pack_qty,numeric,numeric,YES,null
+staged_system_profiles,27,supplier_pack_uom,text,text,YES,null
+staged_system_profiles,28,supplier_pack_note,text,text,YES,null
+staged_system_profiles,29,bal_rating,text,text,YES,null
+staged_system_profiles,30,parser_notes,jsonb,jsonb,YES,null
+staged_system_profiles,31,uom,text,text,YES,null
+staged_system_profiles,32,image_url,text,text,YES,null
+staged_system_profiles,33,website_url,text,text,YES,null
+staged_system_profiles,34,extracted_at,timestamp with time zone,timestamptz,YES,null
+staged_system_profiles,35,procurement_route,text,text,YES,null
+staged_system_profiles,36,production_profile_id,uuid,uuid,YES,null
+staged_systems,1,id,uuid,uuid,NO,gen_random_uuid()
+staged_systems,2,manufacturer_id,uuid,uuid,NO,null
+staged_systems,3,source_document_id,uuid,uuid,YES,null
+staged_systems,4,source_chunk_id,uuid,uuid,YES,null
+staged_systems,5,production_system_id,uuid,uuid,YES,null
+staged_systems,6,name,text,text,NO,null
+staged_systems,7,product_code,text,text,YES,null
+staged_systems,8,slug,text,text,YES,null
+staged_systems,9,category,text,text,YES,null
+staged_systems,10,subcategory,text,text,YES,null
+staged_systems,11,description,text,text,YES,null
+staged_systems,12,dimensions,text,text,YES,null
+staged_systems,13,length_m,numeric,numeric,YES,null
+staged_systems,14,double_sided,boolean,bool,NO,false
+staged_systems,15,hero_image_url,text,text,YES,null
+staged_systems,16,website_url,text,text,YES,null
+staged_systems,17,source_label,text,text,YES,null
+staged_systems,18,source_url,text,text,YES,null
+staged_systems,19,sheet_format,text,text,YES,null
+staged_systems,20,fire_rating,text,text,YES,null
+staged_systems,21,acoustic_rating,text,text,YES,null
+staged_systems,22,moisture_resistant,boolean,bool,NO,false
+staged_systems,23,structural_grade,text,text,YES,null
+staged_systems,25,tech_data_url,text,text,YES,null
+staged_systems,26,sort_order,integer,int4,NO,0
+staged_systems,27,extraction_confidence,numeric,numeric,YES,null
+staged_systems,28,verification_status,text,text,NO,'pending_review'::text
+staged_systems,29,verified_by,uuid,uuid,YES,null
+staged_systems,30,verified_at,timestamp with time zone,timestamptz,YES,null
+staged_systems,31,reviewer_notes,text,text,YES,null
+staged_systems,32,created_at,timestamp with time zone,timestamptz,NO,now()
+staged_systems,33,updated_at,timestamp with time zone,timestamptz,NO,now()
+staged_systems,34,notes,text,text,YES,null
+staged_systems,35,parser_notes,jsonb,jsonb,YES,null
+staged_systems,36,bal_rating,text,text,YES,null
+staged_systems,37,extracted_at,timestamp with time zone,timestamptz,YES,null
+staged_systems,38,australian_made,boolean,bool,YES,null
+staged_systems,39,install_guide_urls,jsonb,jsonb,YES,null
+staged_systems,40,design_guide_url,text,text,YES,null
+staged_systems,41,last_submitted_at,timestamp with time zone,timestamptz,YES,null
+staged_systems,42,last_published_at,timestamp with time zone,timestamptz,YES,null
+staged_systems,43,hero_image_position_x,smallint,int2,NO,50
+staged_systems,44,hero_image_position_y,smallint,int2,NO,50
+staged_systems,45,hero_image_asset_id,uuid,uuid,YES,null
+verification_events,1,id,uuid,uuid,NO,gen_random_uuid()
+verification_events,2,entity_type,text,text,NO,null
+verification_events,3,entity_id,uuid,uuid,NO,null
+verification_events,4,action,text,text,NO,null
+verification_events,5,field_name,text,text,YES,null
+verification_events,6,old_value,text,text,YES,null
+verification_events,7,new_value,text,text,YES,null
+verification_events,8,reviewer_id,uuid,uuid,YES,null
+verification_events,9,notes,text,text,YES,null
+verification_events,10,created_at,timestamp with time zone,timestamptz,NO,now()
+widget_quote_requests,1,id,uuid,uuid,NO,gen_random_uuid()
+widget_quote_requests,2,manufacturer_id,uuid,uuid,NO,null
+widget_quote_requests,3,widget_id,uuid,uuid,YES,null
+widget_quote_requests,4,system_id,text,text,NO,null
+widget_quote_requests,5,system_name,text,text,YES,null
+widget_quote_requests,6,selected_items,jsonb,jsonb,NO,'[]'::jsonb
+widget_quote_requests,7,name,text,text,NO,null
+widget_quote_requests,8,email,text,text,NO,null
+widget_quote_requests,9,phone,text,text,YES,null
+widget_quote_requests,10,postcode,text,text,YES,null
+widget_quote_requests,11,project_type,text,text,YES,null
+widget_quote_requests,12,timeline,text,text,YES,null
+widget_quote_requests,13,message,text,text,YES,null
+widget_quote_requests,14,status,text,text,NO,'new'::text
+widget_quote_requests,15,created_at,timestamp with time zone,timestamptz,NO,now()
+workspace_invitations,1,id,uuid,uuid,NO,gen_random_uuid()
+workspace_invitations,2,manufacturer_id,uuid,uuid,NO,null
+workspace_invitations,3,email,text,text,NO,null
+workspace_invitations,4,role,text,text,NO,'manufacturer_reviewer'::text
+workspace_invitations,5,token_hash,text,text,YES,null
+workspace_invitations,6,status,text,text,NO,'pending'::text
+workspace_invitations,7,invited_by,uuid,uuid,YES,null
+workspace_invitations,8,invited_at,timestamp with time zone,timestamptz,NO,now()
+workspace_invitations,9,expires_at,timestamp with time zone,timestamptz,YES,null
+workspace_invitations,10,accepted_at,timestamp with time zone,timestamptz,YES,null

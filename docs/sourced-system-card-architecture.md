@@ -1,0 +1,250 @@
+# Sourced System Card Architecture
+
+**Status:** Design + implementation plan. Approved to build (no deferred "down the track" — the only phasing below is dependency order).
+
+**Goal:** Make every system card a **static, versioned, self-contained container** that AI can search *within* and cite *as a source*. To do that, the card's structured data **and the content of its specific links** (install guide, design guide, website, tech data, source catalogue) must be treated as one searchable, provenance-bearing unit — resolvable entirely from `card_id + version`.
+
+This doc unifies two previously separate threads:
+1. **URL ingestion** — add a link/URL as a parse source instead of downloading + re-uploading a PDF.
+2. **Sourced container** — cards as citable RAG sources.
+
+They are the same system. URL ingestion is stage one of the container.
+
+---
+
+## 1. Guiding principle
+
+> Everything the AI needs must be resolvable from `card_id + version` **as text**, including the text of every linked document, **frozen at validation time**, with per-chunk provenance so answers can cite back to (card URL, version, source role, page).
+
+Three load-bearing decisions follow from this, and they are the cheap-now / impossible-to-retrofit ones:
+
+- **A link is a typed, content-bearing *source association*, not a display string.**
+- **Provenance travels on every chunk** (source_document_id, role, page range) from docling all the way into the container.
+- **The published version is the container of record** — immutable, hashed, self-contained.
+
+---
+
+## 2. Current state (what already exists)
+
+| Piece | Where | Notes |
+|---|---|---|
+| Upload → R2 → register | `api/manufacturer/{presign-upload,register-document}` | Browser PUTs to R2, inserts `source_documents` (has `storage_key`, `public_url`). |
+| Docling | `api/pipeline/run-docling` → `scripts/worker/pipeline_worker.py` | Enqueues a `pipeline_jobs` row; worker downloads the PDF from R2 by `storage_key`, chunks it, writes `output.md`. |
+| Parser | worker `handle_parser` → `scripts/parser/run_parser.py` | Reads `output.md`, populates `staged_systems` + related. |
+| Card links | `staged_systems`: `install_guide_urls` (jsonb `{label,url}[]`), `design_guide_url`, `website_url`, `tech_data_url`, `source_url`, `source_document_id` | Scattered scalar/jsonb fields — **display only, content not captured.** |
+| Container (nascent) | `card_versions` (migration 049) → `getHostedCard` → `api/cards/[slug]/card.json` | Immutable per-version snapshot: `card_id, version, slug, name, card_json, stockists_json, validated_at`. **This is the container — it just lacks linked-doc text and an index.** |
+| Static bundle | `scripts/build-static-card-bundle.mjs`, `lib/packages/*` | Renders cards as a website-ready static package. |
+
+### Gaps this architecture closes
+
+- **G1 — Docling output is not durably stored.** The worker writes `output.md` to `.local/` on its own disk + `.local/docling-index.json`. The `document_chunks` table **already exists and is rich** (`source_document_id, document_page_id, page_number, chunk_index, heading, chunk_type, raw_text, table_json, docling_json, confidence` — confirmed in the 2026-07-07 dump) but the current worker **does not populate it**. So G1 is narrow: the schema is there; the worker just needs to write the rows. Chunk text + page provenance must live in the DB, not ephemeral worker disk.
+- **G2 — Links carry no content.** Only URLs are stored; the PDFs behind them are never ingested.
+- **G3 — No content snapshot in the container.** `card_json` has fields but not the linked-doc text; if a manufacturer URL dies, the source is lost.
+- **G4 — No retrieval index.** No embeddings/full-text over the container.
+
+---
+
+## 3. Target architecture
+
+```
+ Add link/URL (role) ──► system_sources row (url = LIVE LINK, instant)
+        │                         │
+        │                    enqueue fetch_url job
+        ▼                         ▼
+   card live link          worker: fetch ──► R2 ──► docling ──► document_chunks
+   renders immediately              (durable copy)     (text + page provenance)
+                                          │
+                                          ▼
+                        source_document_id back-filled on system_sources
+                                          │
+                              ┌───────────┴───────────┐
+                        (on publish)            (on demand)
+                              ▼                        ▼
+                     card_versions snapshot     card_embeddings (pgvector)
+                     + content_md + content_hash   keyed by card_id+version+chunk
+                              ▼
+                     static container to R2: card.json + content.md + manifest
+```
+
+### 3.1 Typed source associations — `system_sources`
+
+The keystone. One row per (system, link):
+
+```
+system_sources(
+  id                uuid pk,
+  manufacturer_id   uuid not null,           -- tenant scope for RLS
+  staged_system_id  uuid not null,           -- FK staged_systems
+  role              text not null,           -- install_guide | design_guide | website | tech_data | source_catalogue
+  label             text,                    -- display label (from install_guide_urls[].label)
+  url               text not null,           -- the LIVE LINK, rendered on the card immediately
+  source_document_id uuid,                   -- FK source_documents; NULL until ingested
+  ingest_status     text not null default 'linked',  -- linked | queued | fetching | extracted | failed | skipped
+  include_in_container boolean not null default true, -- website links may be link-only
+  sort_order        int default 0,
+  created_at        timestamptz default now(),
+  updated_at        timestamptz default now()
+)
+```
+
+- `url` does double duty: **live link** (independent of ingestion) + **fetch target**.
+- `source_document_id` fills in after the worker ingests; the live link never waits on it.
+- `include_in_container = false` lets a `website` link be shown but not chunked into the container.
+
+The existing scalar/jsonb link fields on `staged_systems` remain the **render source of truth for now**; `system_sources` is generated from them and kept in sync (see plan step 2). Eventually the card renderer can read from `system_sources`, but we do not need to rip out the old fields to ship this.
+
+### 3.2 Durable chunks with provenance — `document_chunks` (already exists)
+
+The table is live (migration 001 lineage) with the right shape — **reuse it, do not recreate.** Real columns (2026-07-07 dump):
+
+```
+document_chunks(
+  id, source_document_id, document_page_id, extraction_run_id,
+  page_number, chunk_index, heading, chunk_type,
+  raw_text, table_json, docling_json, confidence, created_at
+)
+```
+
+The worker writes these rows at the end of `handle_docling` (currently it only writes `.local/output.md`). Mapping from the current docling output:
+- `chunk_index` ← chunk number; `raw_text` ← chunk markdown body; `source_document_id` ← the doc.
+- Docling chunks are **page ranges** (default 7 pages) but `page_number` is a single int → store the chunk's **start page** in `page_number` and keep the full `{startPage,endPage}` in `docling_json`. (If range querying becomes hot later, add `end_page` — additive.)
+
+Provenance for citation = `(source_document_id, page_number[, docling_json.endPage])` → joined via `system_sources.role` gives the citable tuple. RLS: reads open to anon/authenticated; **writes are service-role only** (worker uses service role ✓).
+
+### 3.3 `source_documents` additions
+
+```
+alter table source_documents
+  add column source_url  text,          -- where it was fetched from (URL ingestion)
+  add column ingest_kind text default 'upload';  -- upload | url_fetch
+```
+
+### 3.4 Container snapshot — `card_versions` additions
+
+At publish, alongside `card_json`, assemble and store:
+
+```
+alter table card_versions
+  add column content_md   text,   -- serialized fields + linked-source text, frozen
+  add column content_hash text,   -- sha256(content_md); change detection for re-embed
+  add column sources_json jsonb;  -- [{role,label,url,source_document_id,pages}] provenance manifest
+```
+
+`content_md` = deterministic serialization of the structured card **plus** the `document_chunks` text of every `system_sources` row with `include_in_container = true`, at publish time. This makes the container self-contained and immune to G3.
+
+### 3.5 Retrieval index — `card_embeddings` (pgvector)
+
+```
+create extension if not exists vector;   -- Supabase supports pgvector
+
+card_embeddings(
+  id            uuid pk,
+  card_id       uuid not null,
+  version       int not null,
+  chunk_id      uuid,               -- provenance: which document_chunk (nullable for field-derived text)
+  source_role   text,               -- install_guide | design_guide | fields | ...
+  page_start    int,
+  page_end      int,
+  content       text not null,      -- the embedded text span
+  embedding     vector(1536),       -- model-dependent dimension; confirm at build
+  content_hash  text not null,      -- = card_versions.content_hash it was built from
+  created_at    timestamptz default now()
+)
+```
+
+Because the container is versioned + hashed, embedding is a **pure function** of it — (re)embed only when `content_hash` changes. Retrieval returns spans with full provenance, so the AI cites "‹card canonical_url› v‹n› — install guide, pp.4–5."
+
+### 3.6 Static container artifact (R2)
+
+Extend the static-bundle build to emit, per published version:
+- `card.json` — structured (already have via `card.json` route shape).
+- `content.md` — the full searchable text (= `content_md`).
+- `manifest.json` — `{card_id, version, content_hash, sources:[…], canonical_url}`.
+
+That is the literal "static container object," consumable by external AI or our own retrieval, decoupled from the DB.
+
+---
+
+## 4. Ingestion flow (worker-based, `fetch_url` stage)
+
+Decision: **fetch in the worker, not Vercel.** Rationale (durability, provenance on one chain, retryable/observable jobs, no 50 MB serverless ceiling, re-ingestion is inherently a job) is recorded in this doc's companion discussion; summary:
+
+- **Vercel stays thin:** validate URL → insert `source_documents` (`ingest_kind='url_fetch'`, `source_url`) + `system_sources` row (`ingest_status='queued'`) → enqueue `fetch_url` job. Returns immediately; **live link is already live.**
+- **Worker `fetch_url`:** `requests.get` with redirects + UA → validate `Content-Type: application/pdf` (reject/flag HTML) → stream to R2 under `manufacturer-uploads/{mfr}/{uuid}.pdf` → patch `source_documents.storage_key` + `system_sources.source_document_id` → optionally chain into `docling` (for roles where `include_in_container`).
+- `fetch_url` is its **own** stage (not folded into docling) so `website` links can be stored/rendered without being chunked, and so "in R2" is separate from "parsed."
+
+New `pipeline_jobs.job_type = 'fetch_url'`; payload `{manufacturer_id, source_document_id, system_source_id, source_url, then_docling: bool, chunk_size}`.
+
+---
+
+## 5. Implementation plan (dependency-ordered — all in scope)
+
+Migrations are applied **manually** in the Supabase SQL editor (house rule); code must degrade gracefully (42P01/42703 fallbacks) so a half-applied state never crashes pages.
+
+### Step 1 — Schema foundations (migrations) — ✅ written: `051_system_sources_and_url_ingest.sql`
+- `system_sources` table + RLS (manufacturer self read/write/delete own; buildquote staff all), mirroring migration 048's stockist pattern. Idempotent.
+- `source_documents.source_url` + `ingest_kind` (CHECK: upload | url_fetch).
+- `card_versions.content_md` + `content_hash` + `sources_json`.
+- `document_chunks` needs **no migration** — it already exists with the right shape (see §3.2); step 4 just writes to it.
+- **Awaiting:** manual apply in Supabase, then confirm no errors.
+
+### Step 2 — Sync links → `system_sources`
+- Backfill from existing `staged_systems` link fields (`install_guide_urls[]`, `design_guide_url`, `website_url`, `tech_data_url`, `source_url`).
+- On brand/verification edits that change a link, upsert the matching `system_sources` row. Keep old fields authoritative for render until step 7.
+
+### Step 3 — URL ingestion: thin Vercel enqueue
+- `api/manufacturer/add-source-url` (server action/route): auth + membership gate (mirror `register-document`), validate URL, insert `source_documents` + `system_sources`, enqueue `fetch_url`.
+- "Add from URL" UI in the Documents widget **and** an "Add link" affordance on the verification/link editor (since links now reuse as sources).
+
+### Step 4 — Worker: `fetch_url` stage + durable chunks
+- Add `handle_fetch_url` to `pipeline_worker.py` (fetch → validate → R2 → patch → optional chain to docling).
+- Extend `handle_docling` to **persist `document_chunks`** rows (text + pages) — closes G1. Keep `.local` output for the parser during transition.
+- Back-fill `system_sources.source_document_id` + `ingest_status`.
+
+### Step 5 — Container assembly at publish
+- Where `card_versions` rows are created (publish path), assemble `content_md` = serialized fields + `document_chunks` text for the system's `system_sources` (include_in_container) + write `content_hash`, `sources_json`.
+- Deterministic serializer (stable ordering) so `content_hash` is meaningful.
+
+### Step 6 — Static container emission
+- Extend static-bundle build to write `card.json` + `content.md` + `manifest.json` per version to R2.
+
+### Step 7 — Embeddings + retrieval
+- `0NN_card_embeddings.sql` (pgvector) + IVFFlat/HNSW index.
+- Embed job: for each published version whose `content_hash` changed, chunk `content_md` (respecting existing `document_chunks` boundaries where possible), embed, upsert `card_embeddings` with provenance.
+- Retrieval RPC: `match_card_sources(query_embedding, filters)` → returns spans + provenance + canonical URL for citation.
+- Optional: swap the card renderer / `card.json` sources to read from `system_sources` (retire scattered fields).
+
+### Step 8 — Verification & backfill
+- Re-ingest existing manufacturers' links; publish to regenerate containers; build embeddings; spot-check citations resolve to correct pages.
+
+---
+
+## 6. Live-link reuse (confirmed decision)
+
+Adding a URL does two things atomically via one `system_sources` row: (a) sets/updates the card's live link for that `role` (rendered immediately, no wait), and (b) queues ingestion of its content. The two are decoupled — the live link never depends on parser output, and parser output never blocks the link.
+
+---
+
+## 7. Open questions / verify against live schema
+
+Resolved by the 2026-07-07 dump (`supabase/snippets/schema_dump_2026-07-07_mig050.md`):
+- ✅ `document_chunks` exists and is rich (see §3.2) — worker populates it in step 4, no table creation.
+- ✅ `source_documents` has no `source_url` yet — migration adds it (step 1).
+- ✅ `pipeline_jobs.job_type` is free text — `fetch_url` is code-only.
+- ✅ `card_versions` matches migration 049 — additions land on top (step 5).
+
+Still open:
+- Exact publish code path that inserts `card_versions` (package-actions vs packages lib) — confirm before step 5.
+- **pgvector availability** — run the `pg_extension` / `pg_available_extensions` check before step 7 (dump didn't cover extensions).
+- Embedding model + dimension (`vector(N)`) — pick at step 7; keep dimension in one constant.
+- Whether `website`/HTML roles should be docling-converted or link-only by default (`include_in_container`).
+- pgvector index type + list/ef params at expected corpus size.
+
+---
+
+## 8. Risks & mitigations
+
+- **Manufacturer URLs are messy** (403/redir/ HTML / large) → worker fetch with UA + redirects + content-type validation + job-level error surfacing; `ingest_status='failed'` shown in UI.
+- **Manual migration drift** → graceful 42P01/42703 fallbacks; container/embedding features no-op cleanly if their tables aren't applied yet.
+- **Stale sources** → `content_hash` + re-ingest job; container is frozen per version, live link always current.
+- **Two ingestion paths diverging** → there is only one (worker); Vercel only enqueues.
