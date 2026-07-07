@@ -2,9 +2,11 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getAdminImpersonatedManufacturerId, getManufacturerInfo } from '@/lib/studio-manufacturer/workspace'
 import { getPendingContact } from '@/lib/studio-admin/pending-contact-actions'
+import { listManufacturerLogins } from '@/lib/studio-admin/manufacturer-login-actions'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { AccountProfileForm } from './AccountProfileForm'
 import { AdminPendingContactForm } from './AdminPendingContactForm'
+import { AdminWorkspaceLoginManager } from './AdminWorkspaceLoginManager'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,9 +51,10 @@ export default async function ManufacturerAccountPage() {
   if (session.globalRole === 'buildquote_admin') {
     const manufacturerId = await getAdminImpersonatedManufacturerId()
     if (manufacturerId) {
-      const [mfrResult, contactResult] = await Promise.all([
+      const [mfrResult, contactResult, loginsResult] = await Promise.all([
         getManufacturerInfo(manufacturerId),
         getPendingContact(manufacturerId),
+        listManufacturerLogins(manufacturerId),
       ])
 
       if (!mfrResult.ok || !contactResult.ok) {
@@ -74,11 +77,25 @@ export default async function ManufacturerAccountPage() {
             </p>
           </div>
 
-          <AdminPendingContactForm
-            manufacturerId={manufacturerId}
-            manufacturerName={mfrResult.manufacturer.name}
-            initialValues={contactResult.fields}
-          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+            <AdminPendingContactForm
+              manufacturerId={manufacturerId}
+              manufacturerName={mfrResult.manufacturer.name}
+              initialValues={contactResult.fields}
+            />
+
+            <AdminWorkspaceLoginManager
+              manufacturerId={manufacturerId}
+              manufacturerName={mfrResult.manufacturer.name}
+              logins={loginsResult.ok ? loginsResult.logins : []}
+              defaultEmail={
+                (contactResult.fields.login_preference === 'secondary'
+                  ? contactResult.fields.email_secondary
+                  : contactResult.fields.email_primary) ?? ''
+              }
+              defaultFullName={contactResult.fields.full_name ?? ''}
+            />
+          </div>
         </StudioShell>
       )
     }
