@@ -52,6 +52,12 @@ R2_SECRET_KEY = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "studio-buildquote")
 R2_PUBLIC_URL = os.environ.get("CLOUDFLARE_R2_PUBLIC_URL", "").rstrip("/")
 R2_ENDPOINT = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+# Voyage AI embeddings (Step 7). If VOYAGE_API_KEY is unset, embed jobs no-op.
+# Dimension MUST match migration 052's vector(1024).
+VOYAGE_API_KEY = os.environ.get("VOYAGE_API_KEY", "")
+VOYAGE_MODEL = os.environ.get("VOYAGE_MODEL", "voyage-3.5")
+VOYAGE_DIM = int(os.environ.get("VOYAGE_DIM", "1024"))
 POLL_INTERVAL = 4  # seconds between polls
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -244,6 +250,43 @@ def persist_document_chunks(document_id: str, chunks: list[dict]):
     ]
     if rows:
         sb_post("document_chunks", rows)
+
+
+# ── Embeddings (Voyage) ─────────────────────────────────────────────────────────
+
+def voyage_embed(texts: list[str], input_type: str = "document") -> list[list[float]]:
+    """Embed a batch of texts with Voyage. input_type: 'document' or 'query'."""
+    resp = requests.post(
+        "https://api.voyageai.com/v1/embeddings",
+        headers={"Authorization": f"Bearer {VOYAGE_API_KEY}", "Content-Type": "application/json"},
+        json={"input": texts, "model": VOYAGE_MODEL, "input_type": input_type, "output_dimension": VOYAGE_DIM},
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()["data"]
+    # Preserve request order.
+    return [d["embedding"] for d in sorted(data, key=lambda x: x["index"])]
+
+
+def window_text(text: str, size: int = 1500, overlap: int = 200) -> list[str]:
+    """Split content_md into overlapping character windows for embedding."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    windows: list[str] = []
+    step = max(size - overlap, 1)
+    i = 0
+    while i < len(text):
+        windows.append(text[i:i + size])
+        if i + size >= len(text):
+            break
+        i += step
+    return windows
+
+
+def vector_literal(embedding: list[float]) -> str:
+    """pgvector text input, e.g. '[0.1,0.2,...]' — PostgREST casts on insert."""
+    return "[" + ",".join(repr(float(x)) for x in embedding) + "]"
 
 
 # ── Job handlers ──────────────────────────────────────────────────────────────
@@ -616,6 +659,95 @@ def handle_fetch_url(job: dict):
     })
 
 
+def handle_embed(job: dict):
+    """Embed a published card version's container (card_versions.content_md) into
+    card_embeddings via Voyage. Idempotent by content_hash — skips if unchanged.
+    No-ops (marks done) when VOYAGE_API_KEY is unset, so publish can enqueue
+    freely before embeddings are turned on. See
+    docs/sourced-system-card-architecture.md §3.5.
+    """
+    job_id = job["id"]
+    payload = job["payload"]
+    card_id = payload["card_id"]
+    version = payload["version"]
+    manufacturer_id = payload["manufacturer_id"]
+
+    log: list[str] = []
+
+    def log_line(msg: str):
+        log.append(msg)
+        print(f"  {msg}")
+
+    if not VOYAGE_API_KEY:
+        complete_job(job_id, {"skipped": "no_voyage_key"}, log + ["Embeddings disabled (no VOYAGE_API_KEY)."])
+        return
+
+    rows = sb_get(
+        "card_versions",
+        f"card_id=eq.{card_id}&version=eq.{version}&select=content_md,content_hash&limit=1",
+    )
+    if not rows:
+        fail_job(job_id, "card_version not found", log)
+        return
+    content_md = rows[0].get("content_md")
+    content_hash = rows[0].get("content_hash")
+    if not content_md or not content_hash:
+        complete_job(job_id, {"skipped": "no_content"}, log + ["No container content to embed."])
+        return
+
+    # Already embedded this exact container?
+    existing = sb_get(
+        "card_embeddings",
+        f"card_id=eq.{card_id}&version=eq.{version}&content_hash=eq.{content_hash}&select=id&limit=1",
+    )
+    if existing:
+        complete_job(job_id, {"skipped": "unchanged", "contentHash": content_hash}, log)
+        return
+
+    windows = window_text(content_md)
+    if not windows:
+        complete_job(job_id, {"skipped": "empty"}, log)
+        return
+
+    log_line(f"Embedding {len(windows)} windows via {VOYAGE_MODEL} ({VOYAGE_DIM}d)")
+    embeddings: list[list[float]] = []
+    try:
+        for b in range(0, len(windows), 128):
+            embeddings.extend(voyage_embed(windows[b:b + 128], "document"))
+    except Exception as e:
+        fail_job(job_id, f"Voyage embed failed: {e}", log)
+        return
+
+    # Replace any prior embeddings for this card/version.
+    try:
+        sb_delete("card_embeddings", f"card_id=eq.{card_id}&version=eq.{version}")
+    except Exception:
+        pass
+
+    insert_rows = [
+        {
+            "manufacturer_id": manufacturer_id,
+            "card_id": card_id,
+            "version": version,
+            "chunk_index": i,
+            "source_role": None,
+            "content": w,
+            "embedding": vector_literal(emb),
+            "content_hash": content_hash,
+        }
+        for i, (w, emb) in enumerate(zip(windows, embeddings))
+    ]
+    try:
+        for b in range(0, len(insert_rows), 200):
+            sb_post("card_embeddings", insert_rows[b:b + 200])
+    except Exception as e:
+        fail_job(job_id, f"Could not store embeddings: {e}", log)
+        return
+
+    log_line(f"Stored {len(insert_rows)} embeddings")
+    complete_job(job_id, {"embeddings": len(insert_rows), "contentHash": content_hash}, log)
+
+
 def handle_rerun_chunk(job: dict):
     job_id = job["id"]
     payload = job["payload"]
@@ -694,6 +826,7 @@ HANDLERS = {
     "parser": handle_parser,
     "rerun_chunk": handle_rerun_chunk,
     "fetch_url": handle_fetch_url,
+    "embed": handle_embed,
 }
 
 

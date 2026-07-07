@@ -510,6 +510,23 @@ export async function generateCardPackage(
       }
     }
 
+    // Enqueue embedding jobs (Step 7) for cards that produced container content.
+    // The worker no-ops when VOYAGE_API_KEY is unset and is idempotent by
+    // content_hash, so enqueuing on every publish is safe. Best-effort.
+    try {
+      const embedJobs = readyCards
+        .filter((rc) => containers.get(rc.system.id)?.content_md)
+        .map((rc) => ({
+          manufacturer_id: manufacturerId,
+          job_type: 'embed',
+          status: 'pending',
+          payload: { card_id: rc.system.id, version: nextVersion, manufacturer_id: manufacturerId },
+        }))
+      if (embedJobs.length) await supabase.from('pipeline_jobs').insert(embedJobs)
+    } catch {
+      /* embeddings are best-effort — never block publish */
+    }
+
     // Supersede older generated-but-never-downloaded packages.
     await supabase
       .from('card_packages')

@@ -211,11 +211,13 @@ Migrations are applied **manually** in the Supabase SQL editor (house rule); cod
 - Generator writes `cards/<slug>/content.md` (the container text) into the package ZIP and adds a `content` path to `feed.json`; `manifest.json` auto-lists it. `PackageCardInput.containerMd` carries it in.
 - `package-actions.ts` now builds containers **before** the ZIP (so `content.md` ships) and reuses the same map for the `card_versions` snapshot. Fails soft. tsc + build + 17 fixture tests green.
 
-### Step 7 — Embeddings + retrieval
-- `0NN_card_embeddings.sql` (pgvector) + IVFFlat/HNSW index.
-- Embed job: for each published version whose `content_hash` changed, chunk `content_md` (respecting existing `document_chunks` boundaries where possible), embed, upsert `card_embeddings` with provenance.
-- Retrieval RPC: `match_card_sources(query_embedding, filters)` → returns spans + provenance + canonical URL for citation.
-- Optional: swap the card renderer / `card.json` sources to read from `system_sources` (retire scattered fields).
+### Step 7 — Embeddings + retrieval — ✅ written (provider: Voyage AI, voyage-3.5 / 1024-dim)
+- `052_card_embeddings.sql` — pgvector `card_embeddings` (vector(1024)) + HNSW cosine index + RLS + `match_card_sources(query_embedding, match_count, filter_manufacturer)` RPC.
+- Worker `handle_embed`: reads `card_versions.content_md`, idempotent by `content_hash`, windows the text, embeds via Voyage, upserts `card_embeddings`. **No-ops when `VOYAGE_API_KEY` is unset.**
+- `package-actions.ts` enqueues `embed` jobs after the version snapshot (best-effort).
+- `api/admin/card-search` — embeds the query (`input_type='query'`) and calls the RPC; admin/reviewer only; 503 without a key.
+- **Needs to run:** apply migration 052, set `VOYAGE_API_KEY` (+ optional `VOYAGE_MODEL`/`VOYAGE_DIM`) for the worker and web, then a publish + worker run to populate/verify. tsc + build green; not runtime-tested (no key/Python here).
+- Optional later: swap the card renderer / `card.json` sources to read from `system_sources` (retire scattered fields); finer per-source provenance on embeddings (currently window-level).
 
 ### Step 8 — Verification & backfill
 - Re-ingest existing manufacturers' links; publish to regenerate containers; build embeddings; spot-check citations resolve to correct pages.
