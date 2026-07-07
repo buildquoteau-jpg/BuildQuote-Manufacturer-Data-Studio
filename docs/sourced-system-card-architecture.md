@@ -189,8 +189,8 @@ Migrations are applied **manually** in the Supabase SQL editor (house rule); cod
 - **Awaiting:** manual apply in Supabase, then confirm no errors.
 
 ### Step 2 — Sync links → `system_sources`
-- Backfill from existing `staged_systems` link fields (`install_guide_urls[]`, `design_guide_url`, `website_url`, `tech_data_url`, `source_url`).
-- On brand/verification edits that change a link, upsert the matching `system_sources` row. Keep old fields authoritative for render until step 7.
+- **Backfill ✅ written:** `supabase/snippets/backfill_system_sources_from_staged_systems.sql` — idempotent (ON CONFLICT DO NOTHING), maps `website_url`→website, `design_guide_url`→design_guide, `tech_data_url`→tech_data, `source_url`(+`source_label`)→source_catalogue, `install_guide_urls[]`→install_guide. `ingest_status='linked'` (does not auto-fetch). **Awaiting:** run once in Supabase.
+- **Still TODO:** on verification edits that change a link, upsert the matching `system_sources` row (live sync in `verification-actions.ts`). Keep old fields authoritative for render until step 7.
 
 ### Step 3 — URL ingestion: thin Vercel enqueue — ✅ route written: `api/manufacturer/add-source-url/route.ts`
 - Auth + membership gate (mirrors `register-document`), validates URL (http/https), inserts `source_documents` (`ingest_kind='url_fetch'`, `status='pending_fetch'`), optionally upserts a `system_sources` row when `stagedSystemId` + `role` are given (verifies the system belongs to the workspace), enqueues a `fetch_url` job. `then_docling` = true for PDF roles / plain library adds, false for `website`.
