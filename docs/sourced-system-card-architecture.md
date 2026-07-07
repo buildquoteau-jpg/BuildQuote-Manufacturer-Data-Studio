@@ -202,9 +202,10 @@ Migrations are applied **manually** in the Supabase SQL editor (house rule); cod
 - `handle_docling` now **persists `document_chunks`** rows (`raw_text`, `page_number`=start page, `chunk_index`, `docling_json`={startPage,endPage,charCount,status}) via `persist_document_chunks` — closes G1. `.local/output.md` still written for the parser.
 - **Not verified here** (no Python runtime in the build env): needs a worker run to confirm end-to-end. New helpers `sb_post`/`sb_delete`/`upload_document`/`fetch_url_to_path`/`looks_like_pdf` added.
 
-### Step 5 — Container assembly at publish
-- Where `card_versions` rows are created (publish path), assemble `content_md` = serialized fields + `document_chunks` text for the system's `system_sources` (include_in_container) + write `content_hash`, `sources_json`.
-- Deterministic serializer (stable ordering) so `content_hash` is meaningful.
+### Step 5 — Container assembly at publish — ✅ written: `lib/packages/card-container.ts`
+- `buildCardContainers()` — batched (2 queries): serializes structured fields (deterministic → stable hash) + appends each `system_sources` (include_in_container) linked doc's `document_chunks` text, with a provenance manifest (`sources_json`) + `sha256` `content_hash`. Fails soft to fields-only.
+- Hooked into `package-actions.ts` publish path (`card_versions` insert) with a **pre-051 fallback** (retries without the container columns via `isMissingSchemaError`). tsc + build green.
+- **Note:** content is only as rich as ingested sources — needs Step 2 backfill + a worker run to have linked-doc text; without them the container is fields-only (still valid + hashed).
 
 ### Step 6 — Static container emission
 - Extend static-bundle build to write `card.json` + `content.md` + `manifest.json` per version to R2.

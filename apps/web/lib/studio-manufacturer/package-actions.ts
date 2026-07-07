@@ -447,6 +447,20 @@ export async function generateCardPackage(
         .eq('id', packageId)
     }
 
+    // Sourced-card container (Step 5): freeze per-version full-text = structured
+    // fields + linked-source text, with a provenance manifest + hash. Fails soft
+    // to an empty map so publishing is never blocked.
+    let containers = new Map<string, import('@/lib/packages/card-container').CardContainer>()
+    try {
+      const { buildCardContainers } = await import('@/lib/packages/card-container')
+      containers = await buildCardContainers(
+        supabase,
+        result.items.map((_item, i) => ({ cardId: readyCards[i].system.id, system: cards[i].system })),
+      )
+    } catch {
+      containers = new Map()
+    }
+
     // Immutable version history (049): one snapshot per card per package
     // version — the record behind versioned card URLs, the validation footer
     // and the audit/certificate exports. Insert-only; degrades to a log note
@@ -454,6 +468,7 @@ export async function generateCardPackage(
     const versionRows = result.items.map((item, i) => {
       const { system } = readyCards[i]
       const card = cards[i]
+      const container = containers.get(system.id)
       return {
         manufacturer_id: manufacturerId,
         card_id: system.id,
@@ -465,14 +480,30 @@ export async function generateCardPackage(
         stockists_json: card.stockists ?? [],
         validated_by: system.reviewer_notes,
         validated_at: system.verified_at,
+        content_md: container?.content_md ?? null,
+        content_hash: container?.content_hash ?? null,
+        sources_json: container?.sources_json ?? null,
       }
     })
     const { error: versionsError } = await supabase.from('card_versions').insert(versionRows)
     if (versionsError) {
-      await supabase
-        .from('card_packages')
-        .update({ build_log: `${fullLog.join('\n')}\nNote: card_versions snapshot skipped (${versionsError.message})` })
-        .eq('id', packageId)
+      // Pre-051 environments lack the container columns — retry without them so
+      // the version snapshot itself still lands.
+      if (isMissingSchemaError(versionsError)) {
+        const legacyRows = versionRows.map(({ content_md, content_hash, sources_json, ...rest }) => rest)
+        const { error: legacyErr } = await supabase.from('card_versions').insert(legacyRows)
+        if (legacyErr) {
+          await supabase
+            .from('card_packages')
+            .update({ build_log: `${fullLog.join('\n')}\nNote: card_versions snapshot skipped (${legacyErr.message})` })
+            .eq('id', packageId)
+        }
+      } else {
+        await supabase
+          .from('card_packages')
+          .update({ build_log: `${fullLog.join('\n')}\nNote: card_versions snapshot skipped (${versionsError.message})` })
+          .eq('id', packageId)
+      }
     }
 
     // Supersede older generated-but-never-downloaded packages.
