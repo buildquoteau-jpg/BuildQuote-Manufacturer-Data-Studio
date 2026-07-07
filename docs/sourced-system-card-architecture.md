@@ -207,8 +207,9 @@ Migrations are applied **manually** in the Supabase SQL editor (house rule); cod
 - Hooked into `package-actions.ts` publish path (`card_versions` insert) with a **pre-051 fallback** (retries without the container columns via `isMissingSchemaError`). tsc + build green.
 - **Note:** content is only as rich as ingested sources — needs Step 2 backfill + a worker run to have linked-doc text; without them the container is fields-only (still valid + hashed).
 
-### Step 6 — Static container emission
-- Extend static-bundle build to write `card.json` + `content.md` + `manifest.json` per version to R2.
+### Step 6 — Static container emission — ✅ written: `generator.ts` + `package-actions.ts`
+- Generator writes `cards/<slug>/content.md` (the container text) into the package ZIP and adds a `content` path to `feed.json`; `manifest.json` auto-lists it. `PackageCardInput.containerMd` carries it in.
+- `package-actions.ts` now builds containers **before** the ZIP (so `content.md` ships) and reuses the same map for the `card_versions` snapshot. Fails soft. tsc + build + 17 fixture tests green.
 
 ### Step 7 — Embeddings + retrieval
 - `0NN_card_embeddings.sql` (pgvector) + IVFFlat/HNSW index.

@@ -373,6 +373,24 @@ export async function generateCardPackage(
       }
     }
 
+    // Sourced-card containers (Step 5/6): freeze per-card full-text = structured
+    // fields + linked-source text. Built BEFORE the ZIP so content.md ships
+    // inside the package, and reused for the card_versions snapshot below. Fails
+    // soft to an empty map so publishing is never blocked.
+    let containers = new Map<string, import('@/lib/packages/card-container').CardContainer>()
+    try {
+      const { buildCardContainers } = await import('@/lib/packages/card-container')
+      containers = await buildCardContainers(
+        supabase,
+        cards.map((c, i) => ({ cardId: readyCards[i].system.id, system: c.system })),
+      )
+      for (let i = 0; i < cards.length; i++) {
+        cards[i].containerMd = containers.get(readyCards[i].system.id)?.content_md ?? null
+      }
+    } catch {
+      containers = new Map()
+    }
+
     // ── Build the ZIP ──
     const generatedAtIso = new Date().toISOString()
     const result = await buildPackageZip({
@@ -445,20 +463,6 @@ export async function generateCardPackage(
         .from('card_packages')
         .update({ build_log: `${fullLog.join('\n')}\nWARN: card_package_items insert failed: ${itemsError.message}` })
         .eq('id', packageId)
-    }
-
-    // Sourced-card container (Step 5): freeze per-version full-text = structured
-    // fields + linked-source text, with a provenance manifest + hash. Fails soft
-    // to an empty map so publishing is never blocked.
-    let containers = new Map<string, import('@/lib/packages/card-container').CardContainer>()
-    try {
-      const { buildCardContainers } = await import('@/lib/packages/card-container')
-      containers = await buildCardContainers(
-        supabase,
-        result.items.map((_item, i) => ({ cardId: readyCards[i].system.id, system: cards[i].system })),
-      )
-    } catch {
-      containers = new Map()
     }
 
     // Immutable version history (049): one snapshot per card per package

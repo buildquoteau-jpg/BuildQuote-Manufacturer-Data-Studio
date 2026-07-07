@@ -63,6 +63,12 @@ export type PackageCardInput = {
   validation?: SystemCardValidation | null
   /** Share/analytics wiring (share links, view beacon, doc-click tracking). */
   tracking?: SystemCardTracking | null
+  /**
+   * Frozen full-text container (structured fields + linked-source text) for AI
+   * search — written as cards/<slug>/content.md. See
+   * docs/sourced-system-card-architecture.md. Omitted when there's nothing to write.
+   */
+  containerMd?: string | null
 }
 
 export type PackageBuildInput = {
@@ -266,6 +272,13 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       null, 2,
     ))
 
+    // content.md — the AI-searchable container: structured fields + the text of
+    // this card's linked sources, frozen at build time. Ships in the static
+    // package so the card is a self-contained, citable source anywhere.
+    if (card.containerMd && card.containerMd.trim()) {
+      dir.file('content.md', card.containerMd)
+    }
+
     // QR code → the card's public URL on the manufacturer's website.
     const qrTarget = publicUrl ?? `${effectiveBase}${installPath}cards/${card.slug}/`
     const qrPng = await QRCode.toBuffer(qrTarget, {
@@ -291,6 +304,7 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       description: card.system.description,
       path: `cards/${card.slug}/`,
       json: `cards/${card.slug}/card.json`,
+      content: card.containerMd && card.containerMd.trim() ? `cards/${card.slug}/content.md` : null,
       url: publicUrl,
     })
   }
