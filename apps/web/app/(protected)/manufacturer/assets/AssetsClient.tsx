@@ -189,7 +189,12 @@ function AddAssetPanel({ manufacturerId }: { manufacturerId: string }) {
       {/* Mode toggle */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
         <button
-          onClick={() => setMode('upload')}
+          onClick={() => {
+            // Already in upload mode → open the file picker directly (people
+            // read this as THE upload button, not just a tab). Otherwise switch.
+            if (mode === 'upload') fileInputRef.current?.click()
+            else setMode('upload')
+          }}
           className={`studio-btn ${mode === 'upload' ? 'studio-btn-primary' : 'studio-btn-ghost'}`}
           style={{ fontSize: '0.8rem' }}
         >
@@ -226,6 +231,7 @@ function AddAssetPanel({ manufacturerId }: { manufacturerId: string }) {
             multiple
             accept={ACCEPT_ATTR}
             style={{ display: 'none' }}
+            onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
               const files = Array.from(e.target.files ?? [])
               if (files.length) uploadFiles(files)

@@ -253,6 +253,7 @@ export function UploadWidget({ manufacturerId, onUploaded }: Props) {
           multiple
           accept={ACCEPT_ATTR}
           style={{ display: 'none' }}
+          onClick={(e) => e.stopPropagation()}
           onChange={handleFileChange}
         />
         <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
