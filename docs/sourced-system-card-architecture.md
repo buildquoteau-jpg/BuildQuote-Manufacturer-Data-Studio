@@ -194,7 +194,8 @@ Migrations are applied **manually** in the Supabase SQL editor (house rule); cod
 
 ### Step 3 — URL ingestion: thin Vercel enqueue — ✅ route written: `api/manufacturer/add-source-url/route.ts`
 - Auth + membership gate (mirrors `register-document`), validates URL (http/https), inserts `source_documents` (`ingest_kind='url_fetch'`, `status='pending_fetch'`), optionally upserts a `system_sources` row when `stagedSystemId` + `role` are given (verifies the system belongs to the workspace), enqueues a `fetch_url` job. `then_docling` = true for PDF roles / plain library adds, false for `website`.
-- **Still TODO:** the "Add from URL" UI in the Documents widget + an "Add link" affordance on the verification/link editor. (Deferred to next session — needs careful integration into existing widgets.)
+- **UI (Documents) ✅:** `AddUrlWidget.tsx` + a upload/URL toggle in `DocumentsClient.tsx` — paste a PDF link, posts to the route, background fetch+parse. (tsc + build green.)
+- **Still TODO:** an "Add link" affordance on the verification/link editor (system-level reuse — creates a `system_sources` row with a role, doubling as the card's live link). Needs the verification link-editor UI.
 
 ### Step 4 — Worker: `fetch_url` stage + durable chunks — ✅ written in `pipeline_worker.py`
 - `handle_fetch_url`: fetch (UA + redirects, streamed) → validate it's a PDF (content-type or `%PDF-` magic) → upload to R2 under `manufacturer-uploads/{mfr}/{uuid}.pdf` → patch `source_documents` (storage_key/size/public_url/status) → chain into `handle_docling` on the same job (or complete as link-only). Marks `system_sources.ingest_status` through `fetching → extracted` / `failed`.
