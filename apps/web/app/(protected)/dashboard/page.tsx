@@ -46,8 +46,11 @@ export default async function DashboardPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
             gap: '1rem',
+            // A short menu shouldn't stretch across a wide monitor — cap it so
+            // the tiles form a tidy cluster instead of stranding top-left.
+            maxWidth: 680,
           }}
         >
           {ADMIN_MENU.map((item) => (

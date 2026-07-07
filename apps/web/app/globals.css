@@ -39,8 +39,15 @@
   :root { --studio-px: 1rem; }
 }
 
+/* Fluid root type — the whole studio is rem-based, so scaling the root
+   font-size proportionally scales every heading, label, card, table and gap
+   with the viewport. Laptops (~≤1280px) stay at today's 16px so nothing
+   regresses; large desktop and 4K monitors grow to ~18–20px so content never
+   looks like tiny text stranded in a huge canvas. Phones/tablets stay 16px.
+   This is what separates a site that "looks right at any size" from one with
+   a frozen 16px root and stepped breakpoints. */
 html {
-  font-size: 16px;
+  font-size: clamp(16px, 0.4vw + 11px, 20px);
 }
 
 body {
