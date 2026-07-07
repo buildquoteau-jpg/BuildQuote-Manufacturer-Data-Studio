@@ -30,6 +30,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,6 +50,7 @@ R2_ACCOUNT_ID = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID", "")
 R2_ACCESS_KEY = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID", "")
 R2_SECRET_KEY = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "studio-buildquote")
+R2_PUBLIC_URL = os.environ.get("CLOUDFLARE_R2_PUBLIC_URL", "").rstrip("/")
 R2_ENDPOINT = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 POLL_INTERVAL = 4  # seconds between polls
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -77,6 +79,22 @@ def sb_patch(table: str, params: str, data: dict):
     )
     r.raise_for_status()
     return r.json()
+
+
+def sb_post(table: str, rows):
+    r = requests.post(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=HEADERS,
+        json=rows,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def sb_delete(table: str, params: str):
+    r = requests.delete(f"{SUPABASE_URL}/rest/v1/{table}?{params}", headers=HEADERS)
+    r.raise_for_status()
+    return r
 
 
 def claim_job() -> dict | None:
@@ -158,6 +176,76 @@ def download_document(storage_key: str, dest_path: Path, bucket: str | None = No
     r2.download_file(target_bucket, storage_key, str(dest_path))
 
 
+def upload_document(storage_key: str, src_path: Path, content_type: str = "application/pdf", bucket: str | None = None):
+    """Upload a local file to Cloudflare R2 via the S3-compatible API."""
+    r2 = boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT,
+        aws_access_key_id=R2_ACCESS_KEY,
+        aws_secret_access_key=R2_SECRET_KEY,
+        config=Config(signature_version="s3v4"),
+        region_name="auto",
+    )
+    target_bucket = bucket or R2_BUCKET
+    r2.upload_file(str(src_path), target_bucket, storage_key, ExtraArgs={"ContentType": content_type})
+
+
+def fetch_url_to_path(source_url: str, dest_path: Path) -> str:
+    """Download a URL to a local file. Returns the response Content-Type (lowercased)."""
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; BuildQuoteDataStudio/1.0; +https://studio.buildquote.com.au)"}
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(source_url, headers=headers, allow_redirects=True, timeout=90, stream=True) as r:
+        r.raise_for_status()
+        ctype = (r.headers.get("Content-Type", "") or "").split(";")[0].strip().lower()
+        with open(dest_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+    return ctype
+
+
+def looks_like_pdf(path: Path, ctype: str) -> bool:
+    if ctype == "application/pdf":
+        return True
+    try:
+        with open(path, "rb") as f:
+            return f.read(5).startswith(b"%PDF-")
+    except Exception:
+        return False
+
+
+def persist_document_chunks(document_id: str, chunks: list[dict]):
+    """Replace the durable document_chunks rows for a document (service role).
+
+    Chunks carry text + page provenance so a system card can later cite back to
+    (source_document, page). See docs/sourced-system-card-architecture.md §3.2.
+    Docling chunks are page ranges; page_number holds the start page and the full
+    {startPage,endPage} lives in docling_json.
+    """
+    try:
+        sb_delete("document_chunks", f"source_document_id=eq.{document_id}")
+    except Exception as e:
+        print(f"  [worker] warning: could not clear old chunks for {document_id}: {e}")
+    rows = [
+        {
+            "source_document_id": document_id,
+            "chunk_index": c["index"],
+            "page_number": c.get("startPage"),
+            "chunk_type": "docling",
+            "raw_text": c.get("text") or None,
+            "docling_json": {
+                "startPage": c.get("startPage"),
+                "endPage": c.get("endPage"),
+                "charCount": c.get("charCount"),
+                "status": c.get("status"),
+            },
+        }
+        for c in chunks
+    ]
+    if rows:
+        sb_post("document_chunks", rows)
+
+
 # ── Job handlers ──────────────────────────────────────────────────────────────
 
 def handle_docling(job: dict):
@@ -166,6 +254,7 @@ def handle_docling(job: dict):
     storage_key = payload["storage_key"]
     document_id = payload["document_id"]
     chunk_size = payload.get("chunk_size", 7)
+    system_source_id = payload.get("system_source_id")
 
     log: list[str] = []
     progress = {"totalChunks": None, "totalPages": None, "completedChunks": [], "currentChunk": None}
@@ -274,6 +363,7 @@ def handle_docling(job: dict):
             "endPage": int(m.group(3)),
             "charCount": char_count,
             "status": "empty" if char_count == 0 else "short" if char_count < 200 else "ok",
+            "text": body,
         })
 
     failed = [c for c in chunks if c["status"] != "ok"]
@@ -297,11 +387,27 @@ def handle_docling(job: dict):
     }
     index_path.write_text(json.dumps(index, indent=2))
 
+    # Persist durable chunks (text + page provenance) to Supabase so cards can
+    # later be assembled + cited from them. Non-fatal if it fails — the .local
+    # output.md the parser reads is still written above.
+    try:
+        persist_document_chunks(document_id, chunks)
+        log_line(f"Persisted {len(chunks)} document_chunks rows")
+    except Exception as e:
+        log_line(f"warning: could not persist document_chunks: {e}")
+
     # Update source_document status
     try:
         sb_patch("source_documents", f"id=eq.{document_id}", {"status": "extracted"})
     except Exception:
         pass
+
+    # If this docling run came from a URL-ingested system source, mark it extracted.
+    if system_source_id:
+        try:
+            sb_patch("system_sources", f"id=eq.{system_source_id}", {"ingest_status": "extracted"})
+        except Exception:
+            pass
 
     log_line(f"Done: {len(chunks)} chunks, {page_count} pages, {len(failed)} issues")
     complete_job(job_id, {
@@ -403,6 +509,113 @@ def handle_parser(job: dict):
     }, log)
 
 
+def handle_fetch_url(job: dict):
+    """Fetch a PDF from a URL into R2, then (optionally) chain into docling.
+
+    Thin Vercel route (api/manufacturer/add-source-url) only enqueues; all bytes
+    flow through here so large files have no serverless limits and the fetch is a
+    durable, retryable, observable job. See docs/sourced-system-card-architecture.md §4.
+    """
+    job_id = job["id"]
+    payload = job["payload"]
+    document_id = payload["document_id"]
+    manufacturer_id = payload["manufacturer_id"]
+    source_url = payload["source_url"]
+    system_source_id = payload.get("system_source_id")
+    then_docling = payload.get("then_docling", True)
+    chunk_size = payload.get("chunk_size", 7)
+
+    log: list[str] = []
+
+    def log_line(msg: str):
+        log.append(msg)
+        print(f"  {msg}")
+
+    def mark_source(status: str, error: str | None = None):
+        if not system_source_id:
+            return
+        data = {"ingest_status": status}
+        if error is not None:
+            data["error_message"] = error
+        try:
+            sb_patch("system_sources", f"id=eq.{system_source_id}", data)
+        except Exception:
+            pass
+
+    log_line(f"Fetching URL: {source_url}")
+    mark_source("fetching")
+    update_progress(job_id, {"stage": "fetch"}, log)
+
+    pdf_path = REPO_ROOT / ".local" / "pipeline-temp" / f"{document_id}.pdf"
+    try:
+        ctype = fetch_url_to_path(source_url, pdf_path)
+    except Exception as e:
+        msg = f"Fetch failed: {e}"
+        fail_job(job_id, msg, log)
+        mark_source("failed", msg)
+        try:
+            sb_patch("source_documents", f"id=eq.{document_id}", {"status": "fetch_failed"})
+        except Exception:
+            pass
+        return
+
+    if not looks_like_pdf(pdf_path, ctype):
+        msg = f"URL did not return a PDF (Content-Type: {ctype or 'unknown'}). Link stored, but not ingested."
+        fail_job(job_id, msg, log)
+        mark_source("failed", msg)
+        try:
+            sb_patch("source_documents", f"id=eq.{document_id}", {"status": "fetch_failed"})
+        except Exception:
+            pass
+        return
+
+    # Upload the durable copy to R2, keeping the manufacturer-uploads convention.
+    storage_key = f"manufacturer-uploads/{manufacturer_id}/{uuid.uuid4()}.pdf"
+    try:
+        upload_document(storage_key, pdf_path)
+    except Exception as e:
+        fail_job(job_id, f"R2 upload failed: {e}", log)
+        mark_source("failed", f"R2 upload failed: {e}")
+        return
+
+    file_size = pdf_path.stat().st_size
+    public_url = f"{R2_PUBLIC_URL}/{storage_key}" if R2_PUBLIC_URL else None
+    try:
+        sb_patch("source_documents", f"id=eq.{document_id}", {
+            "storage_key": storage_key,
+            "storage_bucket": R2_BUCKET,
+            "file_mime_type": "application/pdf",
+            "file_size_bytes": file_size,
+            "public_url": public_url,
+            "status": "uploaded",
+        })
+    except Exception as e:
+        fail_job(job_id, f"Could not update source_document: {e}", log)
+        return
+    log_line(f"Uploaded to R2 ({file_size} bytes): {storage_key}")
+
+    if not then_docling:
+        # Link-only source (e.g. website / plain library add without parsing).
+        mark_source("extracted")
+        complete_job(job_id, {"storageKey": storage_key, "fileSizeBytes": file_size, "docling": False}, log)
+        return
+
+    # Chain into docling on the SAME job — it downloads the key we just wrote,
+    # chunks it, persists document_chunks, and completes/fails this job itself.
+    log_line("Chaining into docling extraction…")
+    handle_docling({
+        "id": job_id,
+        "payload": {
+            "document_id": document_id,
+            "manufacturer_id": manufacturer_id,
+            "storage_key": storage_key,
+            "document_name": document_id,
+            "chunk_size": chunk_size,
+            "system_source_id": system_source_id,
+        },
+    })
+
+
 def handle_rerun_chunk(job: dict):
     job_id = job["id"]
     payload = job["payload"]
@@ -480,6 +693,7 @@ HANDLERS = {
     "docling": handle_docling,
     "parser": handle_parser,
     "rerun_chunk": handle_rerun_chunk,
+    "fetch_url": handle_fetch_url,
 }
 
 

@@ -192,14 +192,14 @@ Migrations are applied **manually** in the Supabase SQL editor (house rule); cod
 - Backfill from existing `staged_systems` link fields (`install_guide_urls[]`, `design_guide_url`, `website_url`, `tech_data_url`, `source_url`).
 - On brand/verification edits that change a link, upsert the matching `system_sources` row. Keep old fields authoritative for render until step 7.
 
-### Step 3 — URL ingestion: thin Vercel enqueue
-- `api/manufacturer/add-source-url` (server action/route): auth + membership gate (mirror `register-document`), validate URL, insert `source_documents` + `system_sources`, enqueue `fetch_url`.
-- "Add from URL" UI in the Documents widget **and** an "Add link" affordance on the verification/link editor (since links now reuse as sources).
+### Step 3 — URL ingestion: thin Vercel enqueue — ✅ route written: `api/manufacturer/add-source-url/route.ts`
+- Auth + membership gate (mirrors `register-document`), validates URL (http/https), inserts `source_documents` (`ingest_kind='url_fetch'`, `status='pending_fetch'`), optionally upserts a `system_sources` row when `stagedSystemId` + `role` are given (verifies the system belongs to the workspace), enqueues a `fetch_url` job. `then_docling` = true for PDF roles / plain library adds, false for `website`.
+- **Still TODO:** the "Add from URL" UI in the Documents widget + an "Add link" affordance on the verification/link editor. (Deferred to next session — needs careful integration into existing widgets.)
 
-### Step 4 — Worker: `fetch_url` stage + durable chunks
-- Add `handle_fetch_url` to `pipeline_worker.py` (fetch → validate → R2 → patch → optional chain to docling).
-- Extend `handle_docling` to **persist `document_chunks`** rows (text + pages) — closes G1. Keep `.local` output for the parser during transition.
-- Back-fill `system_sources.source_document_id` + `ingest_status`.
+### Step 4 — Worker: `fetch_url` stage + durable chunks — ✅ written in `pipeline_worker.py`
+- `handle_fetch_url`: fetch (UA + redirects, streamed) → validate it's a PDF (content-type or `%PDF-` magic) → upload to R2 under `manufacturer-uploads/{mfr}/{uuid}.pdf` → patch `source_documents` (storage_key/size/public_url/status) → chain into `handle_docling` on the same job (or complete as link-only). Marks `system_sources.ingest_status` through `fetching → extracted` / `failed`.
+- `handle_docling` now **persists `document_chunks`** rows (`raw_text`, `page_number`=start page, `chunk_index`, `docling_json`={startPage,endPage,charCount,status}) via `persist_document_chunks` — closes G1. `.local/output.md` still written for the parser.
+- **Not verified here** (no Python runtime in the build env): needs a worker run to confirm end-to-end. New helpers `sb_post`/`sb_delete`/`upload_document`/`fetch_url_to_path`/`looks_like_pdf` added.
 
 ### Step 5 — Container assembly at publish
 - Where `card_versions` rows are created (publish path), assemble `content_md` = serialized fields + `document_chunks` text for the system's `system_sources` (include_in_container) + write `content_hash`, `sources_json`.
