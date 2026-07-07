@@ -36,3 +36,7 @@ export type StockistActionResult = { ok: true } | { ok: false; error: string }
 export type StockistListResult =
   | { ok: true; stockists: StockistRecord[] }
   | { ok: false; error: string; missingSchema?: boolean }
+
+export type StockistImportResult =
+  | { ok: true; inserted: number; skipped: { row: number; reason: string }[] }
+  | { ok: false; error: string }

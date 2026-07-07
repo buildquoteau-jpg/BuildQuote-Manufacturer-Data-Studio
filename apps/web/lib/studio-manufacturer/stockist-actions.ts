@@ -14,10 +14,13 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import {
   AU_STATES,
   type StockistActionResult,
+  type StockistImportResult,
   type StockistInput,
   type StockistListResult,
   type StockistRecord,
 } from './stockist-types'
+
+const MAX_IMPORT_ROWS = 1000
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
 
@@ -156,6 +159,47 @@ export async function createStockist(
   if (error) return { ok: false, error: friendlyDbError(error.message) }
   revalidatePath('/manufacturer/stockists')
   return { ok: true }
+}
+
+// ─── Bulk import (CSV) ──────────────────────────────────────────────────────────
+// The client parses the CSV → StockistInput[] and posts it here. Each row is
+// validated with the same sanitiser as single-add; invalid rows are skipped
+// (reported back), valid rows are inserted in one batch.
+
+export async function importStockists(
+  manufacturerId: string,
+  inputs: StockistInput[],
+): Promise<StockistImportResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+  const client = makeClient()
+  if (!client.ok) return { ok: false, error: client.error }
+
+  if (!Array.isArray(inputs) || inputs.length === 0) {
+    return { ok: false, error: 'No rows found in the CSV.' }
+  }
+  if (inputs.length > MAX_IMPORT_ROWS) {
+    return { ok: false, error: `Too many rows (${inputs.length}). Import up to ${MAX_IMPORT_ROWS} at a time.` }
+  }
+
+  const rows: Record<string, unknown>[] = []
+  const skipped: { row: number; reason: string }[] = []
+  inputs.forEach((input, i) => {
+    const clean = sanitise(input)
+    if (!clean.ok) {
+      skipped.push({ row: i + 1, reason: clean.error }) // row 1 = first data row
+      return
+    }
+    rows.push({ manufacturer_id: manufacturerId, ...clean.row })
+  })
+
+  if (rows.length === 0) return { ok: true, inserted: 0, skipped }
+
+  const { error } = await client.supabase.from('manufacturer_stockists').insert(rows)
+  if (error) return { ok: false, error: friendlyDbError(error.message) }
+
+  revalidatePath('/manufacturer/stockists')
+  return { ok: true, inserted: rows.length, skipped }
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────

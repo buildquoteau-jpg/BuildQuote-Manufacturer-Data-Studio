@@ -13,6 +13,7 @@ import {
   updateStockist,
 } from '@/lib/studio-manufacturer/stockist-actions'
 import { AU_STATES, type StockistInput, type StockistRecord } from '@/lib/studio-manufacturer/stockist-types'
+import { StockistCsvTools } from './StockistCsvTools'
 
 type Card = { id: string; name: string }
 
@@ -136,9 +137,13 @@ export function StockistsClient({ manufacturerId, initialStockists, cards, origi
 
       {/* Add button / form */}
       {!showForm ? (
-        <button type="button" className="studio-btn studio-btn-primary" onClick={startAdd} style={{ marginBottom: '1.25rem' }}>
-          + Add stockist
-        </button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <button type="button" className="studio-btn studio-btn-primary" onClick={startAdd}>
+            + Add stockist
+          </button>
+          <span style={{ color: 'var(--ds-text-faint)', fontSize: '0.8rem' }}>or bulk import:</span>
+          <StockistCsvTools manufacturerId={manufacturerId} onImported={refresh} />
+        </div>
       ) : (
         <div style={{ background: '#fff', border: '1px solid var(--ds-border)', borderRadius: 10, padding: '1.1rem 1.25rem', marginBottom: '1.25rem' }}>
           <div style={{ fontWeight: 700, color: 'var(--ds-navy)', fontSize: '0.95rem', marginBottom: '0.85rem' }}>
