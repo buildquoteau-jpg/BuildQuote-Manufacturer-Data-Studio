@@ -137,6 +137,37 @@ export async function updateSystemImageCrop(
   return { ok: true }
 }
 
+// ─── updateSystemHeroAsset ─────────────────────────────────────────────────────
+// Links (or unlinks) a system's hero image to an Asset Library image, so the
+// static package can bundle a durable, optimized local copy instead of a
+// best-effort live fetch of an external URL at generation time. Sets
+// hero_image_url too, so the raw-URL field / crop preview / live card preview
+// all stay in sync automatically — matches the pattern already used for the
+// manufacturer-level logo/hero slots in BrandProfileForm.
+
+export async function updateSystemHeroAsset(
+  systemId: string,
+  manufacturerId: string,
+  assetId: string | null,
+  assetUrl: string | null,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({
+      hero_image_asset_id: assetId,
+      ...(assetUrl ? { hero_image_url: assetUrl } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 // ─── clearFieldVerification ───────────────────────────────────────────────────
 // Removes a field verification (resets to unreviewed).
 

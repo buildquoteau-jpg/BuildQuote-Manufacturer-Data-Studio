@@ -1,5 +1,6 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
+import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { VerificationGrid } from './VerificationGrid'
 
@@ -22,7 +23,10 @@ export default async function ManufacturerReviewPage() {
     )
   }
 
-  const result = await getManufacturerVerificationData(ctx.manufacturerId)
+  const [result, assetsResult] = await Promise.all([
+    getManufacturerVerificationData(ctx.manufacturerId),
+    getManufacturerAssets(ctx.manufacturerId),
+  ])
 
   if (!result.ok) {
     return (
@@ -34,6 +38,9 @@ export default async function ManufacturerReviewPage() {
   }
 
   const { manufacturer, systems } = result
+  // Fails soft — hero-image asset linking just won't offer a picker if the
+  // asset library can't be loaded; everything else on this page still works.
+  const assets = assetsResult.ok ? assetsResult.assets : []
   const verifiedCount    = systems.filter(s => s.verification_status === 'manufacturer_verified').length
   const inReviewCount    = systems.filter(s => s.verification_status === 'in_review').length
   const pendingCount     = systems.filter(s => s.verification_status === 'pending_review').length
@@ -131,6 +138,7 @@ export default async function ManufacturerReviewPage() {
         manufacturerId={ctx.manufacturerId}
         manufacturerName={manufacturer.name}
         systems={systems}
+        assets={assets}
       />
     </StudioShell>
   )

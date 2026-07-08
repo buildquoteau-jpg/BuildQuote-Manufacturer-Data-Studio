@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition, useCallback, useRef } from 'react'
 import { SystemCard } from '@/components/system-card/SystemCard'
 import type { SystemCardData } from '@/components/system-card/SystemCard'
 import type { VerificationSystem, VerificationSystemProfile, VerificationSystemColour, VerificationSystemComponent } from '@/lib/studio-manufacturer/workspace'
+import type { ManufacturerAsset } from '@/lib/studio-manufacturer/assets'
 import {
   upsertFieldVerification,
   clearFieldVerification,
@@ -20,6 +21,7 @@ import {
   getManufacturerComponents,
   linkExistingComponent,
   updateSystemImageCrop,
+  updateSystemHeroAsset,
   createBlankSystem,
   linkSourceDocument,
   getManufacturerSourceDocuments,
@@ -28,6 +30,7 @@ import {
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
 import { SubmitForPublication } from './SubmitForPublication'
+import { AssetSlotControl, type SlotAsset, type SlotPick } from '../profile/AssetSlotControl'
 
 // ─── Category colours ─────────────────────────────────────────────────────────
 
@@ -1435,6 +1438,7 @@ function ExpandedCardView({
   system: initialSystem,
   manufacturerId,
   manufacturerName,
+  assets,
   onClose,
   onStatusChange,
   onSystemFieldUpdate,
@@ -1443,6 +1447,7 @@ function ExpandedCardView({
   system: VerificationSystem
   manufacturerId: string
   manufacturerName: string
+  assets: ManufacturerAsset[]
   onClose: () => void
   onStatusChange: (systemId: string, newStatus: string, reviewerNotes: string | null) => void
   onSystemFieldUpdate: (systemId: string, fieldName: string, value: string) => void
@@ -1626,6 +1631,32 @@ function ExpandedCardView({
     onStateChange: handleFieldChange,
   })
 
+  // Asset Library images offered for this system's hero — Card hero and
+  // Product image types cover both a dedicated hero shot and a reused
+  // product photo. Picking/uploading here also updates hero_image_url, so
+  // the crop tool and live preview below stay in sync immediately.
+  const heroPickerAssets: SlotAsset[] = assets.map(a => ({
+    id: a.id,
+    assetType: a.assetType,
+    title: a.title,
+    displayUrl: a.displayUrl,
+    publicUrl: a.publicUrl,
+    approvedForPublication: a.approvedForPublication,
+  }))
+
+  function handleHeroAssetPick(pick: SlotPick) {
+    const url = pick.publicUrl ?? pick.displayUrl
+    setSystem(prev => ({ ...prev, hero_image_asset_id: pick.assetId, ...(url ? { hero_image_url: url } : {}) }))
+    updateSystemHeroAsset(system.id, manufacturerId, pick.assetId, url)
+  }
+
+  function handleHeroAssetClear() {
+    // Unlinks the asset only — leaves hero_image_url as a manual fallback
+    // rather than clearing it, in case the raw URL is still wanted.
+    setSystem(prev => ({ ...prev, hero_image_asset_id: null }))
+    updateSystemHeroAsset(system.id, manufacturerId, null, null)
+  }
+
   return (
     <>
       {/* Responsive behaviour: below 900px the preview/editor split stacks
@@ -1764,6 +1795,27 @@ function ExpandedCardView({
 
             {/* Images & resources */}
             <FieldSection label="Images & resources">
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
+                  Hero image
+                </div>
+                <AssetSlotControl
+                  manufacturerId={manufacturerId}
+                  uploadAssetType="card_hero"
+                  pickerAssetTypes={['card_hero', 'product']}
+                  assets={heroPickerAssets}
+                  currentAssetId={system.hero_image_asset_id}
+                  onPick={handleHeroAssetPick}
+                  onClear={handleHeroAssetClear}
+                />
+                {!system.hero_image_asset_id && system.hero_image_url && (
+                  <p style={{ fontSize: '11px', color: '#b45309', margin: '6px 0 0' }}>
+                    This hero image is only a URL — the static package will attempt a
+                    best-effort fetch at generation time rather than a guaranteed local
+                    copy. Upload or choose an asset above for a reliable, optimized result.
+                  </p>
+                )}
+              </div>
               <FieldRow {...fieldRowProps('Hero image URL', 'hero_image_url', { isUrl: true })} />
               <CropAdjuster
                 imageUrl={system.hero_image_url}
@@ -2075,10 +2127,12 @@ export function VerificationGrid({
   manufacturerId,
   manufacturerName,
   systems: initialSystems,
+  assets,
 }: {
   manufacturerId: string
   manufacturerName: string
   systems: VerificationSystem[]
+  assets: ManufacturerAsset[]
 }) {
   const [systems,    setSystems]    = useState(initialSystems)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -2099,6 +2153,7 @@ export function VerificationGrid({
         subcategory: null,
         description: null,
         hero_image_url: null,
+        hero_image_asset_id: null,
         hero_image_position_x: null,
         hero_image_position_y: null,
         australian_made: null,
@@ -2252,6 +2307,7 @@ export function VerificationGrid({
           system={expandedSystem}
           manufacturerId={manufacturerId}
           manufacturerName={manufacturerName}
+          assets={assets}
           onClose={() => setExpandedId(null)}
           onStatusChange={handleStatusChange}
           onSystemFieldUpdate={handleSystemFieldUpdate}
