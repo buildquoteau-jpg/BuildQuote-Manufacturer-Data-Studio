@@ -222,6 +222,30 @@ async function publishComponent(
     return { id: c.id, name: c.name, productionComponentId: c.production_component_id, action: 'updated' }
   }
 
+  // No linked production row yet — before inserting, check whether one
+  // already exists for this manufacturer+sku (e.g. a manufacturer whose
+  // catalogue was seeded straight into production and only later brought
+  // into Data Studio via a reverse clone, so the staged row has no link
+  // even though the production row is real). Adopting it here avoids a
+  // duplicate-key error (or a silent duplicate row, where there's no
+  // unique constraint to catch it) and backfills the link for next time.
+  if (c.sku) {
+    const { data: existing } = await prod
+      .from('components')
+      .select('id')
+      .eq('manufacturer_id', productionManufacturerId)
+      .eq('sku', c.sku)
+      .maybeSingle()
+    if (existing) {
+      if (!dryRun) {
+        const { error: updErr } = await prod.from('components').update(payload).eq('id', existing.id)
+        if (updErr) throw new Error(`Could not update component "${c.name}": ${updErr.message}`)
+        await ds.from('staged_components').update({ production_component_id: existing.id }).eq('id', c.id)
+      }
+      return { id: c.id, name: c.name, productionComponentId: existing.id, action: 'updated' }
+    }
+  }
+
   if (dryRun) return { id: c.id, name: c.name, productionComponentId: '(new)', action: 'created' }
 
   const { data: created, error: insErr } = await prod.from('components').insert(payload).select('id').single()
@@ -406,6 +430,26 @@ async function publishProfiles(
         if (e) throw new Error(`Could not update profile "${p.profile_name ?? p.name}": ${e.message}`)
       }
       results.push({ id: p.id, action: 'updated' })
+      continue
+    }
+
+    // No linked production row yet — check for an existing one by
+    // (system, product_code) before inserting. See the matching comment in
+    // publishComponent for why this matters: without it, a manufacturer
+    // whose catalogue already exists in production (e.g. reverse-cloned
+    // into Data Studio) gets a duplicate row inserted every publish —
+    // silently, since system_profiles has no unique constraint to catch it.
+    const existing = p.product_code
+      ? (await prod.from('system_profiles').select('id')
+          .eq('system_id', productionSystemId).eq('product_code', p.product_code).maybeSingle()).data
+      : null
+    if (existing) {
+      if (!dryRun) {
+        const { error: e } = await prod.from('system_profiles').update(payload).eq('id', existing.id)
+        if (e) throw new Error(`Could not update profile "${p.profile_name ?? p.name}": ${e.message}`)
+        await ds.from('staged_system_profiles').update({ production_profile_id: existing.id }).eq('id', p.id)
+      }
+      results.push({ id: p.id, action: 'updated' })
     } else if (dryRun) {
       results.push({ id: p.id, action: 'created' })
     } else {
@@ -441,6 +485,23 @@ async function publishColours(
       if (!dryRun) {
         const { error: e } = await prod.from('system_colours').update(payload).eq('id', c.production_colour_id)
         if (e) throw new Error(`Could not update colour "${c.colour_name}": ${e.message}`)
+      }
+      results.push({ id: c.id, action: 'updated' })
+      continue
+    }
+
+    // No linked production row yet — check for an existing one by
+    // (system, colour_name) before inserting. system_colours has a unique
+    // constraint on this pair, so without this check a manufacturer whose
+    // catalogue already exists in production throws a duplicate-key error
+    // on every publish attempt instead of updating.
+    const { data: existing } = await prod.from('system_colours').select('id')
+      .eq('system_id', productionSystemId).eq('colour_name', c.colour_name).maybeSingle()
+    if (existing) {
+      if (!dryRun) {
+        const { error: e } = await prod.from('system_colours').update(payload).eq('id', existing.id)
+        if (e) throw new Error(`Could not update colour "${c.colour_name}": ${e.message}`)
+        await ds.from('staged_system_colours').update({ production_colour_id: existing.id }).eq('id', c.id)
       }
       results.push({ id: c.id, action: 'updated' })
     } else if (dryRun) {

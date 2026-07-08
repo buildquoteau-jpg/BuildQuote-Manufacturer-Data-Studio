@@ -119,13 +119,21 @@ export function evaluateCardReadiness(
   }
 
   // ── Images ──
+  // A URL-only hero blocks packaging (not just a warning): the package
+  // generator's only recourse for a URL with no linked asset is a
+  // best-effort live fetch at generation time (see resolveImageFile in
+  // package-actions.ts) — no guarantee it succeeds, it's re-fetched fresh
+  // (and unoptimized) on every single build, and a failure ships the card
+  // with no hero image at all with nothing but a build-log line to show for
+  // it. Requiring an Asset Library link makes the result deterministic.
   if (assetInfo?.heroImageAssetId) {
     if (!assetInfo.heroAssetReady) {
       blockers.push('The linked hero image asset is archived or not approved for publication.')
       setStatus('needs_asset_import')
     }
   } else if (card.hero_image_url) {
-    warnings.push('Hero image is an external URL — import it into Assets so the package can bundle a local copy.')
+    blockers.push('Hero image is a URL only — import it into Assets (or upload it directly) so the package can bundle a reliable, optimized local copy.')
+    setStatus('needs_asset_import')
   } else {
     warnings.push('No hero image set (card will render without one).')
   }
