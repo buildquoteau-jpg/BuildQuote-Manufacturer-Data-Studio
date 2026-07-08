@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 function makeR2Client(): S3Client {
@@ -105,6 +105,24 @@ export async function getObjectFromR2(storageKey: string): Promise<GetObjectResu
     if (!response.Body) return { ok: false, error: 'Empty object body.' }
     const bytes = await response.Body.transformToByteArray()
     return { ok: true, bytes, contentType: response.ContentType ?? null }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export type DeleteObjectResult = { ok: true } | { ok: false; error: string }
+
+// Best-effort cleanup — e.g. removing a pre-optimization scratch upload once
+// its processed replacement has been stored under a new key. Callers should
+// treat failure here as non-fatal; nothing depends on the old object being gone.
+export async function deleteObjectFromR2(storageKey: string): Promise<DeleteObjectResult> {
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET_NAME
+  if (!bucket) return { ok: false, error: 'CLOUDFLARE_R2_BUCKET_NAME not configured.' }
+
+  try {
+    const client = makeR2Client()
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }))
+    return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

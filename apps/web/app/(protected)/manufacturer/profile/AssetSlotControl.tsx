@@ -8,7 +8,7 @@
 import { useRef, useState } from 'react'
 import {
   requestAssetUploadUrl,
-  recordAssetUpload,
+  processAndRecordAssetUpload,
   importAssetFromUrl,
 } from '@/lib/studio-manufacturer/asset-actions'
 import { assetTypeLabel } from '@/lib/studio-manufacturer/asset-types'
@@ -87,16 +87,13 @@ export function AssetSlotControl({
       })
       if (!putRes.ok) { setErrorMsg(`Storage upload failed (${putRes.status}).`); return }
 
-      const record = await recordAssetUpload({
+      const record = await processAndRecordAssetUpload({
         manufacturerId,
         assetType: uploadAssetType,
         storageKey: presign.storageKey,
         contentType: mime,
-        fileSizeBytes: file.size,
         title: file.name.replace(/\.[a-z0-9]+$/i, ''),
         altText: null,
-        width: null,
-        height: null,
       })
       if (!record.ok) { setErrorMsg(record.error); return }
       onPick({ assetId: record.assetId, publicUrl: record.publicUrl, displayUrl: record.displayUrl })

@@ -8,7 +8,7 @@ import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   requestAssetUploadUrl,
-  recordAssetUpload,
+  processAndRecordAssetUpload,
   importAssetFromUrl,
   updateAssetMeta,
   setAssetArchived,
@@ -62,22 +62,6 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function readImageDimensions(file: File): Promise<{ width: number | null; height: number | null }> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => {
-      resolve({ width: img.naturalWidth || null, height: img.naturalHeight || null })
-      URL.revokeObjectURL(url)
-    }
-    img.onerror = () => {
-      resolve({ width: null, height: null })
-      URL.revokeObjectURL(url)
-    }
-    img.src = url
-  })
-}
-
 // ─── Upload / import panel ───────────────────────────────────────────────────
 
 function AddAssetPanel({ manufacturerId }: { manufacturerId: string }) {
@@ -122,17 +106,13 @@ function AddAssetPanel({ manufacturerId }: { manufacturerId: string }) {
         })
         if (!putRes.ok) { errors.push(`${file.name}: storage upload failed (${putRes.status})`); continue }
 
-        const dims = await readImageDimensions(file)
-        const record = await recordAssetUpload({
+        const record = await processAndRecordAssetUpload({
           manufacturerId,
           assetType,
           storageKey: presign.storageKey,
           contentType: mime,
-          fileSizeBytes: file.size,
           title: file.name.replace(/\.[a-z0-9]+$/i, ''),
           altText: null,
-          width: dims.width,
-          height: dims.height,
         })
         if (!record.ok) { errors.push(`${file.name}: ${record.error}`); continue }
         uploaded++

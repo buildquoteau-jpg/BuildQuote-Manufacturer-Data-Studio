@@ -9,8 +9,15 @@ import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
-import { createPresignedUploadUrl, createPresignedDownloadUrl, uploadObjectToR2 } from '@/lib/r2'
+import {
+  createPresignedUploadUrl,
+  createPresignedDownloadUrl,
+  uploadObjectToR2,
+  getObjectFromR2,
+  deleteObjectFromR2,
+} from '@/lib/r2'
 import { ASSET_TYPES } from './asset-types'
+import { processAssetImage, extensionForMime } from './image-processing'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
 
@@ -178,6 +185,89 @@ export async function recordAssetUpload(
   }
 }
 
+// ─── processAndRecordAssetUpload ───────────────────────────────────────────────
+// Preferred over recordAssetUpload: called after a successful browser PUT to
+// R2 (same presigned-upload step, unchanged), but instead of recording the
+// raw upload as-is, downloads it back, runs it through processAssetImage
+// (resize + re-encode to WebP — see image-processing.ts for why this has to
+// happen at upload time rather than on request), stores the optimized result
+// under a new key, and records THAT. The pre-optimization scratch upload is
+// deleted best-effort — nothing depends on it surviving.
+//
+// Kept as a separate function from recordAssetUpload (rather than changing
+// that one in place) so a processing regression can never block an upload —
+// callers can fall back to recordAssetUpload if needed.
+
+export async function processAndRecordAssetUpload(
+  input: Omit<RecordAssetUploadInput, 'width' | 'height' | 'fileSizeBytes'>,
+): Promise<RecordAssetResult> {
+  const auth = await assertManufacturerAccess(input.manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  if (!ASSET_TYPES.includes(input.assetType)) {
+    return { ok: false, error: `Unknown asset type: ${input.assetType}` }
+  }
+
+  const original = await getObjectFromR2(input.storageKey)
+  if (!original.ok) {
+    return { ok: false, error: `Could not read the uploaded file: ${original.error}` }
+  }
+
+  const contentType = input.contentType.split(';')[0].trim()
+  const processed = await processAssetImage(original.bytes, contentType)
+
+  let finalStorageKey = input.storageKey
+  if (processed.wasProcessed) {
+    finalStorageKey = `manufacturer-assets/${input.manufacturerId}/${randomUUID()}.${extensionForMime(processed.mimeType)}`
+    const upload = await uploadObjectToR2({
+      storageKey: finalStorageKey,
+      body: processed.bytes,
+      contentType: processed.mimeType,
+    })
+    if (!upload.ok) return { ok: false, error: `Storage upload failed: ${upload.error}` }
+    // Best-effort: the scratch original is no longer referenced by anything.
+    deleteObjectFromR2(input.storageKey).catch(() => {})
+  }
+
+  const c = makeClient()
+  if (!c.ok) return { ok: false, error: c.error }
+
+  const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL
+  const publicUrl = publicUrlBase
+    ? `${publicUrlBase.replace(/\/$/, '')}/${finalStorageKey}`
+    : null
+
+  const { data, error } = await c.supabase
+    .from('manufacturer_assets')
+    .insert({
+      manufacturer_id: input.manufacturerId,
+      asset_type: input.assetType,
+      title: input.title?.trim() || null,
+      alt_text: input.altText?.trim() || null,
+      storage_key: finalStorageKey,
+      public_url: publicUrl,
+      mime_type: processed.mimeType,
+      file_size_bytes: processed.bytes.byteLength,
+      width: processed.width,
+      height: processed.height,
+      created_by: auth.userId,
+    })
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    return { ok: false, error: friendlyDbError(error?.message ?? 'Failed to record asset.') }
+  }
+
+  revalidatePath('/manufacturer/assets')
+  return {
+    ok: true,
+    assetId: (data as { id: string }).id,
+    publicUrl,
+    displayUrl: await resolveAssetDisplayUrl(publicUrl, finalStorageKey),
+  }
+}
+
 // ─── importAssetFromUrl ───────────────────────────────────────────────────────
 // Server fetches the image (manufacturer site / Wix / Supabase bucket etc.),
 // stores the bytes in R2 and records the asset with source_url kept for
@@ -245,8 +335,13 @@ export async function importAssetFromUrl(
     return { ok: false, error: 'Image exceeds 25 MB limit.' }
   }
 
-  const storageKey = `manufacturer-assets/${input.manufacturerId}/${randomUUID()}.${IMAGE_MIME_EXT[contentType]}`
-  const upload = await uploadObjectToR2({ storageKey, body: buffer, contentType })
+  // Optimize before storing — same reasoning as processAndRecordAssetUpload:
+  // static packages ship whatever's stored here as-is, so this is the only
+  // point where resizing/re-encoding can happen.
+  const processed = await processAssetImage(buffer, contentType)
+
+  const storageKey = `manufacturer-assets/${input.manufacturerId}/${randomUUID()}.${extensionForMime(processed.mimeType)}`
+  const upload = await uploadObjectToR2({ storageKey, body: processed.bytes, contentType: processed.mimeType })
   if (!upload.ok) return { ok: false, error: `Storage upload failed: ${upload.error}` }
 
   const c = makeClient()
@@ -267,8 +362,10 @@ export async function importAssetFromUrl(
       storage_key: storageKey,
       source_url: url.toString(),
       public_url: publicUrl,
-      mime_type: contentType,
-      file_size_bytes: buffer.byteLength,
+      mime_type: processed.mimeType,
+      file_size_bytes: processed.bytes.byteLength,
+      width: processed.width,
+      height: processed.height,
       created_by: auth.userId,
     })
     .select('id')
