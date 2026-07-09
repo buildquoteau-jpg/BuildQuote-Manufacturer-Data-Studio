@@ -144,6 +144,10 @@ function pageHtml(opts: {
   title: string
   description: string | null
   assetsPrefix: string  // "./" (collection) or "../../" (card pages)
+  /** Canonical install URL of this page, trailing slash — makes relative
+   *  asset paths resolve correctly even when the page is served without a
+   *  trailing slash (many hosts, e.g. Next.js/Vercel, strip it by default). */
+  baseHref: string
   data: StaticCollectionData | StaticCardData
   /** schema.org JSON-LD object embedded as application/ld+json (card pages). */
   jsonLd?: Record<string, unknown> | null
@@ -152,6 +156,7 @@ function pageHtml(opts: {
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<base href="${escapeHtml(opts.baseHref)}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
 ${opts.description ? `<meta name="description" content="${escapeHtml(opts.description)}">` : ''}
@@ -226,6 +231,7 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
   for (const card of input.cards) {
     const dir = root.folder(`cards/${card.slug}`)!
     const publicUrl = baseUrl ? `${baseUrl}${installPath}cards/${card.slug}/` : null
+    const cardBaseHref = `${effectiveBase}${installPath}cards/${card.slug}/`
 
     if (card.heroAsset) {
       dir.file(`assets/${card.heroAsset.fileName}`, card.heroAsset.bytes)
@@ -259,6 +265,7 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       title: `${card.system.name} — ${input.manufacturer.name} System Card`,
       description: card.system.description,
       assetsPrefix: '../../',
+      baseHref: cardBaseHref,
       data: cardData,
       // Machine readability: schema.org Product (original card, so external
       // image URLs survive; local package paths are omitted).
@@ -328,6 +335,7 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
     title: `${input.manufacturer.name} System Cards`,
     description: input.manufacturer.description,
     assetsPrefix: './',
+    baseHref: collectionUrl,
     data: collectionData,
   }))
 
