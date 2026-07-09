@@ -22,6 +22,7 @@ import {
   linkExistingComponent,
   updateSystemImageCrop,
   updateSystemHeroAsset,
+  setInstallGuideUrls,
   createBlankSystem,
   linkSourceDocument,
   getManufacturerSourceDocuments,
@@ -647,6 +648,103 @@ function CropAdjuster({
         <input type="range" min={0} max={100} value={y} onChange={e => handleChange(x, Number(e.target.value))}
           style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
       </label>
+    </div>
+  )
+}
+
+// ─── Install guides (label + URL, multiple — e.g. steel frame / timber frame) ─
+
+function InstallGuidesEditor({
+  guides, systemId, manufacturerId, onUpdated,
+}: {
+  guides: { label: string; url: string }[]
+  systemId: string
+  manufacturerId: string
+  onUpdated: (guides: { label: string; url: string }[]) => void
+}) {
+  const [pending, startTransition] = useTransition()
+  const [err, setErr] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newUrl, setNewUrl] = useState('')
+
+  function persist(next: { label: string; url: string }[]) {
+    setErr(null)
+    startTransition(async () => {
+      const res = await setInstallGuideUrls(systemId, manufacturerId, next)
+      if (!res.ok) { setErr(res.error); return }
+      onUpdated(next)
+    })
+  }
+
+  function handleAdd() {
+    if (!newUrl.trim()) return
+    const label = newLabel.trim() || (guides.length > 0 ? `Install guide ${guides.length + 1}` : 'Install guide')
+    persist([...guides, { label, url: newUrl.trim() }])
+    setNewLabel(''); setNewUrl(''); setAdding(false)
+  }
+
+  function handleRemove(i: number) {
+    persist(guides.filter((_, idx) => idx !== i))
+  }
+
+  function handleEdit(i: number, field: 'label' | 'url', value: string) {
+    persist(guides.map((g, idx) => idx === i ? { ...g, [field]: value } : g))
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        Install guide{guides.length > 1 ? 's' : ''} {guides.length > 0 ? `(${guides.length})` : ''}
+      </div>
+      {guides.map((g, i) => (
+        <div key={i} style={{ borderRadius: '8px', border: '1px solid #d1d5db', padding: '10px 12px' }}>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input
+                defaultValue={g.label}
+                onBlur={e => e.target.value.trim() !== g.label && handleEdit(i, 'label', e.target.value.trim())}
+                placeholder="Label, e.g. Steel frame"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '11px', fontWeight: 700, marginBottom: '4px', fontFamily: 'inherit' }}
+              />
+              <input
+                defaultValue={g.url}
+                onBlur={e => e.target.value.trim() !== g.url && handleEdit(i, 'url', e.target.value.trim())}
+                placeholder="https://…"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', color: '#185D7A', fontFamily: 'inherit' }}
+              />
+            </div>
+            <button type="button" title="Remove" onClick={() => handleRemove(i)} disabled={pending}
+              style={{ width: 28, height: 28, borderRadius: '6px', border: '1.5px solid #d1d5db', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>
+              ×
+            </button>
+          </div>
+        </div>
+      ))}
+      {adding ? (
+        <div style={{ borderRadius: '8px', border: '1.5px solid #185D7A', background: '#eef6fa', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label, e.g. Timber frame"
+            style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
+          <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://…"
+            style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button type="button" onClick={handleAdd} disabled={pending || !newUrl.trim()}
+              style={{ padding: '5px 14px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !newUrl.trim() ? 0.5 : 1 }}>
+              Add
+            </button>
+            <button type="button" onClick={() => { setAdding(false); setNewLabel(''); setNewUrl('') }}
+              style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setAdding(true)}
+          style={{ alignSelf: 'flex-start', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '6px', padding: '4px 12px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
+          + Add install guide{guides.length > 0 ? ' (e.g. for a different frame type)' : ''}
+        </button>
+      )}
+      {err && <div style={{ fontSize: '11px', color: '#dc2626' }}>{err}</div>}
     </div>
   )
 }
@@ -1841,21 +1939,12 @@ function ExpandedCardView({
               />
               {system.website_url  && <FieldRow {...fieldRowProps('Manufacturer website', 'website_url', { isUrl: true })} />}
               {system.source_url   && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
-              {Array.isArray(system.install_guide_urls) && system.install_guide_urls.length > 0
-                ? system.install_guide_urls.map((g, i) => (
-                    <FieldRow key={i} {...fieldRowProps(`Install guide${(system.install_guide_urls?.length ?? 0) > 1 ? ` ${i + 1}` : ''} URL`, 'install_guide_urls', { isUrl: true })}
-                      currentValue={g.url}
-                    />
-                  ))
-                : (
-                  <FieldRow
-                    label="Install guide URL" fieldName="install_guide_urls" currentValue={null}
-                    fieldState={fieldStates['install_guide_urls'] ?? null}
-                    systemId={system.id} manufacturerId={manufacturerId} isUrl
-                    onStateChange={handleFieldChange}
-                  />
-                )
-              }
+              <InstallGuidesEditor
+                guides={Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []}
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                onUpdated={(guides) => setSystem(prev => ({ ...prev, install_guide_urls: guides.length > 0 ? guides : null }))}
+              />
               {system.tech_data_url
                 ? <FieldRow {...fieldRowProps('Technical data URL', 'tech_data_url', { isUrl: true })} />
                 : (

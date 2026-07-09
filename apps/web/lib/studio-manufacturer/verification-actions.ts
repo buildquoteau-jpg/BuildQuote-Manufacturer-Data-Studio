@@ -37,11 +37,14 @@ export async function assertManufacturerAccess(
 export type FieldVerificationStatus = 'approved' | 'edited' | 'flagged'
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
-// Text fields that can be directly updated on staged_systems
+// Text fields that can be directly updated on staged_systems.
+// install_guide_urls is NOT here — it's an array (a system can have several
+// guides, e.g. one per frame type) and goes through setInstallGuideUrls
+// instead, so a generic text edit can never clobber it with a plain string.
 const STAGED_TEXT_FIELDS = [
   'name', 'category', 'subcategory', 'description',
   'hero_image_url', 'website_url', 'source_url',
-  'install_guide_urls', 'tech_data_url',
+  'tech_data_url',
   'bal_rating', 'fire_rating', 'acoustic_rating', 'structural_grade',
 ] as const
 
@@ -106,6 +109,49 @@ export async function upsertFieldVerification(
       if (error) return { ok: false, error: error.message }
     }
   }
+
+  return { ok: true }
+}
+
+// ─── setInstallGuideUrls ───────────────────────────────────────────────────────
+// Replaces the whole install_guide_urls array. Systems can have more than one
+// guide (e.g. a steel-frame and a timber-frame install guide), so this takes
+// the full list rather than a single value — keeps the array shape intact
+// where the generic text-field path would flatten it to a string.
+
+export async function setInstallGuideUrls(
+  systemId: string,
+  manufacturerId: string,
+  guides: { label: string; url: string }[],
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const now = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ install_guide_urls: guides.length > 0 ? guides : null, updated_at: now })
+    .eq('id', systemId)
+  if (error) return { ok: false, error: error.message }
+
+  // Audit trail only, consistent with other verified fields — not read back
+  // by the UI, which uses staged_systems.install_guide_urls directly.
+  await supabase.from('field_verifications').upsert(
+    {
+      entity_type: 'staged_system',
+      entity_id: systemId,
+      field_name: 'install_guide_urls',
+      verified_value: JSON.stringify(guides),
+      status: 'edited',
+      reviewer_id: auth.userId,
+      reviewed_at: now,
+      notes: null,
+      updated_at: now,
+    },
+    { onConflict: 'entity_type,entity_id,field_name' },
+  )
 
   return { ok: true }
 }
