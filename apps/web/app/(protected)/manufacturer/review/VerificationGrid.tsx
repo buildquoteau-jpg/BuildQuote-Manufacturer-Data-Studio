@@ -61,11 +61,20 @@ type FieldStateMap = Record<string, FieldState>
 
 // ─── System tile ──────────────────────────────────────────────────────────────
 
-function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: () => void }) {
+function SystemTile({ system, assets, onClick }: { system: VerificationSystem; assets: ManufacturerAsset[]; onClick: () => void }) {
   const [hovered, setHovered] = useState(false)
   const category = system.category ?? 'Unknown'
   const catStyle = CATEGORY_COLOURS[category] ?? { bg: '#f3f4f6', color: '#374151' }
   const profileCount = system.profiles.length
+
+  // Prefer the linked asset's image over hero_image_url — that field can be
+  // stale or wrong (e.g. accidentally holding an unrelated document link)
+  // even when a correct asset is linked. Same precedence as the crop tool
+  // and card preview in ExpandedCardView.
+  const linkedHeroAsset = system.hero_image_asset_id
+    ? assets.find(a => a.id === system.hero_image_asset_id) ?? null
+    : null
+  const tileImageUrl = linkedHeroAsset?.displayUrl ?? linkedHeroAsset?.publicUrl ?? system.hero_image_url
 
   const isVerified = system.verification_status === 'manufacturer_verified'
   const isInReview = system.verification_status === 'in_review'
@@ -130,12 +139,12 @@ function SystemTile({ system, onClick }: { system: VerificationSystem; onClick: 
     >
       <div style={{
         height: '180px', flexShrink: 0, position: 'relative',
-        ...(system.hero_image_url
-          ? { backgroundImage: `url(${system.hero_image_url})`, backgroundSize: 'cover', backgroundPosition: `${system.hero_image_position_x ?? 50}% ${system.hero_image_position_y ?? 50}%` }
+        ...(tileImageUrl
+          ? { backgroundImage: `url(${tileImageUrl})`, backgroundSize: 'cover', backgroundPosition: `${system.hero_image_position_x ?? 50}% ${system.hero_image_position_y ?? 50}%` }
           : { background: 'linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%)' }),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {!system.hero_image_url && (
+        {!tileImageUrl && (
           <span style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', fontFamily: 'monospace' }}>
             {system.product_code ?? system.name}
           </span>
@@ -655,18 +664,28 @@ function CropAdjuster({
 // ─── Install guides (label + URL, multiple — e.g. steel frame / timber frame) ─
 
 function InstallGuidesEditor({
-  guides, systemId, manufacturerId, onUpdated,
+  guides, systemId, manufacturerId, fieldState, onUpdated, onStateChange,
 }: {
   guides: { label: string; url: string }[]
   systemId: string
   manufacturerId: string
+  fieldState: FieldState | null
   onUpdated: (guides: { label: string; url: string }[]) => void
+  onStateChange: (fieldName: string, state: FieldState | null) => void
 }) {
   const [pending, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [newUrl, setNewUrl] = useState('')
+  const [flagging, setFlagging] = useState(false)
+  const [flagNote, setFlagNote] = useState(fieldState?.notes ?? '')
+  const [verifyPending, startVerifyTransition] = useTransition()
+  const [verifyErr, setVerifyErr] = useState<string | null>(null)
+
+  const status = fieldState?.status ?? null
+  const statusColor = status === 'approved' ? '#16a34a' : status === 'flagged' ? '#dc2626' : '#d1d5db'
+  const statusBg    = status === 'approved' ? '#f0fdf4' : status === 'flagged' ? '#fef2f2' : 'transparent'
 
   function persist(next: { label: string; url: string }[]) {
     setErr(null)
@@ -692,59 +711,131 @@ function InstallGuidesEditor({
     persist(guides.map((g, idx) => idx === i ? { ...g, [field]: value } : g))
   }
 
+  function handleApprove() {
+    setVerifyErr(null)
+    if (status === 'approved') {
+      startVerifyTransition(async () => {
+        const res = await clearFieldVerification(systemId, manufacturerId, 'install_guide_urls')
+        if (!res.ok) { setVerifyErr(res.error); return }
+        onStateChange('install_guide_urls', null)
+      })
+      return
+    }
+    setFlagging(false)
+    startVerifyTransition(async () => {
+      const value = JSON.stringify(guides)
+      const res = await upsertFieldVerification(systemId, manufacturerId, 'install_guide_urls', value, value, 'approved', null)
+      if (!res.ok) { setVerifyErr(res.error); return }
+      onStateChange('install_guide_urls', { status: 'approved', verifiedValue: value, notes: null })
+    })
+  }
+
+  function handleSaveFlag() {
+    setVerifyErr(null)
+    startVerifyTransition(async () => {
+      const value = JSON.stringify(guides)
+      const res = await upsertFieldVerification(systemId, manufacturerId, 'install_guide_urls', value, null, 'flagged', flagNote.trim() || null)
+      if (!res.ok) { setVerifyErr(res.error); return }
+      onStateChange('install_guide_urls', { status: 'flagged', verifiedValue: null, notes: flagNote.trim() || null })
+      setFlagging(false)
+    })
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        Install guide{guides.length > 1 ? 's' : ''} {guides.length > 0 ? `(${guides.length})` : ''}
+    <div style={{ borderRadius: '8px', border: `1px solid ${statusColor}`, background: statusBg, padding: '10px 12px', transition: 'all 0.15s' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+        <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>
+          Install guide{guides.length !== 1 ? 's' : ''} {guides.length > 0 ? `(${guides.length})` : ''}
+          {status === 'flagged' && <span style={{ marginLeft: '6px', color: '#dc2626', fontWeight: 700 }}>FLAGGED</span>}
+        </div>
+        {verifyPending ? (
+          <span style={{ fontSize: '11px', color: '#9ca3af' }}>saving…</span>
+        ) : (
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+            <button type="button" title={status === 'approved' ? 'Remove approval' : 'Mark as correct'} onClick={handleApprove}
+              style={{
+                width: 28, height: 28, borderRadius: '6px', cursor: 'pointer',
+                border: `1.5px solid ${status === 'approved' ? '#16a34a' : '#d1d5db'}`,
+                background: status === 'approved' ? '#16a34a' : '#fff',
+                color: status === 'approved' ? '#fff' : '#6b7280',
+                fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>✓</button>
+            <button type="button" title="Flag for review" onClick={() => setFlagging(f => !f)}
+              style={{
+                width: 28, height: 28, borderRadius: '6px', cursor: 'pointer',
+                border: `1.5px solid ${status === 'flagged' || flagging ? '#dc2626' : '#d1d5db'}`,
+                background: status === 'flagged' || flagging ? '#fef2f2' : '#fff',
+                color: status === 'flagged' || flagging ? '#dc2626' : '#6b7280',
+                fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>⚑</button>
+          </div>
+        )}
       </div>
-      {guides.map((g, i) => (
-        <div key={i} style={{ borderRadius: '8px', border: '1px solid #d1d5db', padding: '10px 12px' }}>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <input
-                defaultValue={g.label}
-                onBlur={e => e.target.value.trim() !== g.label && handleEdit(i, 'label', e.target.value.trim())}
-                placeholder="Label, e.g. Steel frame"
-                style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '11px', fontWeight: 700, marginBottom: '4px', fontFamily: 'inherit' }}
-              />
-              <input
-                defaultValue={g.url}
-                onBlur={e => e.target.value.trim() !== g.url && handleEdit(i, 'url', e.target.value.trim())}
-                placeholder="https://…"
-                style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', color: '#185D7A', fontFamily: 'inherit' }}
-              />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {guides.length === 0 && (
+          <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>None linked yet.</div>
+        )}
+        {guides.map((g, i) => (
+          <div key={i} style={{ borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', padding: '10px 12px' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  defaultValue={g.label}
+                  onBlur={e => e.target.value.trim() !== g.label && handleEdit(i, 'label', e.target.value.trim())}
+                  placeholder="Label, e.g. Steel frame"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '11px', fontWeight: 700, marginBottom: '4px', fontFamily: 'inherit' }}
+                />
+                <input
+                  defaultValue={g.url}
+                  onBlur={e => e.target.value.trim() !== g.url && handleEdit(i, 'url', e.target.value.trim())}
+                  placeholder="https://…"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', color: '#185D7A', fontFamily: 'inherit' }}
+                />
+              </div>
+              <button type="button" title="Remove" onClick={() => handleRemove(i)} disabled={pending}
+                style={{ width: 28, height: 28, borderRadius: '6px', border: '1.5px solid #d1d5db', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>
+                ×
+              </button>
             </div>
-            <button type="button" title="Remove" onClick={() => handleRemove(i)} disabled={pending}
-              style={{ width: 28, height: 28, borderRadius: '6px', border: '1.5px solid #d1d5db', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>
-              ×
-            </button>
           </div>
-        </div>
-      ))}
-      {adding ? (
-        <div style={{ borderRadius: '8px', border: '1.5px solid #185D7A', background: '#eef6fa', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label, e.g. Timber frame"
-            style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
-          <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://…"
-            style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button type="button" onClick={handleAdd} disabled={pending || !newUrl.trim()}
-              style={{ padding: '5px 14px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !newUrl.trim() ? 0.5 : 1 }}>
-              Add
-            </button>
-            <button type="button" onClick={() => { setAdding(false); setNewLabel(''); setNewUrl('') }}
-              style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
-              Cancel
-            </button>
+        ))}
+        {adding ? (
+          <div style={{ borderRadius: '8px', border: '1.5px solid #185D7A', background: '#eef6fa', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label, e.g. Timber frame"
+              style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
+            <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://…"
+              style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button type="button" onClick={handleAdd} disabled={pending || !newUrl.trim()}
+                style={{ padding: '5px 14px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !newUrl.trim() ? 0.5 : 1 }}>
+                Add
+              </button>
+              <button type="button" onClick={() => { setAdding(false); setNewLabel(''); setNewUrl('') }}
+                style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
           </div>
+        ) : (
+          <button type="button" onClick={() => setAdding(true)}
+            style={{ alignSelf: 'flex-start', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '6px', padding: '4px 12px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
+            + Add install guide{guides.length > 0 ? ' (e.g. for a different frame type)' : ''}
+          </button>
+        )}
+      </div>
+      {flagging && (
+        <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+          <input type="text" value={flagNote} onChange={e => setFlagNote(e.target.value)}
+            placeholder="Describe what needs fixing…"
+            style={{ flex: 1, padding: '6px 8px', border: '1.5px solid #dc2626', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: 'inherit' }}
+            autoFocus />
+          <button type="button" onClick={handleSaveFlag} disabled={verifyPending}
+            style={{ padding: '6px 12px', borderRadius: '6px', background: '#dc2626', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: verifyPending ? 0.5 : 1 }}>
+            Flag
+          </button>
         </div>
-      ) : (
-        <button type="button" onClick={() => setAdding(true)}
-          style={{ alignSelf: 'flex-start', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '6px', padding: '4px 12px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
-          + Add install guide{guides.length > 0 ? ' (e.g. for a different frame type)' : ''}
-        </button>
       )}
-      {err && <div style={{ fontSize: '11px', color: '#dc2626' }}>{err}</div>}
+      {(err || verifyErr) && <div style={{ marginTop: '6px', fontSize: '11px', color: '#dc2626' }}>{err ?? verifyErr}</div>}
     </div>
   )
 }
@@ -1757,8 +1848,10 @@ function ExpandedCardView({
     // can be a presigned R2 link that expires in an hour, and saving that would
     // leave a dead link once it lapses. The crop preview below reads the
     // linked asset's live displayUrl instead, so it stays correct regardless.
+    // Always sync (not just when truthy) so a stale value from before this
+    // asset was linked can't survive underneath it.
     const url = pick.publicUrl ?? null
-    setSystem(prev => ({ ...prev, hero_image_asset_id: pick.assetId, ...(url ? { hero_image_url: url } : {}) }))
+    setSystem(prev => ({ ...prev, hero_image_asset_id: pick.assetId, hero_image_url: url }))
     updateSystemHeroAsset(system.id, manufacturerId, pick.assetId, url)
   }
 
@@ -1928,7 +2021,12 @@ function ExpandedCardView({
                   </p>
                 )}
               </div>
-              <FieldRow {...fieldRowProps('Hero image URL', 'hero_image_url', { isUrl: true })} />
+              {/* Once an asset is linked, it's the single source of truth for the
+                  hero image — no need to also maintain a matching raw URL. Only
+                  show the manual URL field as a fallback when nothing is linked. */}
+              {!system.hero_image_asset_id && (
+                <FieldRow {...fieldRowProps('Hero image URL', 'hero_image_url', { isUrl: true })} />
+              )}
               <CropAdjuster
                 imageUrl={cropPreviewUrl}
                 positionX={cropX}
@@ -1943,7 +2041,9 @@ function ExpandedCardView({
                 guides={Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []}
                 systemId={system.id}
                 manufacturerId={manufacturerId}
+                fieldState={fieldStates['install_guide_urls'] ?? null}
                 onUpdated={(guides) => setSystem(prev => ({ ...prev, install_guide_urls: guides.length > 0 ? guides : null }))}
+                onStateChange={handleFieldChange}
               />
               {system.tech_data_url
                 ? <FieldRow {...fieldRowProps('Technical data URL', 'tech_data_url', { isUrl: true })} />
@@ -2381,7 +2481,7 @@ export function VerificationGrid({
       {unverified.length > 0 && (
         <div className="vgrid" style={{ marginBottom: verified.length > 0 ? '28px' : 0 }}>
           {unverified.map(system => (
-            <SystemTile key={system.id} system={system} onClick={() => setExpandedId(system.id)} />
+            <SystemTile key={system.id} system={system} assets={assets} onClick={() => setExpandedId(system.id)} />
           ))}
         </div>
       )}
@@ -2399,7 +2499,7 @@ export function VerificationGrid({
           )}
           <div className="vgrid">
             {verified.map(system => (
-              <SystemTile key={system.id} system={system} onClick={() => setExpandedId(system.id)} />
+              <SystemTile key={system.id} system={system} assets={assets} onClick={() => setExpandedId(system.id)} />
             ))}
           </div>
         </>

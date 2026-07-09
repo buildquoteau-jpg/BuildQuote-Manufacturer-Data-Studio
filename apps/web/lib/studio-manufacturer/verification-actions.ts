@@ -205,7 +205,12 @@ export async function updateSystemHeroAsset(
     .from('staged_systems')
     .update({
       hero_image_asset_id: assetId,
-      ...(assetUrl ? { hero_image_url: assetUrl } : {}),
+      // Linking an asset (assetId set) always syncs hero_image_url to match
+      // — including clearing it to null when the asset has no durable public
+      // URL, so a stale/wrong value can't survive under a newly-linked asset.
+      // Unlinking (assetId null) leaves hero_image_url alone, since it's the
+      // intended manual fallback once no asset is linked.
+      ...(assetId !== null ? { hero_image_url: assetUrl } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', systemId)
