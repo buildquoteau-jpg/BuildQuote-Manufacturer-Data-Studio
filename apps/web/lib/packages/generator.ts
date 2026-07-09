@@ -28,6 +28,7 @@
 
 import JSZip from 'jszip'
 import QRCode from 'qrcode'
+import sharp from 'sharp'
 import { createHash } from 'crypto'
 import type {
   SystemCardSystem,
@@ -133,6 +134,28 @@ function inlineJson(value: unknown): string {
 
 function countLabel(n: number, singular: string): string {
   return `${n} ${singular}${n === 1 ? '' : 's'}`
+}
+
+// WhatsApp's own preview renderer (unlike Meta's more lenient Sharing
+// Debugger) has shown inconsistent support for webp og:image/twitter:image —
+// a .jpg with Content-Type: image/jpeg is what verified working in both
+// WhatsApp and Messenger. Returns a same-basename .jpg sibling of `file`; if
+// it's already a jpeg, returns it unchanged (no duplicate file needed). Fails
+// soft to the original file so a sharp edge case never blocks a build — the
+// og:image just stays on the original format in that rare case.
+async function ensureJpegSibling(file: PackageFile): Promise<PackageFile> {
+  if (/\.jpe?g$/i.test(file.fileName)) return file
+  const base = file.fileName.replace(/\.[^.]+$/, '')
+  try {
+    const jpegBytes = await sharp(file.bytes, { failOn: 'none' })
+      .flatten({ background: '#ffffff' }) // og:image is opaque — matte out any transparency
+      .jpeg({ quality: 85 })
+      .toBuffer()
+    return { fileName: `${base}.jpg`, bytes: jpegBytes }
+  } catch (err) {
+    console.error(`[ensureJpegSibling] falling back to original for ${file.fileName}:`, err)
+    return file
+  }
 }
 
 function ogTagsHtml(og: { title: string; description: string; url: string; image: string }): string {
@@ -247,9 +270,15 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
   }
 
   let brandHeroRootPath: string | null = null
+  let brandHeroJpegPath: string | null = null // og:image sibling — see ensureJpegSibling
   if (input.brandHeroAsset) {
     root.file(`assets/${input.brandHeroAsset.fileName}`, input.brandHeroAsset.bytes)
     brandHeroRootPath = `assets/${input.brandHeroAsset.fileName}`
+    const brandHeroJpeg = await ensureJpegSibling(input.brandHeroAsset)
+    if (brandHeroJpeg.fileName !== input.brandHeroAsset.fileName) {
+      root.file(`assets/${brandHeroJpeg.fileName}`, brandHeroJpeg.bytes)
+    }
+    brandHeroJpegPath = `assets/${brandHeroJpeg.fileName}`
   }
 
   // ── Card pages ──
@@ -261,8 +290,14 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
     const publicUrl = baseUrl ? `${baseUrl}${installPath}cards/${card.slug}/` : null
     const cardBaseHref = `${effectiveBase}${installPath}cards/${card.slug}/`
 
+    let cardHeroJpegFileName: string | null = null // og:image sibling — see ensureJpegSibling
     if (card.heroAsset) {
       dir.file(`assets/${card.heroAsset.fileName}`, card.heroAsset.bytes)
+      const cardHeroJpeg = await ensureJpegSibling(card.heroAsset)
+      if (cardHeroJpeg.fileName !== card.heroAsset.fileName) {
+        dir.file(`assets/${cardHeroJpeg.fileName}`, cardHeroJpeg.bytes)
+      }
+      cardHeroJpegFileName = cardHeroJpeg.fileName
     } else if (card.system.hero_image_url) {
       log.push(`WARN: ${card.system.name} — hero image could not be bundled; the card renders without one.`)
     }
@@ -301,8 +336,8 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       || (card.system.category
         ? `${card.system.category} System Card with product specifications, compatible components and installation resources.`
         : 'System Card with product specifications, compatible components and installation resources.')
-    const cardOgImage = card.heroAsset
-      ? `${cardBaseHref}assets/${card.heroAsset.fileName}`
+    const cardOgImage = cardHeroJpegFileName
+      ? `${cardBaseHref}assets/${cardHeroJpegFileName}`
       : (card.system.hero_image_url && /^https?:\/\//i.test(card.system.hero_image_url))
         ? card.system.hero_image_url
         : DEFAULT_OG_IMAGE
@@ -378,8 +413,8 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
     })),
     storageKey,
   }
-  const collectionOgImage = brandHeroRootPath
-    ? `${collectionUrl}${brandHeroRootPath}`
+  const collectionOgImage = brandHeroJpegPath
+    ? `${collectionUrl}${brandHeroJpegPath}`
     : logoRootPath
       ? `${collectionUrl}${logoRootPath}`
       : DEFAULT_OG_IMAGE
