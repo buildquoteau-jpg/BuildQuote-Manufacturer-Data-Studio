@@ -108,6 +108,11 @@ export type PackageBuildResult = {
 const FONTS_HREF =
   'https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap'
 
+// Generic BuildQuote-branded fallback for og:image/twitter:image when a page
+// has no hero image or logo to show — link-preview crawlers require an
+// absolute URL, so this is never a relative path.
+const DEFAULT_OG_IMAGE = 'https://buildquote.com.au/og/system-card-default.png'
+
 const SITE_CSS = `/* BuildQuote System Card package — base page styles */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: #f5f7f9; }
@@ -124,6 +129,26 @@ function escapeHtml(s: string): string {
 // data can never terminate the tag.
 function inlineJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c')
+}
+
+function countLabel(n: number, singular: string): string {
+  return `${n} ${singular}${n === 1 ? '' : 's'}`
+}
+
+function ogTagsHtml(og: { title: string; description: string; url: string; image: string }): string {
+  return `<meta property="og:type" content="website">
+<meta property="og:site_name" content="BuildQuote">
+<meta property="og:title" content="${escapeHtml(og.title)}">
+<meta property="og:description" content="${escapeHtml(og.description)}">
+<meta property="og:url" content="${escapeHtml(og.url)}">
+<meta property="og:image" content="${escapeHtml(og.image)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(og.title)}">
+<meta name="twitter:description" content="${escapeHtml(og.description)}">
+<meta name="twitter:image" content="${escapeHtml(og.image)}">
+<link rel="canonical" href="${escapeHtml(og.url)}">`
 }
 
 function normaliseInstallPath(p: string | undefined): string {
@@ -148,6 +173,8 @@ function pageHtml(opts: {
    *  asset paths resolve correctly even when the page is served without a
    *  trailing slash (many hosts, e.g. Next.js/Vercel, strip it by default). */
   baseHref: string
+  /** Open Graph / Twitter card + canonical link data — image/url must be absolute. */
+  og: { title: string; description: string; url: string; image: string }
   data: StaticCollectionData | StaticCardData
   /** schema.org JSON-LD object embedded as application/ld+json (card pages). */
   jsonLd?: Record<string, unknown> | null
@@ -160,6 +187,7 @@ function pageHtml(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
 ${opts.description ? `<meta name="description" content="${escapeHtml(opts.description)}">` : ''}
+${ogTagsHtml(opts.og)}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="${FONTS_HREF}">
 <link rel="stylesheet" href="${opts.assetsPrefix}assets/site.css">
@@ -261,11 +289,30 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
       validation: card.validation ?? null,
       tracking: card.tracking ?? null,
     }
+    const profileCount = card.system.system_profiles?.length ?? 0
+    const componentCount = card.system.system_components?.length ?? 0
+    const cardOgTitle = [
+      card.system.name,
+      input.manufacturer.name || null,
+      profileCount > 0 ? countLabel(profileCount, 'profile') : null,
+      componentCount > 0 ? countLabel(componentCount, 'component') : null,
+    ].filter(Boolean).join(' · ')
+    const cardOgDescription = (card.system.description && card.system.description.trim())
+      || (card.system.category
+        ? `${card.system.category} System Card with product specifications, compatible components and installation resources.`
+        : 'System Card with product specifications, compatible components and installation resources.')
+    const cardOgImage = card.heroAsset
+      ? `${cardBaseHref}assets/${card.heroAsset.fileName}`
+      : (card.system.hero_image_url && /^https?:\/\//i.test(card.system.hero_image_url))
+        ? card.system.hero_image_url
+        : DEFAULT_OG_IMAGE
+
     dir.file('index.html', pageHtml({
       title: `${card.system.name} — ${input.manufacturer.name} System Card`,
       description: card.system.description,
       assetsPrefix: '../../',
       baseHref: cardBaseHref,
+      og: { title: cardOgTitle, description: cardOgDescription, url: cardBaseHref, image: cardOgImage },
       data: cardData,
       // Machine readability: schema.org Product (original card, so external
       // image URLs survive; local package paths are omitted).
@@ -331,11 +378,24 @@ export async function buildPackageZip(input: PackageBuildInput): Promise<Package
     })),
     storageKey,
   }
+  const collectionOgImage = brandHeroRootPath
+    ? `${collectionUrl}${brandHeroRootPath}`
+    : logoRootPath
+      ? `${collectionUrl}${logoRootPath}`
+      : DEFAULT_OG_IMAGE
+  const collectionOgDescription = (input.manufacturer.description && input.manufacturer.description.trim())
+    || `Browse ${input.manufacturer.name}'s System Cards — product specifications, compatible components and installation resources.`
   root.file('index.html', pageHtml({
     title: `${input.manufacturer.name} System Cards`,
     description: input.manufacturer.description,
     assetsPrefix: './',
     baseHref: collectionUrl,
+    og: {
+      title: `${input.manufacturer.name} System Cards`,
+      description: collectionOgDescription,
+      url: collectionUrl,
+      image: collectionOgImage,
+    },
     data: collectionData,
   }))
 
