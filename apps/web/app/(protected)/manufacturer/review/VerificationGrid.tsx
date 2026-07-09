@@ -775,16 +775,23 @@ function InstallGuidesEditor({
         {guides.length === 0 && (
           <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>None linked yet.</div>
         )}
+        {/* With only one guide there's nothing to distinguish it from, so the
+            label is hidden — just a plain URL row, matching every other
+            single-value field. A label only appears once there are two or
+            more (need something to tell them apart, e.g. "Steel frame" vs
+            "Timber frame"). */}
         {guides.map((g, i) => (
           <div key={i} style={{ borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', padding: '10px 12px' }}>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <input
-                  defaultValue={g.label}
-                  onBlur={e => e.target.value.trim() !== g.label && handleEdit(i, 'label', e.target.value.trim())}
-                  placeholder="Label, e.g. Steel frame"
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '11px', fontWeight: 700, marginBottom: '4px', fontFamily: 'inherit' }}
-                />
+                {guides.length > 1 && (
+                  <input
+                    defaultValue={g.label}
+                    onBlur={e => e.target.value.trim() !== g.label && handleEdit(i, 'label', e.target.value.trim())}
+                    placeholder="Label, e.g. Steel frame"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '11px', fontWeight: 700, marginBottom: '4px', fontFamily: 'inherit' }}
+                  />
+                )}
                 <input
                   defaultValue={g.url}
                   onBlur={e => e.target.value.trim() !== g.url && handleEdit(i, 'url', e.target.value.trim())}
@@ -793,7 +800,7 @@ function InstallGuidesEditor({
                 />
               </div>
               <button type="button" title="Remove" onClick={() => handleRemove(i)} disabled={pending}
-                style={{ width: 28, height: 28, borderRadius: '6px', border: '1.5px solid #d1d5db', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>
+                style={{ width: 28, height: 28, borderRadius: '6px', border: '1.5px solid #d1d5db', background: '#fff', color: '#6b7280', cursor: 'pointer', fontSize: '13px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 ×
               </button>
             </div>
@@ -801,10 +808,16 @@ function InstallGuidesEditor({
         ))}
         {adding ? (
           <div style={{ borderRadius: '8px', border: '1.5px solid #185D7A', background: '#eef6fa', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label, e.g. Timber frame"
-              style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
+            {/* Once this becomes the 2nd guide, ask for a label so the two
+                can be told apart — the first guide stays unlabelled unless
+                a second one shows up. */}
+            {guides.length >= 1 && (
+              <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label, e.g. Timber frame"
+                style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
+            )}
             <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://…"
-              style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+              style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
+              autoFocus={guides.length === 0} />
             <div style={{ display: 'flex', gap: '6px' }}>
               <button type="button" onClick={handleAdd} disabled={pending || !newUrl.trim()}
                 style={{ padding: '5px 14px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !newUrl.trim() ? 0.5 : 1 }}>
