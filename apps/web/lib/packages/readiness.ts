@@ -140,7 +140,7 @@ export function evaluateCardReadiness(
 
   // ── Guide links ──
   const guides: { label: string; url: string }[] = [
-    ...(card.install_guide_urls ?? []),
+    ...(Array.isArray(card.install_guide_urls) ? card.install_guide_urls : []),
     ...(card.design_guide_url ? [{ label: 'Design guide', url: card.design_guide_url }] : []),
     ...(card.tech_data_url ? [{ label: 'Technical data', url: card.tech_data_url }] : []),
   ]

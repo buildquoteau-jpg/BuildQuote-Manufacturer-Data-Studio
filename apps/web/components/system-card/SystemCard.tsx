@@ -736,7 +736,7 @@ export function SystemCard({ data }: { data: SystemCardData }) {
               View {data.name} at {data.manufacturer_name}
             </span>
           )}
-          {(data.install_guide_urls ?? []).map((guide, i) => (
+          {(Array.isArray(data.install_guide_urls) ? data.install_guide_urls : []).map((guide, i) => (
             <a
               key={i}
               href={guide.url}

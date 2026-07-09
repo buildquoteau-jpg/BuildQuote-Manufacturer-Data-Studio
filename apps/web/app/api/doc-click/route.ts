@@ -20,7 +20,7 @@ function knownDocUrls(system: Partial<SystemCardSystem> & Record<string, unknown
   add(system.design_guide_url)
   add(system.tech_data_url)
   add((system as Record<string, unknown>).source_url)
-  for (const g of (system.install_guide_urls ?? []) as { url?: string }[]) add(g?.url)
+  for (const g of (Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []) as { url?: string }[]) add(g?.url)
   return urls
 }
 

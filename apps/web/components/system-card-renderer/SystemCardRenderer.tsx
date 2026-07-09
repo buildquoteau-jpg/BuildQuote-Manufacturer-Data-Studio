@@ -1012,7 +1012,7 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
           )}
 
           {/* Install guides */}
-          {(system.install_guide_urls ?? []).map((guide, i) => (
+          {(Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []).map((guide, i) => (
             <GuideLink key={i} href={docHref(guide.url, 'Installation guide')} context={`View ${mfrName}`} label="Installation guide" />
           ))}
 

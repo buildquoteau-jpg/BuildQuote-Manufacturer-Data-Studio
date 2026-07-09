@@ -713,7 +713,7 @@ function SystemDetailModal({
 
             {/* Action links */}
             <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(system.install_guide_urls ?? []).map((guide, i) => (
+              {(Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []).map((guide, i) => (
                 <a
                   key={i}
                   href={guide.url} target="_blank" rel="noopener noreferrer"

@@ -1583,6 +1583,29 @@ function ExpandedCardView({
   const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
   const [cropY, setCropY] = useState(system.hero_image_position_y ?? 50)
 
+  // Asset Library images offered for this system's hero — Card hero and
+  // Product image types cover both a dedicated hero shot and a reused
+  // product photo. Picking/uploading here also updates hero_image_url, so
+  // the crop tool and live preview below stay in sync immediately.
+  const heroPickerAssets: SlotAsset[] = assets.map(a => ({
+    id: a.id,
+    assetType: a.assetType,
+    title: a.title,
+    displayUrl: a.displayUrl,
+    publicUrl: a.publicUrl,
+    approvedForPublication: a.approvedForPublication,
+  }))
+
+  // The card preview and crop tool should reflect the linked asset, not
+  // hero_image_url — that field may hold a presigned R2 link (set before the
+  // publicUrl-only fix below) that has since expired, or be null when the
+  // asset has no durable public URL. The asset's displayUrl is re-resolved
+  // fresh on every page load, so it's always current.
+  const linkedHeroAsset = system.hero_image_asset_id
+    ? heroPickerAssets.find(a => a.id === system.hero_image_asset_id) ?? null
+    : null
+  const cropPreviewUrl = linkedHeroAsset?.displayUrl ?? linkedHeroAsset?.publicUrl ?? system.hero_image_url
+
   // Build SystemCardData
   const cardData: SystemCardData = {
     name:               system.name,
@@ -1590,7 +1613,7 @@ function ExpandedCardView({
     category:           system.category,
     subcategory:        system.subcategory,
     description:        system.description,
-    hero_image_url:     system.hero_image_url,
+    hero_image_url:     cropPreviewUrl,
     hero_image_position_x: cropX,
     hero_image_position_y: cropY,
     bal_rating:         system.bal_rating,
@@ -1631,21 +1654,12 @@ function ExpandedCardView({
     onStateChange: handleFieldChange,
   })
 
-  // Asset Library images offered for this system's hero — Card hero and
-  // Product image types cover both a dedicated hero shot and a reused
-  // product photo. Picking/uploading here also updates hero_image_url, so
-  // the crop tool and live preview below stay in sync immediately.
-  const heroPickerAssets: SlotAsset[] = assets.map(a => ({
-    id: a.id,
-    assetType: a.assetType,
-    title: a.title,
-    displayUrl: a.displayUrl,
-    publicUrl: a.publicUrl,
-    approvedForPublication: a.approvedForPublication,
-  }))
-
   function handleHeroAssetPick(pick: SlotPick) {
-    const url = pick.publicUrl ?? pick.displayUrl
+    // Only persist a durable public URL into hero_image_url — pick.displayUrl
+    // can be a presigned R2 link that expires in an hour, and saving that would
+    // leave a dead link once it lapses. The crop preview below reads the
+    // linked asset's live displayUrl instead, so it stays correct regardless.
+    const url = pick.publicUrl ?? null
     setSystem(prev => ({ ...prev, hero_image_asset_id: pick.assetId, ...(url ? { hero_image_url: url } : {}) }))
     updateSystemHeroAsset(system.id, manufacturerId, pick.assetId, url)
   }
@@ -1818,7 +1832,7 @@ function ExpandedCardView({
               </div>
               <FieldRow {...fieldRowProps('Hero image URL', 'hero_image_url', { isUrl: true })} />
               <CropAdjuster
-                imageUrl={system.hero_image_url}
+                imageUrl={cropPreviewUrl}
                 positionX={cropX}
                 positionY={cropY}
                 systemId={system.id}
@@ -1827,8 +1841,8 @@ function ExpandedCardView({
               />
               {system.website_url  && <FieldRow {...fieldRowProps('Manufacturer website', 'website_url', { isUrl: true })} />}
               {system.source_url   && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
-              {(system.install_guide_urls ?? []).length > 0
-                ? (system.install_guide_urls ?? []).map((g, i) => (
+              {Array.isArray(system.install_guide_urls) && system.install_guide_urls.length > 0
+                ? system.install_guide_urls.map((g, i) => (
                     <FieldRow key={i} {...fieldRowProps(`Install guide${(system.install_guide_urls?.length ?? 0) > 1 ? ` ${i + 1}` : ''} URL`, 'install_guide_urls', { isUrl: true })}
                       currentValue={g.url}
                     />
