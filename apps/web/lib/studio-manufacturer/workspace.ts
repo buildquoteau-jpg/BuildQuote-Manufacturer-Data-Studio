@@ -6,6 +6,7 @@
 
 import { cookies } from 'next/headers'
 import { createStudioServerClient } from '@/lib/supabase/server'
+import { createPresignedDownloadUrl } from '@/lib/r2'
 import type { StudioSession, StudioManufacturerMembership } from '@/lib/studio-auth/session'
 
 const GATE_COOKIE = 'admin_workspace_gate'
@@ -762,8 +763,32 @@ export async function getManufacturerVerificationData(
     componentsMap.set(r.staged_system_id, list)
   }
 
+  // When a system's hero image is linked to an Asset Library upload,
+  // hero_image_url can be null or stale (e.g. a presigned link saved before
+  // the URL-sync fix, or simply out of date) — resolve the asset's live URL
+  // here so every consumer of this function (review grid, studio preview,
+  // etc.) gets the correct image without each having to know about assets.
+  const heroAssetIds = Array.from(new Set(
+    systemRows.map((s) => s.hero_image_asset_id).filter((id): id is string => !!id),
+  ))
+  const heroImageUrlByAssetId = new Map<string, string>()
+  if (heroAssetIds.length > 0) {
+    const { data: heroAssets } = await c.supabase
+      .from('manufacturer_assets')
+      .select('id, storage_key, public_url')
+      .in('id', heroAssetIds)
+    const rows = (heroAssets ?? []) as { id: string; storage_key: string | null; public_url: string | null }[]
+    await Promise.all(rows.map(async (a) => {
+      if (a.public_url) { heroImageUrlByAssetId.set(a.id, a.public_url); return }
+      if (!a.storage_key) return
+      const presigned = await createPresignedDownloadUrl({ storageKey: a.storage_key, expiresInSeconds: 3600 })
+      if (presigned.ok) heroImageUrlByAssetId.set(a.id, presigned.downloadUrl)
+    }))
+  }
+
   const systems: VerificationSystem[] = systemRows.map((s) => ({
     ...s,
+    hero_image_url: (s.hero_image_asset_id && heroImageUrlByAssetId.get(s.hero_image_asset_id)) || s.hero_image_url,
     profiles:   profilesMap.get(s.id)   ?? [],
     colours:    coloursMap.get(s.id)    ?? [],
     components: componentsMap.get(s.id) ?? [],

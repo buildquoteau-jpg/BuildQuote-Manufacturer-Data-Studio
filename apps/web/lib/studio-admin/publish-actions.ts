@@ -2,6 +2,7 @@
 
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { createStudioServiceClient } from '@/lib/supabase/service'
+import { createPresignedDownloadUrl } from '@/lib/r2'
 import { publishBatch, type PublishBatchResult } from './publish'
 
 async function assertBuildquoteStaff(): Promise<{ allowed: true } | { allowed: false; error: string }> {
@@ -73,9 +74,32 @@ export async function getPendingPublishBatches(): Promise<
   const systemIds = Array.from(new Set((items ?? []).map((i) => i.entity_id).filter(Boolean)))
   const { data: stagedSystems } = await supabase
     .from('staged_systems')
-    .select('id, name, category, hero_image_url')
+    .select('id, name, category, hero_image_url, hero_image_asset_id')
     .in('id', systemIds)
-  const sysById = new Map((stagedSystems ?? []).map((s) => [s.id as string, s as { id: string; name: string; category: string | null; hero_image_url: string | null }]))
+  type StagedSystemRow = { id: string; name: string; category: string | null; hero_image_url: string | null; hero_image_asset_id: string | null }
+  const stagedRows = (stagedSystems ?? []) as StagedSystemRow[]
+  const sysById = new Map(stagedRows.map((s) => [s.id, s]))
+
+  // Same as workspace.ts's getManufacturerVerificationData — hero_image_url
+  // can be null/stale when the hero is actually linked to an Asset Library
+  // upload, so resolve the asset's live URL for the thumbnail here too.
+  const heroAssetIds = Array.from(new Set(
+    stagedRows.map((s) => s.hero_image_asset_id).filter((id): id is string => !!id),
+  ))
+  const heroImageUrlByAssetId = new Map<string, string>()
+  if (heroAssetIds.length > 0) {
+    const { data: heroAssets } = await supabase
+      .from('manufacturer_assets')
+      .select('id, storage_key, public_url')
+      .in('id', heroAssetIds)
+    const assetRows = (heroAssets ?? []) as { id: string; storage_key: string | null; public_url: string | null }[]
+    await Promise.all(assetRows.map(async (a) => {
+      if (a.public_url) { heroImageUrlByAssetId.set(a.id, a.public_url); return }
+      if (!a.storage_key) return
+      const presigned = await createPresignedDownloadUrl({ storageKey: a.storage_key, expiresInSeconds: 3600 })
+      if (presigned.ok) heroImageUrlByAssetId.set(a.id, presigned.downloadUrl)
+    }))
+  }
 
   const result: PendingBatch[] = batches.map((b) => {
     const ownItems = (items ?? []).filter((i) => i.publish_batch_id === b.id)
@@ -92,11 +116,14 @@ export async function getPendingPublishBatches(): Promise<
       failed_count: ownItems.filter((i) => i.status === 'failed').length,
       systems: pendingItems.map((i) => {
         const sys = sysById.get(i.entity_id)
+        const resolvedHeroUrl = sys?.hero_image_asset_id
+          ? heroImageUrlByAssetId.get(sys.hero_image_asset_id)
+          : undefined
         return {
           id: i.entity_id,
           name: sys?.name ?? 'Unknown system',
           category: sys?.category ?? null,
-          hero_image_url: sys?.hero_image_url ?? null,
+          hero_image_url: resolvedHeroUrl ?? sys?.hero_image_url ?? null,
           change_type: i.change_type,
           item_status: i.status,
         }
