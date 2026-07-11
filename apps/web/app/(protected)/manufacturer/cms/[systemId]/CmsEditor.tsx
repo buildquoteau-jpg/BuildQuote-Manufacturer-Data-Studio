@@ -227,8 +227,10 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets 
                   display: 'flex', alignItems: 'center', gap: '0.6rem',
                   border: '1px solid var(--ds-border)', borderRadius: 8, padding: '0.45rem 0.6rem',
                 }}>
+                  {/* Thumbnail via the permanent asset route when linked —
+                      older entries may hold expired presigned URLs. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.url} alt="" style={{ width: 64, height: 42, objectFit: 'cover', borderRadius: 5, flexShrink: 0 }} />
+                  <img src={img.asset_id ? `/api/assets/${img.asset_id}` : img.url} alt="" style={{ width: 64, height: 42, objectFit: 'cover', borderRadius: 5, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       value={img.alt}
@@ -277,7 +279,9 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets 
                           disabled={inGallery}
                           title={a.title ?? undefined}
                           onClick={() => {
-                            const url = a.publicUrl ?? a.displayUrl!
+                            // Never store displayUrl (presigned, expires in an
+                            // hour) — use the permanent public asset route.
+                            const url = a.publicUrl ?? `${window.location.origin}/api/assets/${a.id}`
                             saveGallery([...gallery, {
                               asset_id: a.id,
                               url,

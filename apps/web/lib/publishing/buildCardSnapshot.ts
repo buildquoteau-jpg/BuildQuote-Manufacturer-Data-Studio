@@ -47,6 +47,25 @@ function looksLikeJpeg(url: string | null | undefined): boolean {
   return !!url && /\.jpe?g(\?|#|$)/i.test(url)
 }
 
+// ── Durable image URLs ────────────────────────────────────────────────────────
+// Published snapshots live forever, but asset URLs floating around the draft
+// data are often presigned R2 links that EXPIRE AFTER AN HOUR (X-Amz-Expires).
+// Every image reference must therefore be rewritten to the permanent public
+// asset route (/api/assets/<id>, immutable-cached) before it is frozen into
+// card_json. URLs that are already durable (manufacturer sites, R2 public
+// domains) pass through untouched.
+
+const STUDIO_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au'
+
+function durableAssetUrl(assetId: string): string {
+  return `${STUDIO_ORIGIN.replace(/\/$/, '')}/api/assets/${assetId}`
+}
+
+function isEphemeralUrl(url: string | null | undefined): boolean {
+  if (!url) return false
+  return /r2\.cloudflarestorage\.com|X-Amz-Signature=/i.test(url)
+}
+
 export async function buildCardSnapshot(
   supabase: SupabaseClient,
   stagedSystemId: string,
@@ -70,6 +89,31 @@ export async function buildCardSnapshot(
   const warnings: string[] = []
   const system = adaptStagedSystem(stagedSystem, verification.manufacturer)
   const slug = resolveCardSlug(stagedSystem)
+
+  // ── Rewrite every image to a durable URL before freezing the snapshot ──
+  system.gallery_images = (system.gallery_images ?? [])
+    .map((img) => {
+      const url = img.asset_id
+        ? durableAssetUrl(img.asset_id)
+        : isEphemeralUrl(img.url) ? null : img.url
+      if (!url) {
+        warnings.push(`Gallery image "${img.alt}" skipped — its URL is temporary and not linked to an Asset.`)
+        return null
+      }
+      return {
+        ...img,
+        url,
+        og_jpg_url: isEphemeralUrl(img.og_jpg_url) ? null : img.og_jpg_url ?? null,
+      }
+    })
+    .filter((img): img is NonNullable<typeof img> => img !== null)
+
+  if (stagedSystem.hero_image_asset_id) {
+    system.hero_image_url = durableAssetUrl(stagedSystem.hero_image_asset_id)
+  } else if (isEphemeralUrl(system.hero_image_url)) {
+    warnings.push('Hero image skipped — its URL is temporary and not linked to an Asset.')
+    system.hero_image_url = null
+  }
 
   // ── Stockists (embedded with the version; the live page also refreshes
   // them from the production DB, so this is a fallback copy) ──
