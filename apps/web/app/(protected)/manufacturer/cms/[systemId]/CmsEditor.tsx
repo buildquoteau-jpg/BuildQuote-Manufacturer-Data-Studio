@@ -134,10 +134,14 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets 
   }
 
   // ── Preview data ───────────────────────────────────────────────────────────
-  const previewSystem = useMemo(
-    () => adaptStagedSystem(system, manufacturer),
-    [system, manufacturer],
-  )
+  // Gallery URLs stored on older drafts can be expired presigned links; the
+  // preview renders via the permanent asset route (same rewrite publish does).
+  const previewSystem = useMemo(() => {
+    const adapted = adaptStagedSystem(system, manufacturer)
+    adapted.gallery_images = (adapted.gallery_images ?? []).map(img =>
+      img.asset_id ? { ...img, url: `/api/assets/${img.asset_id}` } : img)
+    return adapted
+  }, [system, manufacturer])
 
   const publishStatus = system.publish_status ?? 'draft'
 
