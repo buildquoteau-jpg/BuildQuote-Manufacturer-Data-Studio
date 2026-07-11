@@ -27,7 +27,8 @@ export type HeroGalleryImage = {
 type Props = {
   images: HeroGalleryImage[]
   // Classic single-hero fallback (also used when images is empty).
-  fallbackHero?: { url: string | null; alt: string; posX: number; posY: number }
+  // zoom: 1 = fit … 3 = 300%, scaled around the (posX, posY) crop point.
+  fallbackHero?: { url: string | null; alt: string; posX: number; posY: number; zoom?: number | null }
   // Title block (manufacturer / name / category) pinned over the gallery.
   overlay?: React.ReactNode
   // Optional control pinned top-right (e.g. the favourite heart).
@@ -57,6 +58,7 @@ export function HeroGallery({ images, fallbackHero, overlay, topRight }: Props) 
     const url = single?.url ?? fallbackHero?.url ?? null
     const posX = single ? 50 : fallbackHero?.posX ?? 50
     const posY = single ? 50 : fallbackHero?.posY ?? 50
+    const zoom = single ? 1 : Math.max(1, Math.min(3, fallbackHero?.zoom ?? 1))
     return (
       <div style={{
         position: 'relative',
@@ -73,6 +75,9 @@ export function HeroGallery({ images, fallbackHero, overlay, topRight }: Props) 
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%',
               objectFit: 'cover', objectPosition: `${posX}% ${posY}%`,
+              // Zoom around the crop point; overflow is clipped by the wrapper.
+              transform: zoom > 1 ? `scale(${zoom})` : undefined,
+              transformOrigin: `${posX}% ${posY}%`,
             }}
           />
         )}

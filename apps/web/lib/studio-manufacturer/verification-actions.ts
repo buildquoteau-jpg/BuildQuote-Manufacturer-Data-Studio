@@ -227,21 +227,31 @@ export async function updateSystemImageCrop(
   manufacturerId: string,
   positionX: number,
   positionY: number,
+  zoom?: number,
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
-  const { error } = await supabase
-    .from('staged_systems')
-    .update({
-      hero_image_position_x: Math.round(Math.max(0, Math.min(100, positionX))),
-      hero_image_position_y: Math.round(Math.max(0, Math.min(100, positionY))),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', systemId)
+  const patch: Record<string, unknown> = {
+    hero_image_position_x: Math.round(Math.max(0, Math.min(100, positionX))),
+    hero_image_position_y: Math.round(Math.max(0, Math.min(100, positionY))),
+    updated_at: new Date().toISOString(),
+  }
+  if (zoom !== undefined) {
+    // 1.0 (fit) … 3.0 (300%), two decimal places — migration 054.
+    patch.hero_image_zoom = Math.round(Math.max(1, Math.min(3, zoom)) * 100) / 100
+  }
+
+  let { error } = await supabase.from('staged_systems').update(patch).eq('id', systemId)
+  if (error && zoom !== undefined && /hero_image_zoom|does not exist/i.test(error.message ?? '')) {
+    // Pre-054 environments — save position without zoom rather than failing.
+    delete patch.hero_image_zoom
+    ;({ error } = await supabase.from('staged_systems').update(patch).eq('id', systemId))
+  }
 
   if (error) return { ok: false, error: error.message }
+  await markDraftChanged(supabase, systemId)
   return { ok: true }
 }
 

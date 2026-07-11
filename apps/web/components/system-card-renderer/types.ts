@@ -72,6 +72,8 @@ export type SystemCardSystem = {
   hero_image_url: string | null
   hero_image_position_x: number | null
   hero_image_position_y: number | null
+  // Zoom into the hero around the crop position (1 = fit … 3 = 300%).
+  hero_image_zoom?: number | null
   // Optional multi-image hero gallery; cards without one fall back to the
   // single hero_image_url render.
   gallery_images?: SystemCardGalleryImage[] | null

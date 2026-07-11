@@ -20,6 +20,7 @@ type SystemCardData = {
   hero_image_url: string | null
   hero_image_position_x?: number | null
   hero_image_position_y?: number | null
+  hero_image_zoom?: number | null
   bal_rating: string | null
   fire_rating: string | null
   moisture_resistant: boolean | null
@@ -213,7 +214,12 @@ const JDS_REGALFRAME: SystemCardData = {
   subcategory: 'Brick construction',
   description:
     'RegalFrame is a welded metal doorframe with a built-in architrave, designed to give a timber-look doorframe with the strength and durability of metal. Made from 1.05mm Zincanneal. Available in 95mm or 114mm back opening.',
-  hero_image_url: null,
+  // Demo hero with zoom (Library V7 crop+zoom) so the single-hero zoom path
+  // is exercisable on the no-auth preview page.
+  hero_image_url: 'https://picsum.photos/seed/bq-regalframe/1200/700',
+  hero_image_position_x: 50,
+  hero_image_position_y: 40,
+  hero_image_zoom: 1.6,
   bal_rating: null,
   fire_rating: null,
   moisture_resistant: null,
@@ -309,6 +315,7 @@ function toRendererSystem(data: SystemCardData, id: string): SystemCardSystem {
     hero_image_url: data.hero_image_url,
     hero_image_position_x: data.hero_image_position_x ?? null,
     hero_image_position_y: data.hero_image_position_y ?? null,
+    hero_image_zoom: data.hero_image_zoom ?? null,
     australian_made: data.australian_made,
     bal_rating: data.bal_rating,
     fire_rating: data.fire_rating,

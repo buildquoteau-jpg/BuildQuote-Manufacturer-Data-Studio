@@ -590,36 +590,39 @@ function BALFieldRow({
 // ─── Image crop adjuster ──────────────────────────────────────────────────────
 
 function CropAdjuster({
-  imageUrl, positionX, positionY, systemId, manufacturerId, onChange,
+  imageUrl, positionX, positionY, zoom: initialZoom, systemId, manufacturerId, onChange,
 }: {
   imageUrl: string | null
   positionX: number
   positionY: number
+  zoom: number
   systemId: string
   manufacturerId: string
-  onChange: (x: number, y: number) => void
+  onChange: (x: number, y: number, zoom: number) => void
 }) {
   const [x, setX] = useState(positionX)
   const [y, setY] = useState(positionY)
+  const [zoom, setZoom] = useState(initialZoom)
   const [savedX, setSavedX] = useState(positionX)
   const [savedY, setSavedY] = useState(positionY)
+  const [savedZoom, setSavedZoom] = useState(initialZoom)
   const [saving, setSaving] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
 
   if (!imageUrl) return null
 
-  const dirty = x !== savedX || y !== savedY
+  const dirty = x !== savedX || y !== savedY || zoom !== savedZoom
 
-  function handleChange(newX: number, newY: number) {
-    setX(newX); setY(newY)
-    onChange(newX, newY)
+  function handleChange(newX: number, newY: number, newZoom: number) {
+    setX(newX); setY(newY); setZoom(newZoom)
+    onChange(newX, newY, newZoom)
   }
 
   async function handleSave() {
     setSaving(true)
-    await updateSystemImageCrop(systemId, manufacturerId, x, y)
+    await updateSystemImageCrop(systemId, manufacturerId, x, y, zoom)
     setSaving(false)
-    setSavedX(x); setSavedY(y)
+    setSavedX(x); setSavedY(y); setSavedZoom(zoom)
     setJustSaved(true)
     setTimeout(() => setJustSaved(false), 1500)
   }
@@ -643,18 +646,30 @@ function CropAdjuster({
       </div>
       {/* Preview — matches system card dimensions: 220px tall × ~360px wide */}
       <div style={{ width: '100%', maxWidth: '360px', height: '220px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
-        <img src={imageUrl} alt="crop preview" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${x}% ${y}%`, display: 'block' }} />
+        <img src={imageUrl} alt="crop preview" style={{
+          width: '100%', height: '100%', objectFit: 'cover',
+          objectPosition: `${x}% ${y}%`, display: 'block',
+          transform: zoom > 1 ? `scale(${zoom})` : undefined,
+          transformOrigin: `${x}% ${y}%`,
+        }} />
       </div>
       {/* X slider */}
       <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '6px' }}>
         Horizontal — {x === 50 ? 'centre' : x < 50 ? `left ${x}%` : `right ${x}%`}
-        <input type="range" min={0} max={100} value={x} onChange={e => handleChange(Number(e.target.value), y)}
+        <input type="range" min={0} max={100} value={x} onChange={e => handleChange(Number(e.target.value), y, zoom)}
           style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
       </label>
       {/* Y slider */}
-      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280' }}>
+      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '6px' }}>
         Vertical — {y === 50 ? 'centre' : y < 50 ? `top ${y}%` : `bottom ${y}%`}
-        <input type="range" min={0} max={100} value={y} onChange={e => handleChange(x, Number(e.target.value))}
+        <input type="range" min={0} max={100} value={y} onChange={e => handleChange(x, Number(e.target.value), zoom)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
+      {/* Zoom slider — scales around the crop point above */}
+      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280' }}>
+        Zoom — {zoom <= 1 ? 'fit (100%)' : `${Math.round(zoom * 100)}%`}
+        <input type="range" min={100} max={300} step={5} value={Math.round(zoom * 100)}
+          onChange={e => handleChange(x, y, Number(e.target.value) / 100)}
           style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
       </label>
     </div>
@@ -1784,6 +1799,7 @@ function ExpandedCardView({
 
   const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
   const [cropY, setCropY] = useState(system.hero_image_position_y ?? 50)
+  const [cropZoom, setCropZoom] = useState(system.hero_image_zoom ?? 1)
 
   // Asset Library images offered for this system's hero — Card hero and
   // Product image types cover both a dedicated hero shot and a reused
@@ -1818,6 +1834,7 @@ function ExpandedCardView({
     hero_image_url:     cropPreviewUrl,
     hero_image_position_x: cropX,
     hero_image_position_y: cropY,
+    hero_image_zoom: cropZoom,
     bal_rating:         system.bal_rating,
     fire_rating:        system.fire_rating,
     moisture_resistant: system.moisture_resistant,
@@ -2044,9 +2061,10 @@ function ExpandedCardView({
                 imageUrl={cropPreviewUrl}
                 positionX={cropX}
                 positionY={cropY}
+                zoom={cropZoom}
                 systemId={system.id}
                 manufacturerId={manufacturerId}
-                onChange={(x, y) => { setCropX(x); setCropY(y) }}
+                onChange={(x, y, zoom) => { setCropX(x); setCropY(y); setCropZoom(zoom) }}
               />
               {system.website_url  && <FieldRow {...fieldRowProps('Manufacturer website', 'website_url', { isUrl: true })} />}
               {system.source_url   && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
@@ -2375,6 +2393,7 @@ export function VerificationGrid({
         gallery_images: null,
         publish_status: null,
         published_version: null,
+        hero_image_zoom: null,
         australian_made: null,
         bal_rating: null,
         fire_rating: null,

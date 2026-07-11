@@ -46,6 +46,7 @@ export interface SystemCardData {
   hero_image_url: string | null
   hero_image_position_x?: number | null
   hero_image_position_y?: number | null
+  hero_image_zoom?: number | null
   bal_rating: string | null
   fire_rating: string | null
   moisture_resistant: boolean | null
@@ -621,18 +622,28 @@ function AttributePills({ systemName, balRating, fireRating, moistureResistant, 
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
-function HeroArea({ imageUrl, imagePositionX, imagePositionY, manufacturerName, name, category, subcategory }: {
+function HeroArea({ imageUrl, imagePositionX, imagePositionY, imageZoom, manufacturerName, name, category, subcategory }: {
   imageUrl: string | null
   imagePositionX?: number | null
   imagePositionY?: number | null
+  imageZoom?: number | null
   manufacturerName: string
   name: string
   category: string | null
   subcategory: string | null
 }) {
+  const posX = imagePositionX ?? 50
+  const posY = imagePositionY ?? 50
+  const zoom = Math.max(1, Math.min(3, imageZoom ?? 1))
   return (
-    <div className="sc-hero" style={{ borderRadius: '10px 10px 0 0', background: imageUrl ? undefined : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)' }}>
-      {imageUrl && <img src={imageUrl} alt={name} style={{ objectPosition: `${imagePositionX ?? 50}% ${imagePositionY ?? 50}%` }} />}
+    <div className="sc-hero" style={{ borderRadius: '10px 10px 0 0', overflow: 'hidden', background: imageUrl ? undefined : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)' }}>
+      {imageUrl && (
+        <img src={imageUrl} alt={name} style={{
+          objectPosition: `${posX}% ${posY}%`,
+          transform: zoom > 1 ? `scale(${zoom})` : undefined,
+          transformOrigin: `${posX}% ${posY}%`,
+        }} />
+      )}
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,30,45,0.85) 0%, rgba(15,30,45,0.2) 60%, transparent 100%)' }} />
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '1rem 1.25rem 1.1rem' }}>
         <div style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: '0.3rem' }}>
@@ -670,6 +681,7 @@ export function SystemCard({ data }: { data: SystemCardData }) {
         imageUrl={data.hero_image_url}
         imagePositionX={data.hero_image_position_x}
         imagePositionY={data.hero_image_position_y}
+        imageZoom={data.hero_image_zoom}
         manufacturerName={data.manufacturer_name}
         name={data.name}
         category={data.category}

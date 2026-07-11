@@ -608,6 +608,7 @@ export type VerificationSystem = {
   hero_image_asset_id: string | null
   hero_image_position_x: number | null
   hero_image_position_y: number | null
+  hero_image_zoom: number | null
   gallery_images: { asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null }[] | null
   australian_made: boolean | null
   bal_rating: string | null
@@ -653,7 +654,7 @@ export async function getManufacturerVerificationData(
       .select(
         'id, name, slug, product_code, category, subcategory, description, hero_image_url, hero_image_asset_id, ' +
         'hero_image_position_x, hero_image_position_y, ' +
-        (withGallery ? 'gallery_images, publish_status, published_version, ' : '') +
+        (withGallery ? 'gallery_images, publish_status, published_version, hero_image_zoom, ' : '') +
         'australian_made, bal_rating, fire_rating, acoustic_rating, moisture_resistant, ' +
         'structural_grade, website_url, source_url, install_guide_urls, design_guide_url, tech_data_url, ' +
         'notes, verification_status, reviewer_notes, verified_at, source_document_id, ' +
@@ -675,7 +676,7 @@ export async function getManufacturerVerificationData(
 
   // Pre-053 environments lack gallery_images/publish_status — retry without.
   let systemsResult = firstSystemsResult
-  if (systemsResult.error && /gallery_images|publish_status|published_version|does not exist/i.test(systemsResult.error.message ?? '')) {
+  if (systemsResult.error && /gallery_images|publish_status|published_version|hero_image_zoom|does not exist/i.test(systemsResult.error.message ?? '')) {
     systemsResult = await stagedSelect(false)
   }
 
@@ -699,6 +700,7 @@ export async function getManufacturerVerificationData(
     gallery_images?: VerificationSystem['gallery_images']
     publish_status?: VerificationSystem['publish_status']
     published_version?: string | null
+    hero_image_zoom?: number | null
     australian_made: boolean | null
     bal_rating: string | null; fire_rating: string | null
     acoustic_rating: string | null; moisture_resistant: boolean | null
@@ -808,6 +810,7 @@ export async function getManufacturerVerificationData(
     gallery_images: s.gallery_images ?? null,
     publish_status: s.publish_status ?? null,
     published_version: s.published_version ?? null,
+    hero_image_zoom: s.hero_image_zoom != null ? Number(s.hero_image_zoom) : null,
     hero_image_url: (s.hero_image_asset_id && heroImageUrlByAssetId.get(s.hero_image_asset_id)) || s.hero_image_url,
     profiles:   profilesMap.get(s.id)   ?? [],
     colours:    coloursMap.get(s.id)    ?? [],
