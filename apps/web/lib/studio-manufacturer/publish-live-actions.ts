@@ -16,7 +16,8 @@
 //
 // Source Traceability Rule: the admin channel blocks cards without a linked
 // source document; here we warn-but-allow and log the event (product call,
-// 2026-07-10).
+// 2026-07-10). Publish events go to card_publish_events — card_events is the
+// separate share/view analytics table from migration 050.
 
 import { revalidatePath } from 'next/cache'
 import { createStudioServerClient } from '@/lib/supabase/server'
@@ -208,7 +209,7 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     .eq('id', stagedSystemId)
   if (stateErr) warnings.push(`Publish state not saved (${stateErr.message}).`)
 
-  await supabase.from('card_events').insert({
+  await supabase.from('card_publish_events').insert({
     card_id: stagedSystemId,
     event_type: 'publish',
     meta: {

@@ -21,6 +21,8 @@ ALTER TABLE public.staged_systems
 ALTER TABLE public.staged_systems
   ADD COLUMN IF NOT EXISTS publish_status TEXT NOT NULL DEFAULT 'draft';
 ALTER TABLE public.staged_systems
+  DROP CONSTRAINT IF EXISTS staged_systems_publish_status_check;
+ALTER TABLE public.staged_systems
   ADD CONSTRAINT staged_systems_publish_status_check
   CHECK (publish_status IN ('draft', 'published', 'published_with_changes'));
 
@@ -35,10 +37,12 @@ ALTER TABLE public.staged_systems
 ALTER TABLE public.staged_systems
   ADD COLUMN IF NOT EXISTS owner_account_id UUID;
 
--- ── Analytics stub ───────────────────────────────────────────────────────────
--- Minimal event log. Only 'publish' events are written today; future
--- manufacturer analytics (views, shares, quote requests) land here too.
-CREATE TABLE IF NOT EXISTS public.card_events (
+-- ── Publish-event log ────────────────────────────────────────────────────────
+-- Minimal event log for the hybrid-publishing channel. Only 'publish' events
+-- are written today; future manufacturer analytics land here too.
+-- NOTE: named card_publish_events because migration 050 already owns
+-- card_events (public share/view analytics keyed by card_slug).
+CREATE TABLE IF NOT EXISTS public.card_publish_events (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     card_id     UUID NOT NULL REFERENCES public.staged_systems(id) ON DELETE CASCADE,
     event_type  TEXT NOT NULL,
@@ -46,16 +50,17 @@ CREATE TABLE IF NOT EXISTS public.card_events (
     meta        JSONB
 );
 
-CREATE INDEX IF NOT EXISTS idx_card_events_card_id
-  ON public.card_events (card_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_card_publish_events_card_id
+  ON public.card_publish_events (card_id, occurred_at DESC);
 
-ALTER TABLE public.card_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_publish_events ENABLE ROW LEVEL SECURITY;
 
 -- Insert-only from the app (service role bypasses RLS; these policies cover
 -- authenticated manufacturer users so events can also be written client-side
 -- later if needed).
-CREATE POLICY "manufacturer_user can read own card events"
-  ON public.card_events
+DROP POLICY IF EXISTS "manufacturer_user can read own publish events" ON public.card_publish_events;
+CREATE POLICY "manufacturer_user can read own publish events"
+  ON public.card_publish_events
   FOR SELECT
   TO authenticated
   USING (
@@ -64,14 +69,15 @@ CREATE POLICY "manufacturer_user can read own card events"
       FROM public.staged_systems ss
       JOIN public.manufacturer_users mu
         ON mu.manufacturer_id = ss.manufacturer_id
-      WHERE ss.id = card_events.card_id
+      WHERE ss.id = card_publish_events.card_id
         AND mu.auth_user_id = auth.uid()
         AND mu.status = 'active'
     )
   );
 
-CREATE POLICY "buildquote staff can read all card events"
-  ON public.card_events
+DROP POLICY IF EXISTS "buildquote staff can read all publish events" ON public.card_publish_events;
+CREATE POLICY "buildquote staff can read all publish events"
+  ON public.card_publish_events
   FOR SELECT
   TO authenticated
   USING (public.get_my_global_role() IN ('buildquote_admin', 'buildquote_reviewer'));
