@@ -10,6 +10,17 @@
 //
 // Everything here is plain JSON — no Supabase types, no client instances.
 
+// One image in the swipeable hero gallery. Index 0 is the cover image —
+// used on tiles and as the og:image share preview (og_jpg_url when set,
+// since some crawlers won't render webp/avif).
+export type SystemCardGalleryImage = {
+  asset_id?: string | null
+  url: string
+  og_jpg_url?: string | null
+  alt: string
+  caption?: string | null
+}
+
 export type SystemCardColour = {
   colour_name: string
   image_url: string | null
@@ -61,6 +72,9 @@ export type SystemCardSystem = {
   hero_image_url: string | null
   hero_image_position_x: number | null
   hero_image_position_y: number | null
+  // Optional multi-image hero gallery; cards without one fall back to the
+  // single hero_image_url render.
+  gallery_images?: SystemCardGalleryImage[] | null
   australian_made: boolean | null
   bal_rating: string | null
   fire_rating: string | null

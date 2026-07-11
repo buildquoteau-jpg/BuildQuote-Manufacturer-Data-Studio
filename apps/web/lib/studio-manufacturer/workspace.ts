@@ -608,6 +608,7 @@ export type VerificationSystem = {
   hero_image_asset_id: string | null
   hero_image_position_x: number | null
   hero_image_position_y: number | null
+  gallery_images: { asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null }[] | null
   australian_made: boolean | null
   bal_rating: string | null
   fire_rating: string | null
@@ -626,6 +627,9 @@ export type VerificationSystem = {
   verified_at: string | null
   production_system_id: string | null
   last_published_at: string | null
+  // Hybrid publishing (053): live-publish state. Both null pre-migration.
+  publish_status: 'draft' | 'published' | 'published_with_changes' | null
+  published_version: string | null
   updated_at: string
   last_submitted_at: string | null
   profiles: VerificationSystemProfile[]
@@ -643,17 +647,13 @@ export async function getManufacturerVerificationData(
   const c = makeClient()
   if (!c.ok) return { ok: false, error: c.error }
 
-  const [mfrResult, systemsResult] = await Promise.all([
-    c.supabase
-      .from('data_studio_manufacturers')
-      .select('id, name, slug, status, description, website_url')
-      .eq('id', manufacturerId)
-      .single(),
+  const stagedSelect = (withGallery: boolean) =>
     c.supabase
       .from('staged_systems')
       .select(
         'id, name, slug, product_code, category, subcategory, description, hero_image_url, hero_image_asset_id, ' +
         'hero_image_position_x, hero_image_position_y, ' +
+        (withGallery ? 'gallery_images, publish_status, published_version, ' : '') +
         'australian_made, bal_rating, fire_rating, acoustic_rating, moisture_resistant, ' +
         'structural_grade, website_url, source_url, install_guide_urls, design_guide_url, tech_data_url, ' +
         'notes, verification_status, reviewer_notes, verified_at, source_document_id, ' +
@@ -662,8 +662,22 @@ export async function getManufacturerVerificationData(
       .eq('manufacturer_id', manufacturerId)
       .neq('verification_status', 'archived')
       .order('sort_order')
-      .limit(100),
+      .limit(100)
+
+  const [mfrResult, firstSystemsResult] = await Promise.all([
+    c.supabase
+      .from('data_studio_manufacturers')
+      .select('id, name, slug, status, description, website_url')
+      .eq('id', manufacturerId)
+      .single(),
+    stagedSelect(true),
   ])
+
+  // Pre-053 environments lack gallery_images/publish_status — retry without.
+  let systemsResult = firstSystemsResult
+  if (systemsResult.error && /gallery_images|publish_status|published_version|does not exist/i.test(systemsResult.error.message ?? '')) {
+    systemsResult = await stagedSelect(false)
+  }
 
   if (mfrResult.error || !mfrResult.data) {
     return { ok: false, error: mfrResult.error?.message ?? 'Manufacturer not found.' }
@@ -682,6 +696,9 @@ export async function getManufacturerVerificationData(
     category: string | null; subcategory: string | null; description: string | null
     hero_image_url: string | null; hero_image_asset_id: string | null
     hero_image_position_x: number | null; hero_image_position_y: number | null
+    gallery_images?: VerificationSystem['gallery_images']
+    publish_status?: VerificationSystem['publish_status']
+    published_version?: string | null
     australian_made: boolean | null
     bal_rating: string | null; fire_rating: string | null
     acoustic_rating: string | null; moisture_resistant: boolean | null
@@ -788,6 +805,9 @@ export async function getManufacturerVerificationData(
 
   const systems: VerificationSystem[] = systemRows.map((s) => ({
     ...s,
+    gallery_images: s.gallery_images ?? null,
+    publish_status: s.publish_status ?? null,
+    published_version: s.published_version ?? null,
     hero_image_url: (s.hero_image_asset_id && heroImageUrlByAssetId.get(s.hero_image_asset_id)) || s.hero_image_url,
     profiles:   profilesMap.get(s.id)   ?? [],
     colours:    coloursMap.get(s.id)    ?? [],
