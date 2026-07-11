@@ -53,6 +53,24 @@ const STAGED_BOOL_FIELDS = [
   'australian_made', 'moisture_resistant',
 ] as const
 
+// Hybrid publishing: once a card is live, any draft edit flips its status to
+// published_with_changes so list views can show "unpublished changes". Fails
+// soft pre-migration-053 (publish_status column absent).
+async function markDraftChanged(
+  supabase: ReturnType<typeof createStudioServerClient>,
+  systemId: string,
+): Promise<void> {
+  try {
+    await supabase
+      .from('staged_systems')
+      .update({ publish_status: 'published_with_changes' })
+      .eq('id', systemId)
+      .eq('publish_status', 'published')
+  } catch {
+    /* pre-053 environments — publish state tracking simply not available */
+  }
+}
+
 // ─── upsertFieldVerification ──────────────────────────────────────────────────
 // Writes one field verification record.
 // If status='edited', also patches the field value directly on staged_systems.
@@ -108,6 +126,7 @@ export async function upsertFieldVerification(
         .eq('id', systemId)
       if (error) return { ok: false, error: error.message }
     }
+    await markDraftChanged(supabase, systemId)
   }
 
   return { ok: true }
@@ -135,6 +154,7 @@ export async function setInstallGuideUrls(
     .update({ install_guide_urls: guides.length > 0 ? guides : null, updated_at: now })
     .eq('id', systemId)
   if (error) return { ok: false, error: error.message }
+  await markDraftChanged(supabase, systemId)
 
   // Audit trail only, consistent with other verified fields — not read back
   // by the UI, which uses staged_systems.install_guide_urls directly.
@@ -144,6 +164,48 @@ export async function setInstallGuideUrls(
       entity_id: systemId,
       field_name: 'install_guide_urls',
       verified_value: JSON.stringify(guides),
+      status: 'edited',
+      reviewer_id: auth.userId,
+      reviewed_at: now,
+      notes: null,
+      updated_at: now,
+    },
+    { onConflict: 'entity_type,entity_id,field_name' },
+  )
+
+  return { ok: true }
+}
+
+// ─── setGalleryImages ─────────────────────────────────────────────────────────
+// Replaces the whole hero-gallery array (hybrid publishing, migration 053).
+// Ordered; element 0 is the cover/share image. Same full-array pattern as
+// setInstallGuideUrls so reordering can never interleave with field edits.
+
+export async function setGalleryImages(
+  systemId: string,
+  manufacturerId: string,
+  images: { asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null }[],
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+  if (images.length > 10) return { ok: false, error: 'A gallery can hold at most 10 images.' }
+
+  const supabase = createStudioServerClient()
+  const now = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ gallery_images: images, updated_at: now })
+    .eq('id', systemId)
+  if (error) return { ok: false, error: error.message }
+  await markDraftChanged(supabase, systemId)
+
+  await supabase.from('field_verifications').upsert(
+    {
+      entity_type: 'staged_system',
+      entity_id: systemId,
+      field_name: 'gallery_images',
+      verified_value: JSON.stringify(images.map((i) => i.url)),
       status: 'edited',
       reviewer_id: auth.userId,
       reviewed_at: now,

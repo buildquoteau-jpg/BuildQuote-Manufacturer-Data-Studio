@@ -15,6 +15,7 @@
 // attribute pills, guides, "Share System Card", add-to-list — matches v6.
 
 import { useState } from 'react'
+import { HeroGallery } from './HeroGallery'
 import type {
   SystemCardSystem,
   SystemCardProfile,
@@ -743,48 +744,51 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
       fontFamily: FONT_BODY,
     }}>
 
-      {/* Hero */}
-      <div style={{
-        position: 'relative',
-        height: 'clamp(180px, 42vw, 240px)',
-        background: system.hero_image_url?.trim()
-          ? undefined
-          : 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)',
-        overflow: 'hidden',
-      }}>
-        {system.hero_image_url?.trim() && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={system.hero_image_url.trim()}
-            alt={system.name}
-            style={{
-              position: 'absolute', inset: 0, width: '100%', height: '100%',
-              objectFit: 'cover', objectPosition: `${posX}% ${posY}%`,
-            }}
-          />
+      {/* Hero — swipeable gallery when the card ships multiple images,
+          classic single hero otherwise (HeroGallery handles both). */}
+      <HeroGallery
+        images={system.gallery_images ?? []}
+        fallbackHero={{
+          url: system.hero_image_url?.trim() ?? null,
+          alt: system.name,
+          posX,
+          posY,
+        }}
+        overlay={(
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 20px 18px', pointerEvents: 'none' }}>
+            {system.manufacturer && (
+              <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: '4px' }}>
+                {system.manufacturer.name}
+              </div>
+            )}
+            <h1 style={{
+              fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: '#fff',
+              margin: 0, lineHeight: 1.15, letterSpacing: '-0.01em',
+              fontFamily: FONT_HEADING,
+            }}>
+              {stripSystem(system.name)}
+            </h1>
+            {(system.category || system.subcategory) && (
+              <div style={{ marginTop: '4px', fontSize: '12px', color: 'rgba(255,255,255,0.65)' }}>
+                {[system.category, system.subcategory].filter(Boolean).join(' · ')}
+              </div>
+            )}
+          </div>
         )}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,30,45,0.88) 0%, rgba(15,30,45,0.2) 60%, transparent 100%)' }} />
+      />
 
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 20px 18px' }}>
-          {system.manufacturer && (
-            <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: '4px' }}>
-              {system.manufacturer.name}
-            </div>
+      {/* Primary resources — pinned directly beneath the gallery so the two
+          most-used actions are reachable before any scrolling. */}
+      {(system.website_url?.trim() || (system.install_guide_urls?.length ?? 0) > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px 20px 0' }}>
+          {system.website_url?.trim() && (
+            <GuideLink href={docHref(system.website_url.trim(), 'Website')} context={`View ${mfrName}`} label="Website" />
           )}
-          <h1 style={{
-            fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: '#fff',
-            margin: 0, lineHeight: 1.15, letterSpacing: '-0.01em',
-            fontFamily: FONT_HEADING,
-          }}>
-            {stripSystem(system.name)}
-          </h1>
-          {(system.category || system.subcategory) && (
-            <div style={{ marginTop: '4px', fontSize: '12px', color: 'rgba(255,255,255,0.65)' }}>
-              {[system.category, system.subcategory].filter(Boolean).join(' · ')}
-            </div>
-          )}
+          {(Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []).map((guide, i) => (
+            <GuideLink key={i} href={docHref(guide.url, 'Installation guide')} context={`View ${mfrName}`} label="Installation guide" />
+          ))}
         </div>
-      </div>
+      )}
 
       {/* Body */}
       <div style={{ padding: '20px 20px 24px' }}>
@@ -1005,16 +1009,8 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
             </div>
           )}
 
-          {/* Manufacturer website — only when the column holds a real URL
-              (guard against NULL and whitespace-only/dirty values). */}
-          {system.website_url?.trim() && (
-            <GuideLink href={docHref(system.website_url.trim(), 'Website')} context={`View ${mfrName}`} label="Website" />
-          )}
-
-          {/* Install guides */}
-          {(Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []).map((guide, i) => (
-            <GuideLink key={i} href={docHref(guide.url, 'Installation guide')} context={`View ${mfrName}`} label="Installation guide" />
-          ))}
+          {/* Website + install guides moved beneath the hero gallery (top of
+              card) — only the secondary guides remain here. */}
 
           {/* Design guide */}
           {system.design_guide_url && (

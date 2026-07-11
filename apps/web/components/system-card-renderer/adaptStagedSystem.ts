@@ -59,6 +59,7 @@ export function adaptStagedSystem(
     hero_image_url: system.hero_image_url,
     hero_image_position_x: system.hero_image_position_x,
     hero_image_position_y: system.hero_image_position_y,
+    gallery_images: system.gallery_images ?? null,
     australian_made: system.australian_made,
     bal_rating: system.bal_rating,
     fire_rating: system.fire_rating,

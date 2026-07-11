@@ -75,8 +75,10 @@ const AXON_CLADDING: SystemCardData = {
   acoustic_rating: null,
   structural_grade: null,
   australian_made: null,
-  source_url: null,
-  install_guide_urls: null,
+  // Demo links so the primary-resource buttons beneath the hero gallery
+  // (Library V7 layout) are visible on the no-auth preview page.
+  source_url: 'https://www.jameshardie.com.au/',
+  install_guide_urls: [{ label: 'Axon Cladding', url: 'https://www.jameshardie.com.au/axon-install-guide' }],
   design_guide_url: null,
   tech_data_url: null,
   notes: 'Pre-primed/site-painted — no stocked colours.',
@@ -375,7 +377,17 @@ export const DEMO_MANUFACTURER: SystemCardManufacturerPage = {
   hero_image_url: null,
 }
 
+// Demo gallery (Library V7 hero gallery) — placeholder images so the
+// swipeable gallery, count pill, dots and fullscreen lightbox are all
+// exercisable on this no-auth preview page.
+const DEMO_GALLERY = [1, 2, 3, 4, 5, 6].map(n => ({
+  url: `https://picsum.photos/seed/bq-axon-${n}/1200/700`,
+  og_jpg_url: null,
+  alt: `Axon Cladding demo image ${n}`,
+  caption: n === 1 ? 'Installed project — demo image' : null,
+}))
+
 export const DEMO_SYSTEMS: SystemCardSystem[] = [
-  toRendererSystem(AXON_CLADDING, 'demo-axon'),
+  { ...toRendererSystem(AXON_CLADDING, 'demo-axon'), gallery_images: DEMO_GALLERY },
   toRendererSystem(JDS_REGALFRAME, 'demo-regalframe'),
 ]
