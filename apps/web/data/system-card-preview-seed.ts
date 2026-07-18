@@ -32,6 +32,7 @@ type SystemCardData = {
   install_guide_urls: { label: string; url: string }[] | null
   design_guide_url: string | null
   tech_data_url: string | null
+  custom_document_links: { label: string; url: string }[] | null
   profiles: {
     product_code: string | null
     profile_name: string
@@ -82,6 +83,11 @@ const AXON_CLADDING: SystemCardData = {
   install_guide_urls: [{ label: 'Axon Cladding', url: 'https://www.jameshardie.com.au/axon-install-guide' }],
   design_guide_url: null,
   tech_data_url: null,
+  // Demo extra documents so the named-button feature is visible on the preview.
+  custom_document_links: [
+    { label: 'Energy rating', url: 'https://www.jameshardie.com.au/axon-energy-rating' },
+    { label: 'Sustainability report', url: 'https://www.jameshardie.com.au/sustainability' },
+  ],
   notes: 'Pre-primed/site-painted — no stocked colours.',
 
   profiles: [
@@ -230,6 +236,7 @@ const JDS_REGALFRAME: SystemCardData = {
   install_guide_urls: null,
   design_guide_url: null,
   tech_data_url: null,
+  custom_document_links: null,
   notes: null,
 
   profiles: [
@@ -327,6 +334,7 @@ function toRendererSystem(data: SystemCardData, id: string): SystemCardSystem {
     install_guide_urls: data.install_guide_urls,
     design_guide_url: data.design_guide_url,
     tech_data_url: data.tech_data_url,
+    custom_document_links: data.custom_document_links,
     manufacturer: {
       name: data.manufacturer_name,
       slug: slugify(data.manufacturer_name),

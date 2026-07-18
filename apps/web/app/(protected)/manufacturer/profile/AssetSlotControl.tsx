@@ -43,6 +43,7 @@ export function AssetSlotControl({
   currentAssetId,
   onPick,
   onClear,
+  quickImportUrl,
 }: {
   manufacturerId: string
   /** Asset type given to newly uploaded/imported images for this slot. */
@@ -53,6 +54,13 @@ export function AssetSlotControl({
   currentAssetId: string | null
   onPick: (pick: SlotPick) => void
   onClear: () => void
+  /**
+   * A raw URL already on file for this slot (e.g. a legacy *_url column set
+   * by the web enricher) that isn't yet backed by a real asset. When set and
+   * no asset is currently linked, offers a one-click "promote this URL"
+   * button that imports it without the user re-typing it.
+   */
+  quickImportUrl?: string | null
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -125,6 +133,25 @@ export function AssetSlotControl({
     }
   }
 
+  async function handleQuickImport() {
+    if (!quickImportUrl) return
+    setErrorMsg('')
+    setBusyMsg('Promoting to asset…')
+    try {
+      const result = await importAssetFromUrl({
+        manufacturerId,
+        url: quickImportUrl,
+        assetType: uploadAssetType,
+        title: null,
+        altText: null,
+      })
+      if (!result.ok) { setErrorMsg(result.error); return }
+      onPick({ assetId: result.assetId, publicUrl: result.publicUrl, displayUrl: result.displayUrl })
+    } finally {
+      setBusyMsg('')
+    }
+  }
+
   const smallBtn: React.CSSProperties = { fontSize: '0.74rem', padding: '0.28rem 0.65rem' }
 
   return (
@@ -146,6 +173,14 @@ export function AssetSlotControl({
           onClick={() => { setPickerOpen((v) => !v); setImportOpen(false) }}>
           Choose from assets ({pickable.length})
         </button>
+        {!current && quickImportUrl && (
+          <button type="button" className="studio-btn studio-btn-ghost" style={smallBtn}
+            disabled={!!busyMsg}
+            title="Fetch, optimize and store the URL already on file as a proper asset"
+            onClick={handleQuickImport}>
+            Promote current URL to asset
+          </button>
+        )}
         {current && (
           <>
             <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-muted)' }}>

@@ -1,6 +1,7 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
+import { getManufacturerLinkLibrary } from '@/lib/studio-manufacturer/link-library'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { VerificationGrid } from './VerificationGrid'
 
@@ -23,9 +24,10 @@ export default async function ManufacturerReviewPage() {
     )
   }
 
-  const [result, assetsResult] = await Promise.all([
+  const [result, assetsResult, linkLibraryResult] = await Promise.all([
     getManufacturerVerificationData(ctx.manufacturerId),
     getManufacturerAssets(ctx.manufacturerId),
+    getManufacturerLinkLibrary(ctx.manufacturerId),
   ])
 
   if (!result.ok) {
@@ -41,6 +43,9 @@ export default async function ManufacturerReviewPage() {
   // Fails soft — hero-image asset linking just won't offer a picker if the
   // asset library can't be loaded; everything else on this page still works.
   const assets = assetsResult.ok ? assetsResult.assets : []
+  // Fails soft — the "add from library" dropdown just won't appear if
+  // migration 056 isn't applied yet; manual entry still works.
+  const linkLibrary = linkLibraryResult.ok ? linkLibraryResult.links : []
   const verifiedCount    = systems.filter(s => s.verification_status === 'manufacturer_verified').length
   const inReviewCount    = systems.filter(s => s.verification_status === 'in_review').length
   const pendingCount     = systems.filter(s => s.verification_status === 'pending_review').length
@@ -139,6 +144,7 @@ export default async function ManufacturerReviewPage() {
         manufacturerName={manufacturer.name}
         systems={systems}
         assets={assets}
+        linkLibrary={linkLibrary}
       />
     </StudioShell>
   )

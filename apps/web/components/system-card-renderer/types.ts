@@ -88,6 +88,9 @@ export type SystemCardSystem = {
   install_guide_urls: { label: string; url: string }[] | null
   design_guide_url: string | null
   tech_data_url: string | null
+  // Arbitrary named document buttons (energy ratings, sustainability reports,
+  // warranty PDFs…). `label` is the button text, `url` is a PDF or web page.
+  custom_document_links?: { label: string; url: string }[] | null
   manufacturer: {
     name: string
     slug: string

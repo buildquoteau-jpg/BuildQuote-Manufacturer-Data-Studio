@@ -143,6 +143,7 @@ export function evaluateCardReadiness(
     ...(Array.isArray(card.install_guide_urls) ? card.install_guide_urls : []),
     ...(card.design_guide_url ? [{ label: 'Design guide', url: card.design_guide_url }] : []),
     ...(card.tech_data_url ? [{ label: 'Technical data', url: card.tech_data_url }] : []),
+    ...(Array.isArray(card.custom_document_links) ? card.custom_document_links : []),
   ]
   for (const guide of guides) {
     if (!isPublicGuideUrl(guide.url)) {

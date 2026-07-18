@@ -72,6 +72,7 @@ export function adaptStagedSystem(
     install_guide_urls: system.install_guide_urls,
     design_guide_url: system.design_guide_url,
     tech_data_url: system.tech_data_url,
+    custom_document_links: system.custom_document_links ?? null,
     manufacturer: {
       name: manufacturer.name,
       slug: manufacturer.slug,

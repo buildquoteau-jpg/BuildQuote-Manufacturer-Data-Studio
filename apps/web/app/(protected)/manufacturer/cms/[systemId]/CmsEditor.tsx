@@ -20,6 +20,7 @@ import Link from 'next/link'
 import {
   upsertFieldVerification,
   setInstallGuideUrls,
+  setCustomDocumentLinks,
   setGalleryImages,
 } from '@/lib/studio-manufacturer/verification-actions'
 import { publishCardLive } from '@/lib/studio-manufacturer/publish-live-actions'
@@ -27,6 +28,9 @@ import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStaged
 import { SystemCardRenderer } from '@/components/system-card-renderer/SystemCardRenderer'
 import type { VerificationSystem, ManufacturerInfo } from '@/lib/studio-manufacturer/workspace'
 import type { ManufacturerAsset } from '@/lib/studio-manufacturer/assets'
+import type { LinkLibraryEntry } from '@/lib/studio-manufacturer/link-library'
+import { addLinkLibraryEntry } from '@/lib/studio-manufacturer/link-library-actions'
+import { LinkLibraryPicker } from '@/components/studio/LinkLibraryPicker'
 
 type GalleryImage = NonNullable<VerificationSystem['gallery_images']>[number]
 
@@ -35,6 +39,7 @@ type Props = {
   manufacturer: ManufacturerInfo
   initialSystem: VerificationSystem
   assets: ManufacturerAsset[]
+  linkLibrary: LinkLibraryEntry[]
 }
 
 const TEXT_FIELDS = [
@@ -55,8 +60,9 @@ const LINK_FIELDS = [
   { name: 'tech_data_url', label: 'Technical data URL' },
 ] as const
 
-export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets }: Props) {
+export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets, linkLibrary: initialLinkLibrary }: Props) {
   const [system, setSystem] = useState<VerificationSystem>(initialSystem)
+  const [linkLibrary, setLinkLibrary] = useState(initialLinkLibrary)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -368,6 +374,16 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets 
                 runSave('install_guide_urls', () => setInstallGuideUrls(system.id, manufacturerId, guides))
               }}
             />
+            <CustomDocumentsField
+              links={system.custom_document_links ?? []}
+              onChange={links => {
+                patch({ custom_document_links: links })
+                runSave('custom_document_links', () => setCustomDocumentLinks(system.id, manufacturerId, links))
+              }}
+              manufacturerId={manufacturerId}
+              linkLibrary={linkLibrary}
+              onLibraryAdd={entry => setLinkLibrary(prev => [entry, ...prev])}
+            />
           </Section>
 
           <Section title="Profiles, components & colours">
@@ -497,6 +513,81 @@ function InstallGuidesField({
           }}
         >
           + Add installation guide
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Arbitrary named documents (energy ratings, sustainability reports, warranty
+// PDFs…). Same shape as install guides, but the title is required — it becomes
+// the button text on the card.
+function CustomDocumentsField({
+  links,
+  onChange,
+  manufacturerId,
+  linkLibrary,
+  onLibraryAdd,
+}: {
+  links: { label: string; url: string }[]
+  onChange: (links: { label: string; url: string }[]) => void
+  manufacturerId: string
+  linkLibrary: LinkLibraryEntry[]
+  onLibraryAdd: (entry: LinkLibraryEntry) => void
+}) {
+  function handleAttachFromLibrary(entry: LinkLibraryEntry) {
+    if (links.some(l => l.url === entry.url)) return
+    onChange([...links, { label: entry.label, url: entry.url }])
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--ds-text-muted)', marginBottom: 4 }}>
+        Additional documents
+      </div>
+      {linkLibrary.length > 0 && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <LinkLibraryPicker library={linkLibrary} onAttach={handleAttachFromLibrary} />
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+        {links.map((g, i) => (
+          <div key={i} style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+            <input
+              value={g.label}
+              placeholder="Button title (e.g. Energy rating)"
+              onChange={e => onChange(links.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+              style={{ ...inputStyle, flex: '0 0 38%' }}
+            />
+            <input
+              value={g.url}
+              placeholder="https://… (PDF or web page)"
+              onChange={e => onChange(links.map((x, j) => j === i ? { ...x, url: e.target.value } : x))}
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            {g.label.trim() && g.url.trim() && (
+              <IconButton
+                label="Save to link library for reuse on other systems"
+                onClick={() => {
+                  addLinkLibraryEntry(manufacturerId, g.label, g.url).then(res => {
+                    if (res.ok) onLibraryAdd(res.entry)
+                  })
+                }}
+              >★</IconButton>
+            )}
+            <IconButton label="Remove document" onClick={() => onChange(links.filter((_, j) => j !== i))}>✕</IconButton>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => onChange([...links, { label: '', url: '' }])}
+          style={{
+            alignSelf: 'flex-start', padding: '6px 12px', borderRadius: 7,
+            border: '1.5px dashed var(--ds-border)', background: 'transparent',
+            color: 'var(--ds-text-muted)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          + Add document
         </button>
       </div>
     </div>

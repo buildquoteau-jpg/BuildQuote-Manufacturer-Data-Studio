@@ -4,8 +4,10 @@ import {
   getManufacturerInfo,
 } from '@/lib/studio-manufacturer/workspace'
 import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
+import { getManufacturerLinkLibrary } from '@/lib/studio-manufacturer/link-library'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { AssetsClient, type AssetView } from './AssetsClient'
+import { LinkLibraryManager } from './LinkLibraryManager'
 
 // Assets = the public visual files that ship inside the static System Card
 // website package (logos, heroes, banners, product shots). Distinct from
@@ -28,10 +30,12 @@ export default async function ManufacturerAssetsPage() {
     )
   }
 
-  const [assetsResult, mfrResult] = await Promise.all([
+  const [assetsResult, mfrResult, linkLibraryResult] = await Promise.all([
     getManufacturerAssets(ctx.manufacturerId),
     getManufacturerInfo(ctx.manufacturerId),
+    getManufacturerLinkLibrary(ctx.manufacturerId),
   ])
+  const linkLibrary = linkLibraryResult.ok ? linkLibraryResult.links : []
   const workspaceName = mfrResult.ok ? mfrResult.manufacturer.name : undefined
 
   const assets: AssetView[] = assetsResult.ok
@@ -74,6 +78,16 @@ export default async function ManufacturerAssetsPage() {
       )}
 
       <AssetsClient manufacturerId={ctx.manufacturerId} assets={assets} />
+
+      {linkLibraryResult.ok ? (
+        <LinkLibraryManager manufacturerId={ctx.manufacturerId} initialLinks={linkLibrary} />
+      ) : (
+        <div className={linkLibraryResult.migrationMissing ? 'studio-info' : 'studio-warn'} style={{ marginTop: '2.5rem' }}>
+          {linkLibraryResult.migrationMissing
+            ? "The link library isn't set up yet — ask BuildQuote admin to apply migration 056."
+            : linkLibraryResult.error}
+        </div>
+      )}
     </StudioShell>
   )
 }

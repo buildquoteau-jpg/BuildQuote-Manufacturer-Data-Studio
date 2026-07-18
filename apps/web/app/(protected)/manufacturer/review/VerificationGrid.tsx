@@ -5,6 +5,9 @@ import { SystemCard } from '@/components/system-card/SystemCard'
 import type { SystemCardData } from '@/components/system-card/SystemCard'
 import type { VerificationSystem, VerificationSystemProfile, VerificationSystemColour, VerificationSystemComponent } from '@/lib/studio-manufacturer/workspace'
 import type { ManufacturerAsset } from '@/lib/studio-manufacturer/assets'
+import type { LinkLibraryEntry } from '@/lib/studio-manufacturer/link-library'
+import { addLinkLibraryEntry } from '@/lib/studio-manufacturer/link-library-actions'
+import { LinkLibraryPicker } from '@/components/studio/LinkLibraryPicker'
 import {
   upsertFieldVerification,
   clearFieldVerification,
@@ -23,6 +26,7 @@ import {
   updateSystemImageCrop,
   updateSystemHeroAsset,
   setInstallGuideUrls,
+  setCustomDocumentLinks,
   createBlankSystem,
   linkSourceDocument,
   getManufacturerSourceDocuments,
@@ -810,7 +814,7 @@ function InstallGuidesEditor({
                 <input
                   defaultValue={g.url}
                   onBlur={e => e.target.value.trim() !== g.url && handleEdit(i, 'url', e.target.value.trim())}
-                  placeholder="https://…"
+                  placeholder="https://… (PDF or web/video page)"
                   style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', color: '#185D7A', fontFamily: 'inherit' }}
                 />
               </div>
@@ -830,7 +834,7 @@ function InstallGuidesEditor({
               <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label, e.g. Timber frame"
                 style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
             )}
-            <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://…"
+            <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://… (PDF or web/video page)"
               style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
               autoFocus={guides.length === 0} />
             <div style={{ display: 'flex', gap: '6px' }}>
@@ -848,6 +852,213 @@ function InstallGuidesEditor({
           <button type="button" onClick={() => setAdding(true)}
             style={{ alignSelf: 'flex-start', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '6px', padding: '4px 12px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
             + Add install guide{guides.length > 0 ? ' (e.g. for a different frame type)' : ''}
+          </button>
+        )}
+      </div>
+      {flagging && (
+        <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+          <input type="text" value={flagNote} onChange={e => setFlagNote(e.target.value)}
+            placeholder="Describe what needs fixing…"
+            style={{ flex: 1, padding: '6px 8px', border: '1.5px solid #dc2626', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: 'inherit' }}
+            autoFocus />
+          <button type="button" onClick={handleSaveFlag} disabled={verifyPending}
+            style={{ padding: '6px 12px', borderRadius: '6px', background: '#dc2626', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: verifyPending ? 0.5 : 1 }}>
+            Flag
+          </button>
+        </div>
+      )}
+      {(err || verifyErr) && <div style={{ marginTop: '6px', fontSize: '11px', color: '#dc2626' }}>{err ?? verifyErr}</div>}
+    </div>
+  )
+}
+
+// ─── Custom document links (title + URL, multiple — energy ratings, etc.) ─────
+// Like install guides, but every entry needs a title because it becomes the
+// button text on the card. Use for any document that isn't an install/design/
+// tech guide: energy ratings, sustainability reports, warranty PDFs, and so on.
+
+function CustomDocumentsEditor({
+  links, systemId, manufacturerId, fieldState, onUpdated, onStateChange, linkLibrary, onLibraryAdd,
+}: {
+  links: { label: string; url: string }[]
+  systemId: string
+  manufacturerId: string
+  fieldState: FieldState | null
+  onUpdated: (links: { label: string; url: string }[]) => void
+  onStateChange: (fieldName: string, state: FieldState | null) => void
+  linkLibrary: LinkLibraryEntry[]
+  onLibraryAdd: (entry: LinkLibraryEntry) => void
+}) {
+  const [pending, startTransition] = useTransition()
+  const [err, setErr] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newUrl, setNewUrl] = useState('')
+  const [saveToLibrary, setSaveToLibrary] = useState(false)
+  const [flagging, setFlagging] = useState(false)
+  const [flagNote, setFlagNote] = useState(fieldState?.notes ?? '')
+  const [verifyPending, startVerifyTransition] = useTransition()
+  const [verifyErr, setVerifyErr] = useState<string | null>(null)
+
+  const status = fieldState?.status ?? null
+  const statusColor = status === 'approved' ? '#16a34a' : status === 'flagged' ? '#dc2626' : '#d1d5db'
+  const statusBg    = status === 'approved' ? '#f0fdf4' : status === 'flagged' ? '#fef2f2' : 'transparent'
+
+  function persist(next: { label: string; url: string }[]) {
+    setErr(null)
+    startTransition(async () => {
+      const res = await setCustomDocumentLinks(systemId, manufacturerId, next)
+      if (!res.ok) { setErr(res.error); return }
+      onUpdated(next)
+    })
+  }
+
+  function handleAdd() {
+    if (!newUrl.trim() || !newLabel.trim()) return
+    persist([...links, { label: newLabel.trim(), url: newUrl.trim() }])
+    if (saveToLibrary) {
+      startTransition(async () => {
+        const res = await addLinkLibraryEntry(manufacturerId, newLabel.trim(), newUrl.trim())
+        if (res.ok) onLibraryAdd(res.entry)
+      })
+    }
+    setNewLabel(''); setNewUrl(''); setSaveToLibrary(false); setAdding(false)
+  }
+
+  function handleAttachFromLibrary(entry: LinkLibraryEntry) {
+    if (links.some(l => l.url === entry.url)) return
+    persist([...links, { label: entry.label, url: entry.url }])
+  }
+
+  function handleRemove(i: number) {
+    persist(links.filter((_, idx) => idx !== i))
+  }
+
+  function handleEdit(i: number, field: 'label' | 'url', value: string) {
+    persist(links.map((g, idx) => idx === i ? { ...g, [field]: value } : g))
+  }
+
+  function handleApprove() {
+    setVerifyErr(null)
+    if (status === 'approved') {
+      startVerifyTransition(async () => {
+        const res = await clearFieldVerification(systemId, manufacturerId, 'custom_document_links')
+        if (!res.ok) { setVerifyErr(res.error); return }
+        onStateChange('custom_document_links', null)
+      })
+      return
+    }
+    setFlagging(false)
+    startVerifyTransition(async () => {
+      const value = JSON.stringify(links)
+      const res = await upsertFieldVerification(systemId, manufacturerId, 'custom_document_links', value, value, 'approved', null)
+      if (!res.ok) { setVerifyErr(res.error); return }
+      onStateChange('custom_document_links', { status: 'approved', verifiedValue: value, notes: null })
+    })
+  }
+
+  function handleSaveFlag() {
+    setVerifyErr(null)
+    startVerifyTransition(async () => {
+      const value = JSON.stringify(links)
+      const res = await upsertFieldVerification(systemId, manufacturerId, 'custom_document_links', value, null, 'flagged', flagNote.trim() || null)
+      if (!res.ok) { setVerifyErr(res.error); return }
+      onStateChange('custom_document_links', { status: 'flagged', verifiedValue: null, notes: flagNote.trim() || null })
+      setFlagging(false)
+    })
+  }
+
+  return (
+    <div style={{ borderRadius: '8px', border: `1px solid ${statusColor}`, background: statusBg, padding: '10px 12px', transition: 'all 0.15s' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '4px' }}>
+        <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>
+          Additional documents {links.length > 0 ? `(${links.length})` : ''}
+          {status === 'flagged' && <span style={{ marginLeft: '6px', color: '#dc2626', fontWeight: 700 }}>FLAGGED</span>}
+        </div>
+        {verifyPending ? (
+          <span style={{ fontSize: '11px', color: '#9ca3af' }}>saving…</span>
+        ) : (
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+            <button type="button" title={status === 'approved' ? 'Remove approval' : 'Mark as correct'} onClick={handleApprove}
+              style={{
+                width: 28, height: 28, borderRadius: '6px', cursor: 'pointer',
+                border: `1.5px solid ${status === 'approved' ? '#16a34a' : '#d1d5db'}`,
+                background: status === 'approved' ? '#16a34a' : '#fff',
+                color: status === 'approved' ? '#fff' : '#6b7280',
+                fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>✓</button>
+            <button type="button" title="Flag for review" onClick={() => setFlagging(f => !f)}
+              style={{
+                width: 28, height: 28, borderRadius: '6px', cursor: 'pointer',
+                border: `1.5px solid ${status === 'flagged' || flagging ? '#dc2626' : '#d1d5db'}`,
+                background: status === 'flagged' || flagging ? '#fef2f2' : '#fff',
+                color: status === 'flagged' || flagging ? '#dc2626' : '#6b7280',
+                fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>⚑</button>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+        Energy ratings, sustainability reports, warranty PDFs — anything that isn’t an install, design or technical guide. The title becomes the button on the card.
+      </div>
+      {linkLibrary.length > 0 && (
+        <div style={{ marginBottom: '8px' }}>
+          <LinkLibraryPicker library={linkLibrary} onAttach={handleAttachFromLibrary} disabled={pending} />
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {links.length === 0 && (
+          <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>None linked yet.</div>
+        )}
+        {links.map((g, i) => (
+          <div key={i} style={{ borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', padding: '10px 12px' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  defaultValue={g.label}
+                  onBlur={e => e.target.value.trim() !== g.label && handleEdit(i, 'label', e.target.value.trim())}
+                  placeholder="Button title, e.g. Energy rating"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '11px', fontWeight: 700, marginBottom: '4px', fontFamily: 'inherit' }}
+                />
+                <input
+                  defaultValue={g.url}
+                  onBlur={e => e.target.value.trim() !== g.url && handleEdit(i, 'url', e.target.value.trim())}
+                  placeholder="https://… (PDF or web page)"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', color: '#185D7A', fontFamily: 'inherit' }}
+                />
+              </div>
+              <button type="button" title="Remove" onClick={() => handleRemove(i)} disabled={pending}
+                style={{ width: 28, height: 28, borderRadius: '6px', border: '1.5px solid #d1d5db', background: '#fff', color: '#6b7280', cursor: 'pointer', fontSize: '13px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                ×
+              </button>
+            </div>
+          </div>
+        ))}
+        {adding ? (
+          <div style={{ borderRadius: '8px', border: '1.5px solid #185D7A', background: '#eef6fa', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Button title, e.g. Sustainability report"
+              style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
+            <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://… (PDF or web page)"
+              style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#6b7280', cursor: 'pointer' }}>
+              <input type="checkbox" checked={saveToLibrary} onChange={e => setSaveToLibrary(e.target.checked)} />
+              Save to link library for reuse on other systems
+            </label>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button type="button" onClick={handleAdd} disabled={pending || !newUrl.trim() || !newLabel.trim()}
+                style={{ padding: '5px 14px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !newUrl.trim() || !newLabel.trim() ? 0.5 : 1 }}>
+                Add
+              </button>
+              <button type="button" onClick={() => { setAdding(false); setNewLabel(''); setNewUrl(''); setSaveToLibrary(false) }}
+                style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setAdding(true)}
+            style={{ alignSelf: 'flex-start', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '6px', padding: '4px 12px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
+            + Add document
           </button>
         )}
       </div>
@@ -1656,6 +1867,8 @@ function ExpandedCardView({
   manufacturerId,
   manufacturerName,
   assets,
+  linkLibrary,
+  onLibraryAdd,
   onClose,
   onStatusChange,
   onSystemFieldUpdate,
@@ -1665,6 +1878,8 @@ function ExpandedCardView({
   manufacturerId: string
   manufacturerName: string
   assets: ManufacturerAsset[]
+  linkLibrary: LinkLibraryEntry[]
+  onLibraryAdd: (entry: LinkLibraryEntry) => void
   onClose: () => void
   onStatusChange: (systemId: string, newStatus: string, reviewerNotes: string | null) => void
   onSystemFieldUpdate: (systemId: string, fieldName: string, value: string) => void
@@ -1846,6 +2061,7 @@ function ExpandedCardView({
     install_guide_urls: system.install_guide_urls,
     design_guide_url:   system.design_guide_url,
     tech_data_url:      system.tech_data_url,
+    custom_document_links: system.custom_document_links ?? null,
     profiles: system.profiles.map(p => ({
       product_code: p.product_code, profile_name: p.profile_name,
       dimensions: p.dimensions, length_mm: p.length_mm,
@@ -2042,6 +2258,7 @@ function ExpandedCardView({
                   currentAssetId={system.hero_image_asset_id}
                   onPick={handleHeroAssetPick}
                   onClear={handleHeroAssetClear}
+                  quickImportUrl={system.hero_image_url}
                 />
                 {!system.hero_image_asset_id && system.hero_image_url && (
                   <p style={{ fontSize: '11px', color: '#b45309', margin: '6px 0 0' }}>
@@ -2098,6 +2315,16 @@ function ExpandedCardView({
                   />
                 )
               }
+              <CustomDocumentsEditor
+                links={Array.isArray(system.custom_document_links) ? system.custom_document_links : []}
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                fieldState={fieldStates['custom_document_links'] ?? null}
+                onUpdated={(links) => setSystem(prev => ({ ...prev, custom_document_links: links.length > 0 ? links : null }))}
+                linkLibrary={linkLibrary}
+                onLibraryAdd={onLibraryAdd}
+                onStateChange={handleFieldChange}
+              />
             </FieldSection>
 
             {/* Technical attributes */}
@@ -2362,13 +2589,16 @@ export function VerificationGrid({
   manufacturerName,
   systems: initialSystems,
   assets,
+  linkLibrary: initialLinkLibrary,
 }: {
   manufacturerId: string
   manufacturerName: string
   systems: VerificationSystem[]
   assets: ManufacturerAsset[]
+  linkLibrary: LinkLibraryEntry[]
 }) {
   const [systems,    setSystems]    = useState(initialSystems)
+  const [linkLibrary, setLinkLibrary] = useState(initialLinkLibrary)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [creating,   startCreateTransition] = useTransition()
   const [createError, setCreateError] = useState<string | null>(null)
@@ -2406,6 +2636,7 @@ export function VerificationGrid({
         install_guide_urls: null,
         design_guide_url: null,
         tech_data_url: null,
+        custom_document_links: null,
         notes: null,
         verification_status: 'pending_review',
         reviewer_notes: null,
@@ -2546,6 +2777,8 @@ export function VerificationGrid({
           manufacturerId={manufacturerId}
           manufacturerName={manufacturerName}
           assets={assets}
+          linkLibrary={linkLibrary}
+          onLibraryAdd={(entry) => setLinkLibrary(prev => [entry, ...prev])}
           onClose={() => setExpandedId(null)}
           onStatusChange={handleStatusChange}
           onSystemFieldUpdate={handleSystemFieldUpdate}

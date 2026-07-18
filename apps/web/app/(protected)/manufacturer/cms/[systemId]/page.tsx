@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
+import { getManufacturerLinkLibrary } from '@/lib/studio-manufacturer/link-library'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { CmsEditor } from './CmsEditor'
 
@@ -22,9 +23,10 @@ export default async function CmsEditorPage({
     )
   }
 
-  const [result, assetsResult] = await Promise.all([
+  const [result, assetsResult, linkLibraryResult] = await Promise.all([
     getManufacturerVerificationData(ctx.manufacturerId),
     getManufacturerAssets(ctx.manufacturerId),
+    getManufacturerLinkLibrary(ctx.manufacturerId),
   ])
   if (!result.ok) {
     return (
@@ -38,6 +40,7 @@ export default async function CmsEditorPage({
   if (!system) notFound()
 
   const assets = assetsResult.ok ? assetsResult.assets : []
+  const linkLibrary = linkLibraryResult.ok ? linkLibraryResult.links : []
 
   return (
     <StudioShell role="manufacturer" subtitle={`${result.manufacturer.name} · Edit card`}>
@@ -46,6 +49,7 @@ export default async function CmsEditorPage({
         manufacturer={result.manufacturer}
         initialSystem={system}
         assets={assets}
+        linkLibrary={linkLibrary}
       />
     </StudioShell>
   )

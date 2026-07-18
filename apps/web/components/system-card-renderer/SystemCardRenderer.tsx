@@ -1023,6 +1023,12 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
             <GuideLink href={docHref(system.tech_data_url, 'Technical guide')} context={`View ${mfrName}`} label="Technical guide" />
           )}
 
+          {/* Extra named documents (energy ratings, sustainability reports…) —
+              the manufacturer-supplied label is the button text. */}
+          {(Array.isArray(system.custom_document_links) ? system.custom_document_links : []).map((doc, i) => (
+            <GuideLink key={i} href={docHref(doc.url, doc.label || 'Document')} context={`View ${mfrName}`} label={doc.label || 'Document'} />
+          ))}
+
         </div>
 
         {/* Validation footer — who stands behind this data, when, which version */}

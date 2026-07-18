@@ -21,6 +21,7 @@ function knownDocUrls(system: Partial<SystemCardSystem> & Record<string, unknown
   add(system.tech_data_url)
   add((system as Record<string, unknown>).source_url)
   for (const g of (Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []) as { url?: string }[]) add(g?.url)
+  for (const d of (Array.isArray(system.custom_document_links) ? system.custom_document_links : []) as { url?: string }[]) add(d?.url)
   return urls
 }
 
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
     } else {
       const { data: staged } = await supabase
         .from('staged_systems')
-        .select('id, website_url, design_guide_url, tech_data_url, source_url, install_guide_urls')
+        .select('id, website_url, design_guide_url, tech_data_url, source_url, install_guide_urls, custom_document_links')
         .eq('manufacturer_id', manufacturer.id)
         .eq('slug', slug)
         .limit(1)

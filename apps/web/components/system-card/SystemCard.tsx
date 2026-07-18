@@ -58,6 +58,7 @@ export interface SystemCardData {
   install_guide_urls: { label: string; url: string }[] | null
   design_guide_url: string | null
   tech_data_url: string | null
+  custom_document_links?: { label: string; url: string }[] | null
   profiles: SystemProfile[]
   components: SystemComponent[]
   colours: SystemColour[]
@@ -782,6 +783,18 @@ export function SystemCard({ data }: { data: SystemCardData }) {
               Technical Data Sheet
             </a>
           )}
+          {(Array.isArray(data.custom_document_links) ? data.custom_document_links : []).map((doc, i) => (
+            <a
+              key={i}
+              href={doc.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="studio-btn studio-btn-ghost"
+              style={{ fontSize: '0.875rem' }}
+            >
+              {doc.label || 'Document'}
+            </a>
+          ))}
         </div>
       </div>
     </div>

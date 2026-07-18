@@ -176,6 +176,58 @@ export async function setInstallGuideUrls(
   return { ok: true }
 }
 
+// ─── setCustomDocumentLinks ───────────────────────────────────────────────────
+// Replaces the whole custom_document_links array. These are arbitrary named
+// documents (energy ratings, sustainability reports, warranty PDFs…) that get
+// their own button on the card — each carries a required label (the button
+// text) plus a PDF/web URL. Same full-array pattern as setInstallGuideUrls so
+// the JSONB shape is never flattened by the generic text-field path.
+// Fails soft pre-migration-055 (column absent) so older environments don't
+// break — the update simply no-ops there.
+
+export async function setCustomDocumentLinks(
+  systemId: string,
+  manufacturerId: string,
+  links: { label: string; url: string }[],
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const now = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ custom_document_links: links.length > 0 ? links : null, updated_at: now })
+    .eq('id', systemId)
+  if (error) {
+    if (/custom_document_links|does not exist/i.test(error.message ?? '')) {
+      return { ok: false, error: 'Additional documents need migration 055 applied first.' }
+    }
+    return { ok: false, error: error.message }
+  }
+  await markDraftChanged(supabase, systemId)
+
+  // Audit trail only, consistent with install_guide_urls — not read back by
+  // the UI, which uses staged_systems.custom_document_links directly.
+  await supabase.from('field_verifications').upsert(
+    {
+      entity_type: 'staged_system',
+      entity_id: systemId,
+      field_name: 'custom_document_links',
+      verified_value: JSON.stringify(links),
+      status: 'edited',
+      reviewer_id: auth.userId,
+      reviewed_at: now,
+      notes: null,
+      updated_at: now,
+    },
+    { onConflict: 'entity_type,entity_id,field_name' },
+  )
+
+  return { ok: true }
+}
+
 // ─── setGalleryImages ─────────────────────────────────────────────────────────
 // Replaces the whole hero-gallery array (hybrid publishing, migration 053).
 // Ordered; element 0 is the cover/share image. Same full-array pattern as
