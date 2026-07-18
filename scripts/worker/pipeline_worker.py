@@ -41,6 +41,11 @@ from dotenv import load_dotenv
 
 load_dotenv(".env.local")
 
+# Line-buffer stdout regardless of invocation (redirected to a file/pipe would
+# otherwise fully buffer, hiding progress until a flush — this bit us hard
+# when monitoring a live run via a redirected log).
+sys.stdout.reconfigure(line_buffering=True)
+
 # Worker always talks to production Supabase — that's where Vercel writes jobs
 SUPABASE_URL = os.environ.get("PRODUCTION_SUPABASE_URL", os.environ["NEXT_PUBLIC_SUPABASE_URL"]).rstrip("/")
 SUPABASE_KEY = os.environ.get("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY", os.environ["SUPABASE_SERVICE_ROLE_KEY"])

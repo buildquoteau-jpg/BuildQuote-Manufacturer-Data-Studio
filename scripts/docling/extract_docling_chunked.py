@@ -134,6 +134,8 @@ def merge_outputs(chunk_dirs: list, total_pages: int, out_dir: Path, input_path:
     print(f"  Tables        : {total_tables}")
     print(f"  Complete      : {all_complete}")
 
+    return all_complete
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -194,8 +196,13 @@ def main():
         page = page_end + 1
         chunk_no += 1
 
-    # Merge all outputs
-    merge_outputs(chunk_dirs, end_page - start_page + 1, final_out, input_path)
+    # Merge all outputs. Non-zero exit on incomplete extraction (e.g. a broken
+    # docling dependency) so callers that check returncode — the pipeline
+    # worker's handle_docling in particular — actually see the failure instead
+    # of a job silently marked "done" with zero real content.
+    all_complete = merge_outputs(chunk_dirs, end_page - start_page + 1, final_out, input_path)
+    if not all_complete:
+        sys.exit("[ERROR] Extraction incomplete — one or more chunks failed (see errors above).")
 
 
 if __name__ == "__main__":
