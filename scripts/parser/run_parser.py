@@ -35,8 +35,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Force unbuffered stdout so output appears immediately when piped
-sys.stdout.reconfigure(line_buffering=True)
+# Force unbuffered stdout so output appears immediately when piped. Also force
+# UTF-8 — Windows' default console codepage (cp1252) can't encode characters
+# like → that show up in extracted catalogue text or model warnings, and a
+# redirected/piped run crashes with UnicodeEncodeError deep into a multi-hour
+# parse instead of failing fast.
+sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")
 
 
 # ============================================================
@@ -90,7 +94,7 @@ Return this exact JSON shape (no other text):
       "moisture_resistant": "boolean or null",
       "structural_grade": "string or null",
       "double_sided": "boolean or null",
-      "install_guide_url": null,
+      "install_guide_urls": null,
       "tech_data_url": null,
       "notes": "string or null — e.g. pre-primed/site-painted note",
       "australian_made": "boolean or null — true if explicitly stated as made in Australia, null if unknown",
@@ -240,7 +244,7 @@ SYSTEM_FIELDS = {
     "manufacturer_id", "source_document_id", "source_chunk_id",
     "name", "product_code", "slug", "category", "subcategory", "description",
     "bal_rating", "acoustic_rating", "moisture_resistant", "structural_grade",
-    "double_sided", "sheet_format", "install_guide_url", "tech_data_url",
+    "double_sided", "sheet_format", "install_guide_urls", "tech_data_url",
     "australian_made", "notes", "sort_order", "extraction_confidence", "parser_notes",
 }
 PROFILE_FIELDS = {
@@ -576,6 +580,96 @@ def deduplicate_systems(all_systems, all_profiles):
     return final
 
 
+def run_qa_checks(all_systems, all_profiles):
+    """Deterministic cross-check run once over the FULL assembled plan, after
+    every chunk has been extracted and system links resolved, but before the
+    Supabase write.
+
+    Each chunk is extracted by its own isolated Claude call with no visibility
+    into any other chunk — so a single-call hallucination (e.g. misreading a
+    dimension table and inventing a different product code) can't be caught by
+    the model itself, no matter how good the prompt is. This catches that class
+    of error structurally instead of trusting another LLM call to police it —
+    an LLM reviewing LLM output has the same blind spot.
+    """
+    system_by_key = {s["_temp_key"]: s for s in all_systems}
+    issues = []
+
+    code_to_profiles = {}
+    for p in all_profiles:
+        code = (p.get("product_code") or "").strip()
+        if code:
+            code_to_profiles.setdefault(code, []).append(p)
+
+    for code, profs in code_to_profiles.items():
+        sys_names = sorted({
+            system_by_key.get(p.get("_staged_system_temp_key"), {}).get("name")
+            for p in profs
+        } - {None})
+        if len(sys_names) > 1:
+            issues.append({
+                "severity": "high",
+                "type": "product_code_multi_system",
+                "product_code": code,
+                "systems": sys_names,
+                "detail": f"product_code '{code}' extracted under {len(sys_names)} different systems: {sys_names}",
+            })
+
+    name_to_profiles = {}
+    for p in all_profiles:
+        name = (p.get("profile_name") or p.get("name") or "").strip().lower()
+        if name:
+            name_to_profiles.setdefault(name, []).append(p)
+
+    for name, profs in name_to_profiles.items():
+        if len(profs) < 2:
+            continue
+        dims = sorted({(p.get("dimensions") or "").strip() for p in profs} - {""})
+        if len(dims) > 1:
+            sys_names = sorted({
+                system_by_key.get(p.get("_staged_system_temp_key"), {}).get("name")
+                for p in profs
+            } - {None})
+            issues.append({
+                "severity": "medium",
+                "type": "profile_name_conflicting_dimensions",
+                "profile_name": name,
+                "dimensions_seen": dims,
+                "systems": sys_names,
+                "detail": f"profile '{name}' has conflicting dimensions across extractions {dims} (systems: {sys_names})",
+            })
+
+    return issues
+
+
+def apply_qa_flags(all_profiles, issues):
+    """Append each finding to the affected profile rows' parser_notes, so the
+    flag surfaces per-row in Verify Systems at the normal human-review point
+    instead of silently landing in staging."""
+    flagged = 0
+    for issue in issues:
+        for p in all_profiles:
+            code = (p.get("product_code") or "").strip()
+            name = (p.get("profile_name") or p.get("name") or "").strip().lower()
+            matches = (
+                (issue["type"] == "product_code_multi_system" and code == issue["product_code"])
+                or (issue["type"] == "profile_name_conflicting_dimensions" and name == issue["profile_name"])
+            )
+            if not matches:
+                continue
+            notes = p.setdefault("parser_notes", [])
+            if isinstance(notes, list):
+                notes.append({
+                    "qa_flag": issue["type"],
+                    "severity": issue["severity"],
+                    "detail": issue["detail"],
+                    "source": "qa_review",
+                    "needs_human_review": True,
+                })
+                flagged += 1
+    return flagged
+
+
 _TM_STRIP = re.compile(r'[™®]')
 NAME_FIELDS = {"name", "profile_name", "colour_name", "description"}
 
@@ -859,6 +953,24 @@ def main():
         all_systems, all_profiles, all_colours, all_components, all_links = assign_temp_keys(
             all_systems, all_profiles, all_colours, all_components, all_links
         )
+
+        print(f"\n[parser] === QA review (pre-insert cross-check) ===")
+        qa_issues = run_qa_checks(all_systems, all_profiles)
+        if qa_issues:
+            for iss in qa_issues:
+                print(f"  [QA-{iss['severity'].upper()}] {iss['detail']}")
+            flagged = apply_qa_flags(all_profiles, qa_issues)
+            print(f"  Flagged {flagged} row(s) with parser_notes.qa_flag for human review in Verify Systems")
+        else:
+            print("  No cross-check issues found.")
+        qa_dir = Path(".local/parser-qa")
+        qa_dir.mkdir(parents=True, exist_ok=True)
+        qa_slug = re.sub(r'[^a-z0-9]+', '_', args.manufacturer_name.lower()).strip('_')
+        qa_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        qa_path = qa_dir / f"{qa_slug}_{qa_ts}.json"
+        qa_path.write_text(json.dumps(qa_issues, indent=2), encoding="utf-8")
+        print(f"  QA report: {qa_path}")
+
         plan = build_plan(args.manufacturer_id, all_systems, all_profiles, all_colours, all_components, all_links)
 
     print(f"\n[parser] Insertion plan:")
