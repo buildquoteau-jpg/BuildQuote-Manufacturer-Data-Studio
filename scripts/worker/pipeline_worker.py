@@ -31,7 +31,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import boto3
@@ -39,7 +39,13 @@ import requests
 from botocore.config import Config
 from dotenv import load_dotenv
 
-load_dotenv(".env.local")
+REPO_ROOT = Path(__file__).parent.parent.parent
+
+# override=True: a stale NEXT_PUBLIC_SUPABASE_URL already exported in the
+# shell (e.g. from a v6 dev session) must NOT silently win over the repo's
+# .env.local — that is exactly the wrong-project bug fixed on 2026-07-18.
+# Absolute path so the worker also works when started outside the repo root.
+load_dotenv(REPO_ROOT / ".env.local", override=True)
 
 # Line-buffer stdout regardless of invocation (redirected to a file/pipe would
 # otherwise fully buffer, hiding progress until a flush — this bit us hard
@@ -51,6 +57,11 @@ sys.stdout.reconfigure(line_buffering=True)
 SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"].rstrip("/")
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 WORKER_ID = socket.gethostname()
+
+# A 'running' job whose heartbeat is older than this is considered abandoned
+# (worker crashed / machine rebooted) and gets reclaimed. Requires migration
+# 059 (pipeline_jobs.heartbeat_at); degrades to pending-only claims without it.
+LEASE_TIMEOUT_MIN = int(os.environ.get("PIPELINE_LEASE_TIMEOUT_MIN", "15"))
 
 R2_ACCOUNT_ID = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID", "")
 R2_ACCESS_KEY = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID", "")
@@ -65,7 +76,6 @@ VOYAGE_API_KEY = os.environ.get("VOYAGE_API_KEY", "")
 VOYAGE_MODEL = os.environ.get("VOYAGE_MODEL", "voyage-3.5")
 VOYAGE_DIM = int(os.environ.get("VOYAGE_DIM", "1024"))
 POLL_INTERVAL = 4  # seconds between polls
-REPO_ROOT = Path(__file__).parent.parent.parent
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -109,24 +119,69 @@ def sb_delete(table: str, params: str):
     return r
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# Migration 059 adds pipeline_jobs.heartbeat_at. Until it is applied live,
+# PostgREST rejects writes that mention the column — strip it and carry on
+# (house graceful-degradation pattern).
+_HEARTBEAT_SUPPORTED = True
+
+
+def job_patch(params: str, data: dict):
+    global _HEARTBEAT_SUPPORTED
+    if not _HEARTBEAT_SUPPORTED:
+        data = {k: v for k, v in data.items() if k != "heartbeat_at"}
+    try:
+        return sb_patch("pipeline_jobs", params, data)
+    except requests.HTTPError as e:
+        body = e.response.text if e.response is not None else ""
+        if _HEARTBEAT_SUPPORTED and "heartbeat_at" in body:
+            _HEARTBEAT_SUPPORTED = False
+            print("  [worker] pipeline_jobs.heartbeat_at missing (apply migration 059) — continuing without heartbeats")
+            return job_patch(params, data)
+        raise
+
+
 def claim_job() -> dict | None:
-    """Atomically claim the oldest pending job."""
-    # Fetch oldest pending job
+    """Claim the oldest pending job. If there is none, reclaim a 'running' job
+    whose heartbeat went stale — a crashed worker used to strand its job in
+    'running' forever, invisible to retries and shown as an eternal spinner
+    in the pipeline UI (2026-07-18 audit)."""
     rows = sb_get(
         "pipeline_jobs",
         "status=eq.pending&order=created_at.asc&limit=1&select=*",
     )
-    if not rows:
+    job = rows[0] if rows else None
+    claim_filter = "status=eq.pending"
+
+    if job is None and _HEARTBEAT_SUPPORTED:
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=LEASE_TIMEOUT_MIN)).isoformat()
+        try:
+            stale = sb_get(
+                "pipeline_jobs",
+                f"status=eq.running&heartbeat_at=lt.{cutoff}&order=heartbeat_at.asc&limit=1&select=*",
+            )
+        except Exception:
+            stale = []  # heartbeat_at not live yet (migration 059)
+        if stale:
+            job = stale[0]
+            claim_filter = "status=eq.running"
+            print(f"[worker] Reclaiming stalled job {job['id']} — no heartbeat for over "
+                  f"{LEASE_TIMEOUT_MIN} min, previous worker presumed dead")
+
+    if job is None:
         return None
-    job = rows[0]
+
     # Claim it (optimistic: another worker might beat us, that's fine)
     try:
-        sb_patch(
-            "pipeline_jobs",
-            f"id=eq.{job['id']}&status=eq.pending",
+        job_patch(
+            f"id=eq.{job['id']}&{claim_filter}",
             {
                 "status": "running",
-                "started_at": datetime.now(timezone.utc).isoformat(),
+                "started_at": _now_iso(),
+                "heartbeat_at": _now_iso(),
                 "worker_id": WORKER_ID,
             },
         )
@@ -141,7 +196,7 @@ def claim_job() -> dict | None:
 
 def update_job(job_id: str, data: dict):
     try:
-        sb_patch("pipeline_jobs", f"id=eq.{job_id}", data)
+        job_patch(f"id=eq.{job_id}", data)
     except Exception as e:
         print(f"  [worker] warning: could not update job {job_id}: {e}")
 
@@ -150,25 +205,78 @@ def update_progress(job_id: str, progress: dict, log_lines: list[str]):
     update_job(job_id, {
         "progress": progress,
         "log_lines": log_lines[-80:],
+        "heartbeat_at": _now_iso(),
     })
 
 
 def complete_job(job_id: str, result: dict, log_lines: list[str]):
     update_job(job_id, {
         "status": "done",
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": _now_iso(),
         "result": result,
         "log_lines": log_lines[-80:],
+        "heartbeat_at": _now_iso(),
     })
 
 
 def fail_job(job_id: str, error: str, log_lines: list[str]):
     update_job(job_id, {
         "status": "error",
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": _now_iso(),
         "error_message": error,
         "log_lines": log_lines[-80:],
+        "heartbeat_at": _now_iso(),
     })
+    notify_failure(job_id, error)
+
+
+def notify_failure(job_id: str, error: str):
+    """Push failures to the operator instead of waiting to be asked how it's
+    going (2026-07-18 audit). Email via Resend when RESEND_API_KEY +
+    PIPELINE_NOTIFY_EMAIL are set in .env.local; Windows balloon notification
+    when the worker runs on a desktop. Both strictly best-effort — a broken
+    notification never breaks the pipeline."""
+    summary = (error or "unknown error").strip().splitlines()[0][:300]
+
+    api_key = os.environ.get("RESEND_API_KEY")
+    to_email = os.environ.get("PIPELINE_NOTIFY_EMAIL")
+    if api_key and to_email:
+        try:
+            requests.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "from": os.environ.get("PIPELINE_NOTIFY_FROM", "BuildQuote Pipeline <onboarding@resend.dev>"),
+                    "to": [to_email],
+                    "subject": f"[BuildQuote pipeline] job failed: {summary[:80]}",
+                    "text": (f"Pipeline job {job_id} failed.\n\n{error}\n\n"
+                             f"Open the pipeline page (/manufacturer/pipeline) for the full log."),
+                },
+                timeout=15,
+            )
+            print(f"  [worker] failure email sent to {to_email}")
+        except Exception as e:
+            print(f"  [worker] warning: failure email not sent: {e}")
+
+    if sys.platform == "win32":
+        try:
+            safe = summary.replace("'", "''")
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "Add-Type -AssemblyName System.Drawing; "
+                "$n = New-Object System.Windows.Forms.NotifyIcon; "
+                "$n.Icon = [System.Drawing.SystemIcons]::Error; "
+                "$n.Visible = $true; "
+                f"$n.ShowBalloonTip(10000, 'BuildQuote pipeline job failed', '{safe}', "
+                "[System.Windows.Forms.ToolTipIcon]::Error); "
+                "Start-Sleep -Seconds 12; $n.Dispose()"
+            )
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
 
 
 # ── R2 / storage download ─────────────────────────────────────────────────────
@@ -342,6 +450,9 @@ def handle_docling(job: dict):
         cmd, cwd=str(REPO_ROOT),
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
+        # Child attaches its pipeline_report shim to THIS job row instead of
+        # creating a duplicate — see scripts/lib/pipeline_report.py.
+        env={**os.environ, "PIPELINE_JOB_ID": str(job_id)},
     )
 
     for line in proc.stdout:
@@ -477,7 +588,6 @@ def handle_parser(job: dict):
     slug = payload["slug"]
     document_id = payload["document_id"]
     output_dir = Path(payload["output_dir"])
-    target_system_id = payload.get("target_system_id")
     dry_run = payload.get("dry_run", False)
 
     log: list[str] = []
@@ -504,8 +614,9 @@ def handle_parser(job: dict):
         "--manufacturer-name", manufacturer_name,
         "--hints", str(hints_path),
     ]
-    if target_system_id:
-        cmd += ["--target-system-id", target_system_id]
+    # NOTE: --target-system-id used to be forwarded here, but run_parser.py
+    # never defined that argument — argparse rejected it and every job that
+    # carried a target_system_id failed at spawn (2026-07-18 audit).
     if dry_run:
         cmd.append("--dry-run")
 
@@ -516,7 +627,9 @@ def handle_parser(job: dict):
         cmd, cwd=str(REPO_ROOT),
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
-        env={**os.environ},
+        # Child attaches its pipeline_report shim to THIS job row instead of
+        # creating a duplicate — see scripts/lib/pipeline_report.py.
+        env={**os.environ, "PIPELINE_JOB_ID": str(job_id)},
     )
     for line in proc.stdout:
         line = line.rstrip()
@@ -701,19 +814,24 @@ def handle_embed(job: dict):
         complete_job(job_id, {"skipped": "no_content"}, log + ["No container content to embed."])
         return
 
-    # Already embedded this exact container?
-    existing = sb_get(
-        "card_embeddings",
-        f"card_id=eq.{card_id}&version=eq.{version}&content_hash=eq.{content_hash}&select=id&limit=1",
-    )
-    if existing:
-        complete_job(job_id, {"skipped": "unchanged", "contentHash": content_hash}, log)
-        return
-
     windows = window_text(content_md)
     if not windows:
         complete_job(job_id, {"skipped": "empty"}, log)
         return
+
+    # Already embedded this exact container? Compare ROW COUNT, not mere
+    # existence: a previous run that died between the batched inserts leaves a
+    # partial set carrying the right content_hash, and an existence check
+    # would wrongly skip it forever (2026-07-18 audit).
+    existing = sb_get(
+        "card_embeddings",
+        f"card_id=eq.{card_id}&version=eq.{version}&content_hash=eq.{content_hash}&select=id&limit={len(windows) + 1}",
+    )
+    if len(existing) == len(windows):
+        complete_job(job_id, {"skipped": "unchanged", "contentHash": content_hash}, log)
+        return
+    if existing:
+        log_line(f"Found {len(existing)}/{len(windows)} embeddings for this container — previous run incomplete, re-embedding")
 
     log_line(f"Embedding {len(windows)} windows via {VOYAGE_MODEL} ({VOYAGE_DIM}d)")
     embeddings: list[list[float]] = []

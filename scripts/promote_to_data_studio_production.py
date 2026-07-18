@@ -1,11 +1,25 @@
 """
 promote_to_data_studio_production.py
 -------------------------------------
-Promotes a manufacturer's staging data from LOCAL dev Supabase
-to PRODUCTION Data Studio Supabase (ovndokzwkxpfjfobewaq).
+⚠️  LEGACY FLOW — read before running (2026-07-18 audit).
 
-This script does NOT touch the RFQ/BuildQuote production database.
-Target: PRODUCTION_SUPABASE_URL / PRODUCTION_SUPABASE_SERVICE_ROLE_KEY in .env.local
+This script dates from the era when Data Studio staging lived in a LOCAL
+Supabase and a separate "Data Studio production" cloud project existed. That
+topology is gone: ovndokzwkxpfjfobewaq IS the live Data Studio (staging tables
+included), and cards reach the public library through the hybrid-publishing
+flow (apps/web/lib/studio-admin/publish.ts), not through this script.
+
+It is kept only for a genuine two-Data-Studio-projects copy (e.g. seeding a
+fresh environment). Because .env.local's PRODUCTION_SUPABASE_URL now points at
+the RFQ/BuildQuote project, this script DELIBERATELY no longer reads that
+variable — it requires its own explicit pair so "production" can never again
+be conflated with RFQ:
+
+    DATA_STUDIO_PROD_URL=https://<target-project>.supabase.co
+    DATA_STUDIO_PROD_SERVICE_ROLE_KEY=...
+
+Before writing anything it probes the target for staged_* tables and refuses
+to run against a project that doesn't have them (i.e. the RFQ project).
 
 What it copies:
   - data_studio_manufacturers row
@@ -15,8 +29,9 @@ What it copies:
   - staged_components
   - staged_system_components
 
-IDs are preserved (same UUIDs on production as local).
-On conflict (same UUID already exists) the script skips — safe to re-run.
+IDs are preserved (same UUIDs on target as source).
+On conflict (same UUID already exists) the row is SKIPPED — safe to re-run,
+but note this never propagates edits or deletes to rows that already exist.
 
 Usage:
   python scripts/promote_to_data_studio_production.py --manufacturer-id <uuid> --dry-run
@@ -28,18 +43,21 @@ import json
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 
-load_dotenv(".env.local")
+REPO_ROOT = Path(__file__).parent.parent
+# override=True: repo .env.local beats any stale shell exports (audit fix).
+load_dotenv(REPO_ROOT / ".env.local", override=True)
 
 # ── clients ──────────────────────────────────────────────────────────────────
 
-LOCAL_URL  = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:54321").rstrip("/")
+LOCAL_URL  = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "").rstrip("/")
 LOCAL_KEY  = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-PROD_URL   = os.environ.get("PRODUCTION_SUPABASE_URL", "").rstrip("/")
-PROD_KEY   = os.environ.get("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY", "")
+PROD_URL   = os.environ.get("DATA_STUDIO_PROD_URL", "").rstrip("/")
+PROD_KEY   = os.environ.get("DATA_STUDIO_PROD_SERVICE_ROLE_KEY", "")
 
 def local_headers():
     return {"apikey": LOCAL_KEY, "Authorization": f"Bearer {LOCAL_KEY}"}
@@ -55,9 +73,23 @@ def prod_headers():
 # ── fetch helpers ─────────────────────────────────────────────────────────────
 
 def local_get(table, params=""):
-    r = requests.get(f"{LOCAL_URL}/rest/v1/{table}?{params}", headers=local_headers())
-    r.raise_for_status()
-    return r.json()
+    """Fetch ALL rows, paginated. PostgREST silently caps unpaginated
+    responses at 1000 rows — a large manufacturer's profiles would have been
+    silently truncated during promotion (2026-07-18 audit)."""
+    rows, offset, page = [], 0, 1000
+    while True:
+        r = requests.get(
+            f"{LOCAL_URL}/rest/v1/{table}?{params}",
+            headers={**local_headers(),
+                     "Range-Unit": "items",
+                     "Range": f"{offset}-{offset + page - 1}"},
+        )
+        r.raise_for_status()
+        batch = r.json()
+        rows += batch
+        if len(batch) < page:
+            return rows
+        offset += page
 
 def local_get_by_ids(table, id_field, ids, batch=10):
     rows = []
@@ -88,10 +120,19 @@ def prod_insert(table, rows, dry_run=False):
 
 # ── column allow-lists (strip local-only / auto-generated fields) ─────────────
 
+# 2026-07-18 audit: these allowlists had drifted from the live schema — the
+# old entry "install_guide_url" (renamed by migration 026) matched nothing, so
+# install guides silently never promoted; columns added after the list was
+# written (dimensions, design_guide_url, custom_document_links, …) were
+# silently dropped the same way. filter_cols() is an allowlist over the source
+# row, so a stale entry produces NO error — keep these in sync with
+# supabase/schema_complete.sql (regenerate via scripts/refresh_schema_reference.mjs).
 SYSTEM_COLS = {
     "id", "manufacturer_id", "source_document_id", "name", "product_code", "slug",
-    "category", "subcategory", "description", "double_sided", "hero_image_url",
-    "website_url", "source_url", "source_label", "install_guide_url", "tech_data_url",
+    "category", "subcategory", "description", "dimensions", "length_m", "double_sided",
+    "sheet_format", "hero_image_url", "hero_image_position_x", "hero_image_position_y",
+    "website_url", "source_url", "source_label", "install_guide_urls", "design_guide_url",
+    "tech_data_url", "custom_document_links", "gallery_images",
     "sort_order", "extraction_confidence", "verification_status", "notes", "parser_notes",
     "bal_rating", "australian_made", "fire_rating", "acoustic_rating", "moisture_resistant",
     "structural_grade", "extracted_at", "created_at", "updated_at",
@@ -102,7 +143,8 @@ PROFILE_COLS = {
     "length_m", "length_mm", "width_mm", "height_mm", "thickness_mm", "depth_mm",
     "gauge_mm", "diameter_mm", "roll_m", "weight_kg", "weight_g", "volume_ml",
     "pieces", "pack_format", "supplier_pack_qty", "supplier_pack_uom", "supplier_pack_note",
-    "uom", "bal_rating", "sheet_format", "sort_order", "parser_notes", "image_url",
+    "uom", "bal_rating", "sheet_format", "procurement_route", "sort_order",
+    "parser_notes", "image_url",
     "website_url", "verification_status", "extracted_at", "created_at",
 }
 
@@ -117,7 +159,8 @@ COMPONENT_COLS = {
     "category", "uom", "length_mm", "width_mm", "height_mm", "thickness_mm",
     "depth_mm", "gauge_mm", "diameter_mm", "roll_m", "weight_kg", "weight_g",
     "volume_ml", "pieces", "pack_format", "supplier_pack_qty", "supplier_pack_uom",
-    "supplier_pack_note", "material", "finish", "coverage_m2", "sort_order",
+    "supplier_pack_note", "material", "finish", "colour", "profile", "texture",
+    "procurement_route", "coverage_m2", "sort_order",
     "extraction_confidence", "verification_status", "parser_notes", "image_url",
     "website_url", "extracted_at", "created_at", "updated_at",
 }
@@ -145,7 +188,25 @@ def main():
     args = parser.parse_args()
 
     if not PROD_URL or not PROD_KEY:
-        print("[ERROR] PRODUCTION_SUPABASE_URL or PRODUCTION_SUPABASE_SERVICE_ROLE_KEY not set in .env.local")
+        print("[ERROR] DATA_STUDIO_PROD_URL / DATA_STUDIO_PROD_SERVICE_ROLE_KEY not set in .env.local.")
+        print("        This script no longer reads PRODUCTION_SUPABASE_URL — that variable points at")
+        print("        the RFQ/BuildQuote project, which this script must never touch. If you really")
+        print("        need a Data-Studio-to-Data-Studio copy, set the DATA_STUDIO_PROD_* pair")
+        print("        explicitly. For publishing cards, use the app's Publish flow instead.")
+        sys.exit(1)
+
+    rfq_url = os.environ.get("PRODUCTION_SUPABASE_URL", "").rstrip("/")
+    if rfq_url and PROD_URL == rfq_url:
+        print("[ERROR] DATA_STUDIO_PROD_URL equals PRODUCTION_SUPABASE_URL (the RFQ/BuildQuote project).")
+        print("        Refusing to write staged_* data into the RFQ database.")
+        sys.exit(1)
+
+    # Probe the target before writing anything: a project without staged_*
+    # tables is the wrong project (e.g. RFQ production).
+    probe = requests.get(f"{PROD_URL}/rest/v1/staged_systems?select=id&limit=1", headers=prod_headers())
+    if probe.status_code != 200:
+        print(f"[ERROR] Target {PROD_URL} has no reachable staged_systems table "
+              f"(HTTP {probe.status_code}) — this does not look like a Data Studio project. Aborting.")
         sys.exit(1)
 
     mid = args.manufacturer_id
