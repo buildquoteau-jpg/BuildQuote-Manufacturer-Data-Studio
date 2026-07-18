@@ -46,9 +46,10 @@ load_dotenv(".env.local")
 # when monitoring a live run via a redirected log).
 sys.stdout.reconfigure(line_buffering=True)
 
-# Worker always talks to production Supabase — that's where Vercel writes jobs
-SUPABASE_URL = os.environ.get("PRODUCTION_SUPABASE_URL", os.environ["NEXT_PUBLIC_SUPABASE_URL"]).rstrip("/")
-SUPABASE_KEY = os.environ.get("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY", os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+# pipeline_jobs (and every table this worker touches) lives only in the Data
+# Studio project — never the separate RFQ/BuildQuote PRODUCTION_SUPABASE_URL.
+SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"].rstrip("/")
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 WORKER_ID = socket.gethostname()
 
 R2_ACCOUNT_ID = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID", "")
