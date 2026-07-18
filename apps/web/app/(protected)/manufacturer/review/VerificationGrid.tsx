@@ -1422,6 +1422,23 @@ function AddColourForm({
   )
 }
 
+// Groups by category the same way SystemCardRenderer's ComponentsSection
+// does, so the review grid's grouping matches what ships on the public card.
+// First-appearance order, with any Service/delivery category pushed to the end.
+function groupComponentsByCategory(
+  components: VerificationSystemComponent[],
+): [string, VerificationSystemComponent[]][] {
+  const byCat = new Map<string, VerificationSystemComponent[]>()
+  for (const c of components) {
+    const cat = c.category?.trim() || 'Other'
+    if (!byCat.has(cat)) byCat.set(cat, [])
+    byCat.get(cat)!.push(c)
+  }
+  return Array.from(byCat.entries()).sort(
+    (a, b) => (/service|delivery/i.test(a[0]) ? 1 : 0) - (/service|delivery/i.test(b[0]) ? 1 : 0)
+  )
+}
+
 // ─── Component item ───────────────────────────────────────────────────────────
 
 function ComponentItem({
@@ -2395,13 +2412,25 @@ function ExpandedCardView({
               )}
             </FieldSection>
 
-            {/* Components */}
+            {/* Components — grouped by category, same as the public card renderer
+                (SystemCardRenderer's ComponentsSection), so a mixed list of
+                fixings/cleaning products/screws reads as sections instead of
+                one undifferentiated flat list. */}
             <FieldSection
               label={`Components & accessories (${system.components.length})`}
               action={<AddButton label="Add component / accessory" onClick={() => { setShowAddComponent(true); setShowAddProfile(false); setShowAddColour(false) }} />}
             >
-              {system.components.map(c => (
-                <ComponentItem key={c.id} component={c} manufacturerId={manufacturerId} onUpdated={updateComponentLocal} />
+              {groupComponentsByCategory(system.components).map(([cat, items]) => (
+                <div key={cat} style={{ marginBottom: '4px' }}>
+                  {items.length > 0 && (
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '10px 0 6px' }}>
+                      {cat}
+                    </div>
+                  )}
+                  {items.map(c => (
+                    <ComponentItem key={c.id} component={c} manufacturerId={manufacturerId} onUpdated={updateComponentLocal} />
+                  ))}
+                </div>
               ))}
               {system.components.length === 0 && !showAddComponent && (
                 <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>No components recorded — add one using the button above.</div>
