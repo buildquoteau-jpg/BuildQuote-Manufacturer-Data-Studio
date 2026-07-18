@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ManufacturerDocument } from '@/lib/studio-manufacturer/workspace'
+import { LiveJobsPanel } from './LiveJobsPanel'
 
 type Stats = {
   documents: number
@@ -390,6 +391,9 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
 
       {/* ── FUNNEL TAB ── */}
       {activeTab === 'funnel' && (
+        <>
+        {/* Live job feed: every run (worker or terminal) with stalled/error states */}
+        <LiveJobsPanel manufacturerId={manufacturerId} />
         <div className="studio-section" style={{ marginTop: 0 }}>
           <div className="studio-section-heading">Extraction funnel — {manufacturerName}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
@@ -430,6 +434,7 @@ export function PipelineClient({ manufacturerId, manufacturerName, manufacturerS
             ))}
           </div>
         </div>
+        </>
       )}
 
       {/* ── RUN PIPELINE TAB ── */}
