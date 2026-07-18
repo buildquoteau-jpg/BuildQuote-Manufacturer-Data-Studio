@@ -68,7 +68,7 @@ BEGIN
         'structural_grade',      NULL::text,
         'double_sided',          false,
         'sheet_format',          NULL::text,
-        'install_guide_url',     NULL::text,
+        'install_guide_urls',    NULL,
         'tech_data_url',         NULL::text,
         'notes',                 NULL::text,
         'sort_order',            0,
@@ -302,53 +302,97 @@ BEGIN
     v_fv_after - v_fv_before,
     v_pfe_after - v_pfe_before;
 
-  -- Assertions
-  IF (v_sys_after - v_sys_before) = 1     THEN RAISE NOTICE 'PASS: staged_systems +1';     ELSE RAISE NOTICE 'FAIL: staged_systems delta=%', v_sys_after - v_sys_before;   END IF;
-  IF (v_prof_after - v_prof_before) = 1   THEN RAISE NOTICE 'PASS: staged_system_profiles +1';  ELSE RAISE NOTICE 'FAIL: profiles delta=%', v_prof_after - v_prof_before;   END IF;
-  IF (v_comp_after - v_comp_before) = 1   THEN RAISE NOTICE 'PASS: staged_components +1';  ELSE RAISE NOTICE 'FAIL: components delta=%', v_comp_after - v_comp_before;  END IF;
-  IF (v_col_after - v_col_before) = 1     THEN RAISE NOTICE 'PASS: staged_system_colours +1';   ELSE RAISE NOTICE 'FAIL: colours delta=%', v_col_after - v_col_before;    END IF;
-  IF (v_link_after - v_link_before) = 1   THEN RAISE NOTICE 'PASS: staged_system_components +1'; ELSE RAISE NOTICE 'FAIL: links delta=%', v_link_after - v_link_before;   END IF;
-  IF (v_fv_after - v_fv_before) = 5       THEN RAISE NOTICE 'PASS: field_verifications +5';  ELSE RAISE NOTICE 'FAIL: fv delta=%', v_fv_after - v_fv_before;             END IF;
-  IF (v_pfe_after - v_pfe_before) = 3     THEN RAISE NOTICE 'PASS: parser_field_evidence +3'; ELSE RAISE NOTICE 'FAIL: pfe delta=%', v_pfe_after - v_pfe_before;          END IF;
+  -- Assertions — RAISE EXCEPTION so a regression exits non-zero under
+  -- ON_ERROR_STOP instead of printing a FAIL notice that scrolls away.
+  IF (v_sys_after - v_sys_before) = 1     THEN RAISE NOTICE 'PASS: staged_systems +1';     ELSE RAISE EXCEPTION 'staged_systems delta=% (expected 1)', v_sys_after - v_sys_before;   END IF;
+  IF (v_prof_after - v_prof_before) = 1   THEN RAISE NOTICE 'PASS: staged_system_profiles +1';  ELSE RAISE EXCEPTION 'profiles delta=% (expected 1)', v_prof_after - v_prof_before;   END IF;
+  IF (v_comp_after - v_comp_before) = 1   THEN RAISE NOTICE 'PASS: staged_components +1';  ELSE RAISE EXCEPTION 'components delta=% (expected 1)', v_comp_after - v_comp_before;  END IF;
+  IF (v_col_after - v_col_before) = 1     THEN RAISE NOTICE 'PASS: staged_system_colours +1';   ELSE RAISE EXCEPTION 'colours delta=% (expected 1)', v_col_after - v_col_before;    END IF;
+  IF (v_link_after - v_link_before) = 1   THEN RAISE NOTICE 'PASS: staged_system_components +1'; ELSE RAISE EXCEPTION 'links delta=% (expected 1)', v_link_after - v_link_before;   END IF;
+  IF (v_fv_after - v_fv_before) = 5       THEN RAISE NOTICE 'PASS: field_verifications +5';  ELSE RAISE EXCEPTION 'fv delta=% (expected 5)', v_fv_after - v_fv_before;             END IF;
+  IF (v_pfe_after - v_pfe_before) = 3     THEN RAISE NOTICE 'PASS: parser_field_evidence +3'; ELSE RAISE EXCEPTION 'pfe delta=% (expected 3)', v_pfe_after - v_pfe_before;          END IF;
 
-  -- Verify inserted rows reference the correct system UUID
-  RAISE NOTICE 'Profile FK check: %',
-    (SELECT CASE WHEN sp.staged_system_id = ss.id THEN 'PASS: profile.staged_system_id = system.id'
-                 ELSE 'FAIL: profile FK mismatch' END
-     FROM staged_systems ss
-     JOIN staged_system_profiles sp ON sp.staged_system_id = ss.id
-     WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
-     LIMIT 1);
+  -- Verify inserted rows reference the correct system UUID — each check
+  -- raises on failure instead of printing a FAIL string.
+  IF NOT EXISTS (
+    SELECT 1 FROM staged_systems ss
+    JOIN staged_system_profiles sp ON sp.staged_system_id = ss.id
+    WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
+  ) THEN
+    RAISE EXCEPTION 'profile FK mismatch — no profile resolves to the test system';
+  END IF;
+  RAISE NOTICE 'PASS: profile.staged_system_id = system.id';
 
-  RAISE NOTICE 'Colour FK check: %',
-    (SELECT CASE WHEN sc.staged_system_id = ss.id THEN 'PASS: colour.staged_system_id = system.id'
-                 ELSE 'FAIL: colour FK mismatch' END
-     FROM staged_systems ss
-     JOIN staged_system_colours sc ON sc.staged_system_id = ss.id
-     WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
-     LIMIT 1);
+  IF NOT EXISTS (
+    SELECT 1 FROM staged_systems ss
+    JOIN staged_system_colours sc ON sc.staged_system_id = ss.id
+    WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
+  ) THEN
+    RAISE EXCEPTION 'colour FK mismatch — no colour resolves to the test system';
+  END IF;
+  RAISE NOTICE 'PASS: colour.staged_system_id = system.id';
 
-  RAISE NOTICE 'Link FK check: %',
-    (SELECT CASE WHEN sl.staged_system_id = ss.id AND sl.staged_component_id = c.id
-                 THEN 'PASS: link FKs resolve to correct system + component'
-                 ELSE 'FAIL: link FK mismatch' END
-     FROM staged_systems ss
-     JOIN staged_system_components sl ON sl.staged_system_id = ss.id
-     JOIN staged_components c ON c.id = sl.staged_component_id
-     WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
-     LIMIT 1);
+  IF NOT EXISTS (
+    SELECT 1 FROM staged_systems ss
+    JOIN staged_system_components sl ON sl.staged_system_id = ss.id
+    JOIN staged_components c ON c.id = sl.staged_component_id
+    WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
+  ) THEN
+    RAISE EXCEPTION 'link FK mismatch — link does not resolve to test system + component';
+  END IF;
+  RAISE NOTICE 'PASS: link FKs resolve to correct system + component';
 
-  RAISE NOTICE 'field_verifications status check: %',
-    (SELECT CASE WHEN bool_and(fv.status = 'pending') THEN 'PASS: all fv.status = pending'
-                 ELSE 'FAIL: unexpected fv status value' END
-     FROM field_verifications fv
-     JOIN staged_systems ss ON ss.id::text = fv.entity_id::text
-     WHERE ss.name = 'Avenue Decking (Migration 012 Test)');
+  IF EXISTS (
+    SELECT 1 FROM field_verifications fv
+    JOIN staged_systems ss ON ss.id::text = fv.entity_id::text
+    WHERE ss.name = 'Avenue Decking (Migration 012 Test)' AND fv.status <> 'pending'
+  ) THEN
+    RAISE EXCEPTION 'unexpected field_verifications.status value (expected pending)';
+  END IF;
+  RAISE NOTICE 'PASS: all fv.status = pending';
 
-  RAISE NOTICE 'staged_systems verification_status check: %',
-    (SELECT CASE WHEN verification_status = 'pending_review'
-                 THEN 'PASS: staged_systems.verification_status = pending_review'
-                 ELSE 'FAIL: unexpected value: ' || verification_status END
-     FROM staged_systems WHERE name = 'Avenue Decking (Migration 012 Test)' LIMIT 1);
+  IF NOT EXISTS (
+    SELECT 1 FROM staged_systems
+    WHERE name = 'Avenue Decking (Migration 012 Test)'
+      AND verification_status = 'pending_review'
+  ) THEN
+    RAISE EXCEPTION 'staged_systems.verification_status is not pending_review';
+  END IF;
+  RAISE NOTICE 'PASS: staged_systems.verification_status = pending_review';
+
+  -- Cleanup: this test used to leave its rows behind on every run, polluting
+  -- the shared staging DB. Delete everything it inserted (evidence rows first
+  -- — polymorphic entity_id has no FK cascade).
+  DELETE FROM field_verifications fv
+  WHERE fv.entity_id IN (
+    SELECT id FROM staged_systems WHERE name = 'Avenue Decking (Migration 012 Test)'
+    UNION ALL
+    SELECT sp.id FROM staged_system_profiles sp
+      JOIN staged_systems ss ON ss.id = sp.staged_system_id
+      WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
+    UNION ALL
+    SELECT sc.id FROM staged_system_colours sc
+      JOIN staged_systems ss ON ss.id = sc.staged_system_id
+      WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
+    UNION ALL
+    SELECT sl.id FROM staged_system_components sl
+      JOIN staged_systems ss ON ss.id = sl.staged_system_id
+      WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
+    UNION ALL
+    SELECT id FROM staged_components WHERE sku = 'MIG-TST-CLIP'
+  );
+  DELETE FROM parser_field_evidence pfe
+  WHERE pfe.entity_id IN (
+    SELECT id FROM staged_systems WHERE name = 'Avenue Decking (Migration 012 Test)'
+    UNION ALL
+    SELECT sp.id FROM staged_system_profiles sp
+      JOIN staged_systems ss ON ss.id = sp.staged_system_id
+      WHERE ss.name = 'Avenue Decking (Migration 012 Test)'
+    UNION ALL
+    SELECT id FROM staged_components WHERE sku = 'MIG-TST-CLIP'
+  );
+  DELETE FROM staged_systems WHERE name = 'Avenue Decking (Migration 012 Test)';
+  DELETE FROM staged_components WHERE sku = 'MIG-TST-CLIP';
+  RAISE NOTICE 'Cleanup complete — test rows removed';
 END;
 $$;

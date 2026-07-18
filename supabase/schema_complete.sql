@@ -1,438 +1,747 @@
-﻿-- schema_complete.sql
--- Last refreshed: 2026-05-19
--- Source: information_schema.columns query (see supabase/snippets/)
+-- schema_complete.sql — GENERATED FILE, do not hand-edit.
+-- Last refreshed: 2026-07-18 from live project ovndokzwkxpfjfobewaq (PostgREST OpenAPI).
+-- Regenerate after every applied migration:
+--     node scripts/refresh_schema_reference.mjs
 --
 -- REFERENCE ONLY — do not run this to migrate.
--- Authoritative schema lives in supabase/migrations/.
--- To refresh: run the columns query in the Supabase editor, export CSV,
--- save to snippets/, then update this file to match.
+-- Authoritative DDL lives in supabase/migrations/.
+-- NOT NULL is derived from the OpenAPI required list; defaults and
+-- constraints are shown where PostgREST exposes them.
+
+-- ============================================================
+-- card_embeddings
+-- ============================================================
+CREATE TABLE public.card_embeddings (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    card_id                      uuid NOT NULL,
+    version                      integer NOT NULL,
+    chunk_index                  integer NOT NULL,
+    source_role                  text,
+    page_start                   integer,
+    page_end                     integer,
+    content                      text NOT NULL,
+    embedding                    vector(1024) NOT NULL,
+    content_hash                 text NOT NULL,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- card_events
+-- ============================================================
+CREATE TABLE public.card_events (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    card_id                      uuid,
+    card_slug                    text NOT NULL,
+    version                      integer,
+    event_type                   text NOT NULL,
+    channel                      text,
+    sender_tag                   text,
+    share_token                  text,
+    host_domain                  text,
+    doc_label                    text,
+    doc_url                      text,
+    device_hash                  text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- card_package_items
+-- ============================================================
+CREATE TABLE public.card_package_items (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    package_id                   uuid NOT NULL,
+    card_id                      uuid NOT NULL,
+    package_slug                 text NOT NULL,
+    generated_card_path          text,
+    generated_json_path          text,
+    qr_code_path                 text,
+    status                       text NOT NULL DEFAULT included,
+    error_message                text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- card_packages
+-- ============================================================
+CREATE TABLE public.card_packages (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    package_version              integer NOT NULL DEFAULT 1,
+    status                       text NOT NULL DEFAULT generating,
+    intended_install_path        text NOT NULL DEFAULT /system-cards/,
+    zip_storage_key              text,
+    zip_url                      text,
+    manifest_url                 text,
+    feed_url                     text,
+    preview_url                  text,
+    checksum                     text,
+    file_size_bytes              bigint,
+    card_count                   integer NOT NULL DEFAULT 0,
+    error_message                text,
+    build_log                    text,
+    generated_at                 timestamp with time zone,
+    generated_by                 uuid,
+    downloaded_at                timestamp with time zone,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- card_publish_events
+-- ============================================================
+CREATE TABLE public.card_publish_events (
+    id                           bigint NOT NULL,  -- PK
+    card_id                      uuid NOT NULL,
+    event_type                   text NOT NULL,
+    occurred_at                  timestamp with time zone NOT NULL DEFAULT now(),
+    meta                         jsonb
+);
+
+-- ============================================================
+-- card_share_links
+-- ============================================================
+CREATE TABLE public.card_share_links (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    card_id                      uuid,
+    card_slug                    text NOT NULL,
+    token                        text NOT NULL,
+    channel                      text NOT NULL DEFAULT copy,
+    sender_tag                   text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- card_versions
+-- ============================================================
+CREATE TABLE public.card_versions (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    card_id                      uuid NOT NULL,
+    package_id                   uuid,
+    version                      integer NOT NULL,
+    slug                         text NOT NULL,
+    name                         text NOT NULL,
+    card_json                    jsonb NOT NULL,
+    stockists_json               jsonb,
+    validated_by                 text,
+    validated_at                 timestamp with time zone,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    content_md                   text,
+    content_hash                 text,
+    sources_json                 jsonb
+);
 
 -- ============================================================
 -- data_studio_manufacturers
 -- ============================================================
 CREATE TABLE public.data_studio_manufacturers (
-    id                         UUID        NOT NULL DEFAULT gen_random_uuid(),
-    production_manufacturer_id UUID,
-    name                       TEXT        NOT NULL,
-    slug                       TEXT        NOT NULL,
-    website_url                TEXT,
-    logo_url                   TEXT,
-    hero_image_url             TEXT,
-    hero_image_position_y      SMALLINT    NOT NULL DEFAULT 50,
-    hero_wide_image_url        TEXT,
-    hero_wide_image_position_y SMALLINT    NOT NULL DEFAULT 50,
-    description                TEXT,
-    abn                        TEXT,
-    phone                      TEXT,
-    status                     TEXT        NOT NULL DEFAULT 'draft',
-    pending_contact_full_name        TEXT,
-    pending_contact_email_primary    TEXT,
-    pending_contact_email_secondary  TEXT,
-    pending_contact_login_preference TEXT NOT NULL DEFAULT 'primary',
-    created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    production_manufacturer_id   uuid,
+    name                         text NOT NULL,
+    slug                         text NOT NULL,
+    website_url                  text,
+    logo_url                     text,
+    hero_image_url               text,
+    description                  text,
+    abn                          text,
+    phone                        text,
+    status                       text NOT NULL DEFAULT draft,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    hero_image_position_y        smallint NOT NULL DEFAULT 50,
+    pending_contact_full_name    text,
+    pending_contact_email_primary text,
+    pending_contact_email_secondary text,
+    pending_contact_login_preference text NOT NULL DEFAULT primary,
+    hero_wide_image_url          text,
+    hero_wide_image_position_y   smallint NOT NULL DEFAULT 50,
+    widget_button_config         jsonb NOT NULL,
+    logo_asset_id                uuid,
+    hero_image_asset_id          uuid,
+    hero_wide_image_asset_id     uuid
 );
 
 -- ============================================================
 -- data_studio_user_profiles
 -- ============================================================
 CREATE TABLE public.data_studio_user_profiles (
-    id           UUID        NOT NULL DEFAULT gen_random_uuid(),
-    auth_user_id UUID        NOT NULL,
-    email        TEXT        NOT NULL,
-    full_name    TEXT,
-    global_role  TEXT        NOT NULL DEFAULT 'manufacturer_user',
-    status       TEXT        NOT NULL DEFAULT 'active',
-    company_email_primary   TEXT,
-    company_email_secondary TEXT,
-    login_email_preference  TEXT        NOT NULL DEFAULT 'primary',
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ============================================================
--- source_documents
--- storage_provider is always 'cloudflare_r2'; binary blobs never stored in Supabase
--- ============================================================
-CREATE TABLE public.source_documents (
-    id                UUID        NOT NULL DEFAULT gen_random_uuid(),
-    manufacturer_id   UUID        NOT NULL,
-    original_filename TEXT        NOT NULL,
-    document_name     TEXT        NOT NULL,
-    document_type     TEXT,
-    document_date     TEXT,
-    storage_provider  TEXT        NOT NULL DEFAULT 'cloudflare_r2',
-    storage_bucket    TEXT,
-    storage_key       TEXT,
-    public_url        TEXT,
-    file_mime_type    TEXT,
-    file_size_bytes   BIGINT,
-    status            TEXT        NOT NULL DEFAULT 'uploaded',
-    uploaded_by       UUID,
-    uploaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    notes             TEXT
-);
-
--- ============================================================
--- document_pages
--- ============================================================
-CREATE TABLE public.document_pages (
-    id                      UUID        NOT NULL DEFAULT gen_random_uuid(),
-    source_document_id      UUID        NOT NULL,
-    page_number             INTEGER     NOT NULL,
-    page_image_storage_key  TEXT,
-    page_text               TEXT,
-    docling_json            JSONB,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    auth_user_id                 uuid NOT NULL,
+    email                        text NOT NULL,
+    full_name                    text,
+    global_role                  text NOT NULL DEFAULT manufacturer_user,
+    status                       text NOT NULL DEFAULT active,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    company_email_primary        text,
+    company_email_secondary      text,
+    login_email_preference       text NOT NULL DEFAULT primary
 );
 
 -- ============================================================
 -- document_chunks
 -- ============================================================
 CREATE TABLE public.document_chunks (
-    id                 UUID        NOT NULL DEFAULT gen_random_uuid(),
-    source_document_id UUID        NOT NULL,
-    document_page_id   UUID,
-    extraction_run_id  UUID,
-    page_number        INTEGER,
-    chunk_index        INTEGER     NOT NULL,
-    heading            TEXT,
-    chunk_type         TEXT,
-    raw_text           TEXT,
-    table_json         JSONB,
-    docling_json       JSONB,
-    confidence         NUMERIC,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    source_document_id           uuid NOT NULL,
+    document_page_id             uuid,
+    extraction_run_id            uuid,
+    page_number                  integer,
+    chunk_index                  integer NOT NULL,
+    heading                      text,
+    chunk_type                   text,
+    raw_text                     text,
+    table_json                   jsonb,
+    docling_json                 jsonb,
+    confidence                   numeric,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- document_pages
+-- ============================================================
+CREATE TABLE public.document_pages (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    source_document_id           uuid NOT NULL,
+    page_number                  integer NOT NULL,
+    page_image_storage_key       text,
+    page_text                    text,
+    docling_json                 jsonb,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- ============================================================
 -- extraction_runs
 -- ============================================================
 CREATE TABLE public.extraction_runs (
-    id                 UUID        NOT NULL DEFAULT gen_random_uuid(),
-    source_document_id UUID        NOT NULL,
-    run_type           TEXT        NOT NULL,
-    status             TEXT        NOT NULL DEFAULT 'queued',
-    tool_name          TEXT,
-    tool_version       TEXT,
-    model_name         TEXT,
-    started_at         TIMESTAMPTZ,
-    completed_at       TIMESTAMPTZ,
-    error_message      TEXT,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    source_document_id           uuid NOT NULL,
+    run_type                     text NOT NULL,
+    status                       text NOT NULL DEFAULT queued,
+    tool_name                    text,
+    tool_version                 text,
+    model_name                   text,
+    started_at                   timestamp with time zone,
+    completed_at                 timestamp with time zone,
+    error_message                text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- ============================================================
--- staged_systems
--- verification_status values: pending_review | approved | rejected
--- production_system_id set when promoted to production
+-- field_verifications
 -- ============================================================
-CREATE TABLE public.staged_systems (
-    id                    UUID        NOT NULL DEFAULT gen_random_uuid(),
-    manufacturer_id       UUID        NOT NULL,
-    source_document_id    UUID,
-    source_chunk_id       UUID,
-    production_system_id  UUID,
-    name                  TEXT        NOT NULL,
-    product_code          TEXT,
-    slug                  TEXT,
-    category              TEXT,
-    subcategory           TEXT,
-    description           TEXT,
-    dimensions            TEXT,
-    length_m              NUMERIC,
-    double_sided          BOOLEAN     NOT NULL DEFAULT false,
-    hero_image_url        TEXT,
-    website_url           TEXT,
-    source_label          TEXT,
-    source_url            TEXT,
-    sheet_format          TEXT,
-    fire_rating           TEXT,
-    acoustic_rating       TEXT,
-    moisture_resistant    BOOLEAN     NOT NULL DEFAULT false,
-    structural_grade      TEXT,
-    install_guide_url     TEXT,
-    tech_data_url         TEXT,
-    sort_order            INTEGER     NOT NULL DEFAULT 0,
-    extraction_confidence NUMERIC,
-    verification_status   TEXT        NOT NULL DEFAULT 'pending_review',
-    verified_by           UUID,
-    verified_at           TIMESTAMPTZ,
-    reviewer_notes        TEXT,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-    notes                 TEXT,
-    parser_notes          JSONB,
-    bal_rating            TEXT,
-    extracted_at          TIMESTAMPTZ,
-    australian_made       BOOLEAN
+CREATE TABLE public.field_verifications (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    entity_type                  text NOT NULL,
+    entity_id                    uuid NOT NULL,
+    field_name                   text NOT NULL,
+    extracted_value              text,
+    verified_value               text,
+    source_document_id           uuid,
+    source_page_id               uuid,
+    source_chunk_id              uuid,
+    source_page_number           integer,
+    status                       text NOT NULL DEFAULT pending,
+    confidence                   numeric,
+    reviewer_id                  uuid,
+    reviewed_at                  timestamp with time zone,
+    notes                        text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- manufacturer_assets
+-- ============================================================
+CREATE TABLE public.manufacturer_assets (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    asset_type                   text NOT NULL,
+    title                        text,
+    alt_text                     text,
+    caption                      text,
+    storage_key                  text,
+    source_url                   text,
+    public_url                   text,
+    mime_type                    text,
+    file_size_bytes              bigint,
+    width                        integer,
+    height                       integer,
+    focal_x                      smallint NOT NULL DEFAULT 50,
+    focal_y                      smallint NOT NULL DEFAULT 50,
+    approved_for_publication     boolean NOT NULL DEFAULT false,
+    archived                     boolean NOT NULL DEFAULT false,
+    created_by                   uuid,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- manufacturer_embed_widget_systems
+-- ============================================================
+CREATE TABLE public.manufacturer_embed_widget_systems (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    embed_widget_id              uuid NOT NULL,
+    staged_system_id             uuid NOT NULL,
+    sort_order                   integer NOT NULL DEFAULT 0
+);
+
+-- ============================================================
+-- manufacturer_embed_widgets
+-- ============================================================
+CREATE TABLE public.manufacturer_embed_widgets (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    public_token                 text NOT NULL DEFAULT encode(extensions.gen_random_bytes(24), 'hex'::text),
+    status                       text NOT NULL DEFAULT active,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- manufacturer_link_library
+-- ============================================================
+CREATE TABLE public.manufacturer_link_library (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    label                        text NOT NULL,
+    url                          text NOT NULL,
+    created_by                   uuid,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- manufacturer_messages
+-- ============================================================
+CREATE TABLE public.manufacturer_messages (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    sender_type                  text NOT NULL,
+    sender_user_id               uuid,
+    sender_label                 text,
+    body                         text NOT NULL,
+    message_type                 text NOT NULL DEFAULT general,
+    related_publish_batch_id     uuid,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    acknowledged_at              timestamp with time zone
+);
+
+-- ============================================================
+-- manufacturer_stockist_cards
+-- ============================================================
+CREATE TABLE public.manufacturer_stockist_cards (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    stockist_id                  uuid NOT NULL,
+    card_id                      uuid NOT NULL,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- manufacturer_stockists
+-- ============================================================
+CREATE TABLE public.manufacturer_stockists (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    business_name                text NOT NULL,
+    suburb                       text,
+    state                        text,
+    phone                        text,
+    website_url                  text,
+    trade_desk_email             text,
+    all_cards                    boolean NOT NULL DEFAULT true,
+    confirm_token                uuid NOT NULL DEFAULT gen_random_uuid(),
+    confirm_status               text NOT NULL DEFAULT unconfirmed,
+    confirmed_at                 timestamp with time zone,
+    archived                     boolean NOT NULL DEFAULT false,
+    sort_order                   integer NOT NULL DEFAULT 0,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- manufacturer_users
+-- ============================================================
+CREATE TABLE public.manufacturer_users (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    auth_user_id                 uuid,
+    email                        text NOT NULL,
+    role                         text NOT NULL DEFAULT manufacturer_reviewer,
+    status                       text NOT NULL DEFAULT invited,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    user_profile_id              uuid,
+    invited_by                   uuid,
+    invited_at                   timestamp with time zone DEFAULT now(),
+    accepted_at                  timestamp with time zone,
+    last_active_at               timestamp with time zone,
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- parser_field_evidence
+-- ============================================================
+CREATE TABLE public.parser_field_evidence (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    extraction_run_id            uuid NOT NULL,
+    entity_type                  text NOT NULL,
+    entity_id                    uuid NOT NULL,
+    field_name                   text NOT NULL,
+    extracted_value              text,
+    source_document_id           uuid,
+    source_page_number           integer,
+    source_chunk_id              uuid,
+    confidence                   numeric,
+    is_uncertain                 boolean NOT NULL DEFAULT false,
+    parser_note                  text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- pipeline_jobs
+-- ============================================================
+CREATE TABLE public.pipeline_jobs (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    document_id                  uuid,
+    job_type                     text NOT NULL,
+    status                       text NOT NULL DEFAULT pending,
+    payload                      jsonb NOT NULL,
+    result                       jsonb,
+    error_message                text,
+    log_lines                    text[],
+    progress                     jsonb,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    started_at                   timestamp with time zone,
+    completed_at                 timestamp with time zone,
+    worker_id                    text
+);
+
+-- ============================================================
+-- publish_batch_items
+-- ============================================================
+CREATE TABLE public.publish_batch_items (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    publish_batch_id             uuid NOT NULL,
+    entity_type                  text NOT NULL,
+    entity_id                    uuid NOT NULL,
+    production_table             text,
+    production_id                uuid,
+    status                       text NOT NULL DEFAULT pending,
+    error_message                text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    change_type                  text NOT NULL DEFAULT new
+);
+
+-- ============================================================
+-- publish_batches
+-- ============================================================
+CREATE TABLE public.publish_batches (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid,
+    status                       text NOT NULL DEFAULT draft,
+    export_type                  text NOT NULL DEFAULT csv,
+    production_project_ref       text,
+    created_by                   uuid,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    approved_at                  timestamp with time zone,
+    published_at                 timestamp with time zone,
+    notes                        text
+);
+
+-- ============================================================
+-- source_documents
+-- ============================================================
+CREATE TABLE public.source_documents (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    original_filename            text NOT NULL,
+    document_name                text NOT NULL,
+    document_type                text,
+    document_date                text,
+    storage_provider             text NOT NULL DEFAULT cloudflare_r2,
+    storage_bucket               text,
+    storage_key                  text,
+    public_url                   text,
+    file_mime_type               text,
+    file_size_bytes              bigint,
+    status                       text NOT NULL DEFAULT uploaded,
+    uploaded_by                  uuid,
+    uploaded_at                  timestamp with time zone NOT NULL DEFAULT now(),
+    notes                        text,
+    production_catalogue_source_id uuid,
+    source_url                   text,
+    ingest_kind                  text NOT NULL DEFAULT upload
+);
+
+-- ============================================================
+-- staged_components
+-- ============================================================
+CREATE TABLE public.staged_components (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    source_document_id           uuid,
+    source_chunk_id              uuid,
+    production_component_id      uuid,
+    sku                          text,
+    name                         text NOT NULL,
+    description                  text,
+    category                     text,
+    uom                          text,
+    length_mm                    numeric,
+    width_mm                     numeric,
+    height_mm                    numeric,
+    thickness_mm                 numeric,
+    depth_mm                     numeric,
+    gauge_mm                     numeric,
+    diameter_mm                  numeric,
+    roll_m                       numeric,
+    weight_kg                    numeric,
+    pieces                       integer,
+    material                     text,
+    finish                       text,
+    colour                       text,
+    profile                      text,
+    texture                      text,
+    coverage_m2                  numeric,
+    sort_order                   integer NOT NULL DEFAULT 0,
+    extraction_confidence        numeric,
+    verification_status          text NOT NULL DEFAULT pending_review,
+    verified_by                  uuid,
+    verified_at                  timestamp with time zone,
+    reviewer_notes               text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    volume_ml                    numeric,
+    weight_g                     numeric,
+    pack_format                  text,
+    supplier_pack_qty            numeric,
+    supplier_pack_uom            text,
+    supplier_pack_note           text,
+    parser_notes                 jsonb,
+    image_url                    text,
+    website_url                  text,
+    extracted_at                 timestamp with time zone,
+    procurement_route            text
 );
 
 -- ============================================================
 -- staged_system_colours
 -- ============================================================
 CREATE TABLE public.staged_system_colours (
-    id                  UUID        NOT NULL DEFAULT gen_random_uuid(),
-    staged_system_id    UUID        NOT NULL,
-    colour_name         TEXT        NOT NULL,
-    sku                 TEXT,
-    image_url           TEXT,
-    is_stocked          BOOLEAN     NOT NULL DEFAULT true,
-    sort_order          INTEGER     NOT NULL DEFAULT 0,
-    verification_status TEXT        NOT NULL DEFAULT 'pending_review',
-    reviewer_notes      TEXT,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    parser_notes        JSONB,
-    sku_suffix          TEXT,
-    extracted_at        TIMESTAMPTZ
-);
-
--- ============================================================
--- staged_system_profiles
--- size/SKU variants within a system (different lengths, sheet formats, etc.)
--- ============================================================
-CREATE TABLE public.staged_system_profiles (
-    id                  UUID        NOT NULL DEFAULT gen_random_uuid(),
-    staged_system_id    UUID        NOT NULL,
-    name                TEXT,
-    product_code        TEXT,
-    dimensions          TEXT,
-    length_m            NUMERIC,
-    sheet_format        TEXT,
-    sort_order          INTEGER     NOT NULL DEFAULT 0,
-    verification_status TEXT        NOT NULL DEFAULT 'pending_review',
-    reviewer_notes      TEXT,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    profile_name        TEXT,
-    length_mm           NUMERIC,
-    width_mm            NUMERIC,
-    height_mm           NUMERIC,
-    thickness_mm        NUMERIC,
-    depth_mm            NUMERIC,
-    gauge_mm            NUMERIC,
-    diameter_mm         NUMERIC,
-    roll_m              NUMERIC,
-    weight_kg           NUMERIC,
-    pieces              NUMERIC,
-    volume_ml           NUMERIC,
-    weight_g            NUMERIC,
-    pack_format         TEXT,
-    supplier_pack_qty   NUMERIC,
-    supplier_pack_uom   TEXT,
-    supplier_pack_note  TEXT,
-    bal_rating          TEXT,
-    parser_notes        JSONB,
-    uom                 TEXT,
-    image_url           TEXT,
-    website_url         TEXT,
-    extracted_at        TIMESTAMPTZ,
-    procurement_route   TEXT
-);
-
--- ============================================================
--- staged_components
--- fixings, trims, clips — production_component_id set when promoted
--- ============================================================
-CREATE TABLE public.staged_components (
-    id                        UUID        NOT NULL DEFAULT gen_random_uuid(),
-    manufacturer_id           UUID        NOT NULL,
-    source_document_id        UUID,
-    source_chunk_id           UUID,
-    production_component_id   UUID,
-    sku                       TEXT,
-    name                      TEXT        NOT NULL,
-    description               TEXT,
-    category                  TEXT,
-    uom                       TEXT,
-    length_mm                 NUMERIC,
-    width_mm                  NUMERIC,
-    height_mm                 NUMERIC,
-    thickness_mm              NUMERIC,
-    depth_mm                  NUMERIC,
-    gauge_mm                  NUMERIC,
-    diameter_mm               NUMERIC,
-    roll_m                    NUMERIC,
-    weight_kg                 NUMERIC,
-    pieces                    INTEGER,
-    material                  TEXT,
-    finish                    TEXT,
-    colour                    TEXT,
-    profile                   TEXT,
-    texture                   TEXT,
-    coverage_m2               NUMERIC,
-    sort_order                INTEGER     NOT NULL DEFAULT 0,
-    extraction_confidence     NUMERIC,
-    verification_status       TEXT        NOT NULL DEFAULT 'pending_review',
-    verified_by               UUID,
-    verified_at               TIMESTAMPTZ,
-    reviewer_notes            TEXT,
-    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-    volume_ml                 NUMERIC,
-    weight_g                  NUMERIC,
-    pack_format               TEXT,
-    supplier_pack_qty         NUMERIC,
-    supplier_pack_uom         TEXT,
-    supplier_pack_note        TEXT,
-    parser_notes              JSONB,
-    image_url                 TEXT,
-    website_url               TEXT,
-    extracted_at              TIMESTAMPTZ,
-    procurement_route         TEXT
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    staged_system_id             uuid NOT NULL,
+    colour_name                  text NOT NULL,
+    sku                          text,
+    image_url                    text,
+    is_stocked                   boolean NOT NULL DEFAULT true,
+    sort_order                   integer NOT NULL DEFAULT 0,
+    verification_status          text NOT NULL DEFAULT pending_review,
+    reviewer_notes               text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    parser_notes                 jsonb,
+    sku_suffix                   text,
+    extracted_at                 timestamp with time zone,
+    production_colour_id         uuid
 );
 
 -- ============================================================
 -- staged_system_components
--- join: which staged_components belong to which staged_system
--- role default: 'component'
 -- ============================================================
 CREATE TABLE public.staged_system_components (
-    id                    UUID        NOT NULL DEFAULT gen_random_uuid(),
-    staged_system_id      UUID        NOT NULL,
-    staged_component_id   UUID        NOT NULL,
-    role                  TEXT        NOT NULL DEFAULT 'component',
-    notes                 TEXT,
-    sort_order            INTEGER     NOT NULL DEFAULT 0,
-    extraction_confidence NUMERIC,
-    verification_status   TEXT        NOT NULL DEFAULT 'pending_review',
-    verified_by           UUID,
-    verified_at           TIMESTAMPTZ,
-    reviewer_notes        TEXT,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-    parser_notes          JSONB,
-    extracted_at          TIMESTAMPTZ
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    staged_system_id             uuid NOT NULL,
+    staged_component_id          uuid NOT NULL,
+    role                         text NOT NULL DEFAULT component,
+    notes                        text,
+    sort_order                   integer NOT NULL DEFAULT 0,
+    extraction_confidence        numeric,
+    verification_status          text NOT NULL DEFAULT pending_review,
+    verified_by                  uuid,
+    verified_at                  timestamp with time zone,
+    reviewer_notes               text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    parser_notes                 jsonb,
+    extracted_at                 timestamp with time zone
 );
 
 -- ============================================================
--- field_verifications
--- per-field review record; entity_type + entity_id is polymorphic
+-- staged_system_profiles
 -- ============================================================
-CREATE TABLE public.field_verifications (
-    id                  UUID        NOT NULL DEFAULT gen_random_uuid(),
-    entity_type         TEXT        NOT NULL,
-    entity_id           UUID        NOT NULL,
-    field_name          TEXT        NOT NULL,
-    extracted_value     TEXT,
-    verified_value      TEXT,
-    source_document_id  UUID,
-    source_page_id      UUID,
-    source_chunk_id     UUID,
-    source_page_number  INTEGER,
-    status              TEXT        NOT NULL DEFAULT 'pending',
-    confidence          NUMERIC,
-    reviewer_id         UUID,
-    reviewed_at         TIMESTAMPTZ,
-    notes               TEXT,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE public.staged_system_profiles (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    staged_system_id             uuid NOT NULL,
+    name                         text,
+    product_code                 text,
+    dimensions                   text,
+    length_m                     numeric,
+    sheet_format                 text,
+    sort_order                   integer NOT NULL DEFAULT 0,
+    verification_status          text NOT NULL DEFAULT pending_review,
+    reviewer_notes               text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    profile_name                 text,
+    length_mm                    numeric,
+    width_mm                     numeric,
+    height_mm                    numeric,
+    thickness_mm                 numeric,
+    depth_mm                     numeric,
+    gauge_mm                     numeric,
+    diameter_mm                  numeric,
+    roll_m                       numeric,
+    weight_kg                    numeric,
+    pieces                       numeric,
+    volume_ml                    numeric,
+    weight_g                     numeric,
+    pack_format                  text,
+    supplier_pack_qty            numeric,
+    supplier_pack_uom            text,
+    supplier_pack_note           text,
+    bal_rating                   text,
+    parser_notes                 jsonb,
+    uom                          text,
+    image_url                    text,
+    website_url                  text,
+    extracted_at                 timestamp with time zone,
+    procurement_route            text,
+    production_profile_id        uuid
 );
 
 -- ============================================================
--- parser_field_evidence
--- evidence trail per field per extraction run
+-- staged_systems
 -- ============================================================
-CREATE TABLE public.parser_field_evidence (
-    id                 UUID        NOT NULL DEFAULT gen_random_uuid(),
-    extraction_run_id  UUID        NOT NULL,
-    entity_type        TEXT        NOT NULL,
-    entity_id          UUID        NOT NULL,
-    field_name         TEXT        NOT NULL,
-    extracted_value    TEXT,
-    source_document_id UUID,
-    source_page_number INTEGER,
-    source_chunk_id    UUID,
-    confidence         NUMERIC,
-    is_uncertain       BOOLEAN     NOT NULL DEFAULT false,
-    parser_note        TEXT,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE public.staged_systems (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    source_document_id           uuid,
+    source_chunk_id              uuid,
+    production_system_id         uuid,
+    name                         text NOT NULL,
+    product_code                 text,
+    slug                         text,
+    category                     text,
+    subcategory                  text,
+    description                  text,
+    dimensions                   text,
+    length_m                     numeric,
+    double_sided                 boolean NOT NULL DEFAULT false,
+    hero_image_url               text,
+    website_url                  text,
+    source_label                 text,
+    source_url                   text,
+    sheet_format                 text,
+    fire_rating                  text,
+    acoustic_rating              text,
+    moisture_resistant           boolean NOT NULL DEFAULT false,
+    structural_grade             text,
+    tech_data_url                text,
+    sort_order                   integer NOT NULL DEFAULT 0,
+    extraction_confidence        numeric,
+    verification_status          text NOT NULL DEFAULT pending_review,
+    verified_by                  uuid,
+    verified_at                  timestamp with time zone,
+    reviewer_notes               text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    notes                        text,
+    parser_notes                 jsonb,
+    bal_rating                   text,
+    extracted_at                 timestamp with time zone,
+    australian_made              boolean,
+    install_guide_urls           jsonb,
+    design_guide_url             text,
+    last_submitted_at            timestamp with time zone,
+    last_published_at            timestamp with time zone,
+    hero_image_position_x        smallint NOT NULL DEFAULT 50,
+    hero_image_position_y        smallint NOT NULL DEFAULT 50,
+    hero_image_asset_id          uuid,
+    gallery_images               jsonb NOT NULL,
+    publish_status               text NOT NULL DEFAULT draft,
+    published_version            text,
+    owner_account_id             uuid,
+    custom_document_links        jsonb
+);
+
+-- ============================================================
+-- system_sources
+-- ============================================================
+CREATE TABLE public.system_sources (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    staged_system_id             uuid NOT NULL,
+    role                         text NOT NULL,
+    label                        text,
+    url                          text NOT NULL,
+    source_document_id           uuid,
+    ingest_status                text NOT NULL DEFAULT linked,
+    include_in_container         boolean NOT NULL DEFAULT true,
+    error_message                text,
+    sort_order                   integer NOT NULL DEFAULT 0,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at                   timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- ============================================================
 -- verification_events
--- append-only audit log of reviewer actions
 -- ============================================================
 CREATE TABLE public.verification_events (
-    id          UUID        NOT NULL DEFAULT gen_random_uuid(),
-    entity_type TEXT        NOT NULL,
-    entity_id   UUID        NOT NULL,
-    action      TEXT        NOT NULL,
-    field_name  TEXT,
-    old_value   TEXT,
-    new_value   TEXT,
-    reviewer_id UUID,
-    notes       TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    entity_type                  text NOT NULL,
+    entity_id                    uuid NOT NULL,
+    action                       text NOT NULL,
+    field_name                   text,
+    old_value                    text,
+    new_value                    text,
+    reviewer_id                  uuid,
+    notes                        text,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- ============================================================
--- publish_batches
--- a batch of staged items to push to production
--- export_type default: 'csv'; production_project_ref = prod Supabase ref
+-- widget_quote_requests
 -- ============================================================
-CREATE TABLE public.publish_batches (
-    id                     UUID        NOT NULL DEFAULT gen_random_uuid(),
-    manufacturer_id        UUID,
-    status                 TEXT        NOT NULL DEFAULT 'draft',
-    export_type            TEXT        NOT NULL DEFAULT 'csv',
-    production_project_ref TEXT,
-    created_by             UUID,
-    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
-    approved_at            TIMESTAMPTZ,
-    published_at           TIMESTAMPTZ,
-    notes                  TEXT
-);
-
--- ============================================================
--- publish_batch_items
--- individual entities queued in a publish batch
--- ============================================================
-CREATE TABLE public.publish_batch_items (
-    id               UUID        NOT NULL DEFAULT gen_random_uuid(),
-    publish_batch_id UUID        NOT NULL,
-    entity_type      TEXT        NOT NULL,
-    entity_id        UUID        NOT NULL,
-    production_table TEXT,
-    production_id    UUID,
-    status           TEXT        NOT NULL DEFAULT 'pending',
-    error_message    TEXT,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ============================================================
--- manufacturer_users
--- links a user to a manufacturer workspace
--- role: 'manufacturer_reviewer' | 'manufacturer_admin'
--- status: 'invited' | 'active' | 'suspended'
--- ============================================================
-CREATE TABLE public.manufacturer_users (
-    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
-    manufacturer_id UUID        NOT NULL,
-    auth_user_id    UUID,
-    email           TEXT        NOT NULL,
-    role            TEXT        NOT NULL DEFAULT 'manufacturer_reviewer',
-    status          TEXT        NOT NULL DEFAULT 'invited',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    user_profile_id UUID,
-    invited_by      UUID,
-    invited_at      TIMESTAMPTZ          DEFAULT now(),
-    accepted_at     TIMESTAMPTZ,
-    last_active_at  TIMESTAMPTZ,
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE public.widget_quote_requests (
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    widget_id                    uuid,
+    system_id                    text NOT NULL,
+    system_name                  text,
+    selected_items               jsonb NOT NULL,
+    name                         text NOT NULL,
+    email                        text NOT NULL,
+    phone                        text,
+    postcode                     text,
+    project_type                 text,
+    timeline                     text,
+    message                      text,
+    status                       text NOT NULL DEFAULT new,
+    created_at                   timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- ============================================================
 -- workspace_invitations
--- pending email invites; token_hash used for accept link
 -- ============================================================
 CREATE TABLE public.workspace_invitations (
-    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
-    manufacturer_id UUID        NOT NULL,
-    email           TEXT        NOT NULL,
-    role            TEXT        NOT NULL DEFAULT 'manufacturer_reviewer',
-    token_hash      TEXT,
-    status          TEXT        NOT NULL DEFAULT 'pending',
-    invited_by      UUID,
-    invited_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at      TIMESTAMPTZ,
-    accepted_at     TIMESTAMPTZ
+    id                           uuid NOT NULL DEFAULT gen_random_uuid(),  -- PK
+    manufacturer_id              uuid NOT NULL,
+    email                        text NOT NULL,
+    role                         text NOT NULL DEFAULT manufacturer_reviewer,
+    token_hash                   text,
+    status                       text NOT NULL DEFAULT pending,
+    invited_by                   uuid,
+    invited_at                   timestamp with time zone NOT NULL DEFAULT now(),
+    expires_at                   timestamp with time zone,
+    accepted_at                  timestamp with time zone
 );
+
+-- ============================================================
+-- RPC endpoints exposed by PostgREST at refresh time
+-- ============================================================
+-- /rpc/get_my_global_role
+-- /rpc/insert_parser_output_plan_v1
+-- /rpc/match_card_sources
+-- /rpc/purge_staged_for_document_v1
+-- /rpc/rls_auto_enable

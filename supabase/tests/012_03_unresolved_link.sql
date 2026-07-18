@@ -2,7 +2,9 @@
 -- The staged_systems row that is inserted first must NOT persist after the rollback.
 -- Row counts must be identical before and after this call.
 --
--- Uses a DO block so we can catch the exception and report PASS/FAIL.
+-- Uses a DO block so we can catch the expected exception. Assertion failures
+-- RAISE EXCEPTION so the run exits non-zero under ON_ERROR_STOP (2026-07-18
+-- audit: PASS/FAIL notices scroll away and were never acted on).
 -- The exception aborts the function's internal transaction — no rows committed.
 
 DO $$
@@ -10,6 +12,7 @@ DECLARE
   v_mfr_id  text;
   v_systems_before bigint;
   v_systems_after  bigint;
+  v_raised  boolean := false;
 BEGIN
   SELECT id::text INTO v_mfr_id
   FROM data_studio_manufacturers WHERE name = 'NewTechWood' LIMIT 1;
@@ -48,18 +51,22 @@ BEGIN
         'parserFieldEvidence',    '[]'::jsonb
       )
     );
-    RAISE NOTICE 'FAIL: no exception raised — unresolved link should have aborted';
   EXCEPTION
     WHEN OTHERS THEN
+      v_raised := true;
       RAISE NOTICE 'PASS: exception raised as expected — SQLERRM: %', SQLERRM;
   END;
+
+  IF NOT v_raised THEN
+    RAISE EXCEPTION 'no exception raised — unresolved link should have aborted the insert';
+  END IF;
 
   SELECT COUNT(*) INTO v_systems_after FROM staged_systems;
 
   IF v_systems_before = v_systems_after THEN
     RAISE NOTICE 'PASS: staged_systems count unchanged (%) — rollback confirmed', v_systems_before;
   ELSE
-    RAISE NOTICE 'FAIL: staged_systems changed from % to % — rollback did NOT occur!',
+    RAISE EXCEPTION 'staged_systems changed from % to % — rollback did NOT occur!',
       v_systems_before, v_systems_after;
   END IF;
 END;
