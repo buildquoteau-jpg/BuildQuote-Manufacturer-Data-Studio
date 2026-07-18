@@ -43,6 +43,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+# scripts/lib is importable regardless of cwd
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.pipeline_report import PipelineReporter  # noqa: E402
+
+# Module-level so the __main__ wrapper can report crashes that escape main().
+REPORTER = None
+
 
 # ============================================================
 # Prompts
@@ -600,6 +607,14 @@ def main():
         sys.exit("[ERROR] products_listing_url not found in hints file — cannot scrape product listing")
 
     # Load rows from Supabase
+    global REPORTER
+    REPORTER = PipelineReporter.start(
+        "web_enricher",
+        payload={"manufacturer_name": args.manufacturer_name,
+                 "dry_run": args.dry_run, "limit": args.limit},
+        manufacturer_id=args.manufacturer_id,
+    )
+
     ids = [i.strip() for i in args.ids.split(",")] if args.ids else None
     require_null = [f.strip() for f in args.require_null.split(",")] if args.require_null else None
     print(f"\n[enricher] Fetching staged_systems for manufacturer {args.manufacturer_id}...")
@@ -653,8 +668,12 @@ def main():
 
     # Scrape each product page and extract fields
     results = []
-    for row in rows:
+    for row_idx, row in enumerate(rows, 1):
         name = row["name"]
+        REPORTER.progress(
+            {"currentStage": "scrape", "row": row_idx, "totalRows": len(rows), "name": name},
+            log_line=f"scraping {row_idx}/{len(rows)}: {name}",
+        )
         match = url_mapping.get(name)
 
         entry = {
@@ -704,6 +723,9 @@ def main():
 
     if args.dry_run:
         print("[enricher] Dry run complete — no Supabase writes.")
+        REPORTER.done({"rows": len(results),
+                       "withPatches": sum(1 for r in results if r.get("patch")),
+                       "dryRun": True})
         return
 
     # Apply patches
@@ -721,7 +743,24 @@ def main():
             print(f"  [ERROR]   Failed to patch {r['name']} ({r['id']})")
 
     print(f"\n[enricher] Done — {patched} patched, {skipped} skipped, {failed} failed.")
+    if failed:
+        REPORTER.fail(f"{failed} row patch(es) failed ({patched} patched, {skipped} skipped) — see patch file {patch_path}")
+    else:
+        REPORTER.done({"patched": patched, "skipped": skipped, "failed": failed})
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as e:
+        if REPORTER is not None and not REPORTER.terminal_sent and e.code not in (0, None):
+            REPORTER.fail(str(e.code))
+        raise
+    except KeyboardInterrupt:
+        if REPORTER is not None and not REPORTER.terminal_sent:
+            REPORTER.fail("interrupted by user (Ctrl+C)")
+        raise
+    except Exception as e:
+        if REPORTER is not None and not REPORTER.terminal_sent:
+            REPORTER.fail(f"{type(e).__name__}: {e}")
+        raise

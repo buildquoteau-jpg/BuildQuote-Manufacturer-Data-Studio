@@ -35,6 +35,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# scripts/lib is importable regardless of cwd
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.pipeline_report import PipelineReporter  # noqa: E402
+
 # Force unbuffered stdout so output appears immediately when piped. Also force
 # UTF-8 — Windows' default console codepage (cp1252) can't encode characters
 # like → that show up in extracted catalogue text or model warnings, and a
@@ -343,7 +347,7 @@ def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, int
             else:
                 import anthropic
                 response = client.messages.create(
-                    model="claude-sonnet-4-6",
+                    model=getattr(client, "_model", "claude-sonnet-4-6"),
                     max_tokens=16000,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
@@ -378,16 +382,22 @@ def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, int
                 time.sleep(inter_call_delay)
             return result
         except json.JSONDecodeError as e:
-            print(f"    [WARN] Invalid JSON ({label}): {e}")
+            print(f"    [WARN] Invalid JSON ({label}) attempt {attempt}/{max_retries}: {e}")
             print(f"    Raw (last 500): ...{raw[-500:]}")
             if stop_reason in ("max_tokens", "length"):
                 print(f"    [WARN] Response hit max_tokens — JSON truncated.")
+            # Retry instead of silently dropping the chunk (2026-07-18 audit:
+            # a single bad generation used to lose the whole chunk's products
+            # with only this console warning as a trace).
+            if attempt < max_retries:
+                time.sleep(5)
+                continue
             return None
 
     return None
 
 
-def parse_stage1(client, chunk, manufacturer_name, hints_text, inter_call_delay=0):
+def parse_stage1(client, chunk, manufacturer_name, hints_text, inter_call_delay=0, manifest=None):
     print(f"  [stage1] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
     user_prompt = STAGE1_USER_TEMPLATE.format(
         manufacturer_name=manufacturer_name,
@@ -398,7 +408,20 @@ def parse_stage1(client, chunk, manufacturer_name, hints_text, inter_call_delay=
     )
     result = call_claude(client, STAGE1_SYSTEM_PROMPT, user_prompt, label=f"stage1-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay)
     if not result:
+        print(f"    [ERROR] stage1 chunk {chunk['chunk_no']} produced no usable output — recorded in run manifest")
+        if manifest is not None:
+            manifest.append({
+                "stage": "stage1", "chunk_no": chunk["chunk_no"],
+                "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+                "status": "failed",
+            })
         return [], [], []
+    if manifest is not None:
+        manifest.append({
+            "stage": "stage1", "chunk_no": chunk["chunk_no"],
+            "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+            "status": "ok",
+        })
 
     systems = result.get("systems") or []
     profiles = result.get("system_profiles") or []
@@ -415,7 +438,7 @@ def parse_stage1(client, chunk, manufacturer_name, hints_text, inter_call_delay=
     return systems, profiles, colours
 
 
-def parse_stage2(client, chunk, manufacturer_name, hints_text, system_context, inter_call_delay=0):
+def parse_stage2(client, chunk, manufacturer_name, hints_text, system_context, inter_call_delay=0, manifest=None):
     print(f"  [stage2] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
     user_prompt = STAGE2_USER_TEMPLATE.format(
         manufacturer_name=manufacturer_name,
@@ -427,7 +450,20 @@ def parse_stage2(client, chunk, manufacturer_name, hints_text, system_context, i
     )
     result = call_claude(client, STAGE2_SYSTEM_PROMPT, user_prompt, label=f"stage2-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay)
     if not result:
+        print(f"    [ERROR] stage2 chunk {chunk['chunk_no']} produced no usable output — recorded in run manifest")
+        if manifest is not None:
+            manifest.append({
+                "stage": "stage2", "chunk_no": chunk["chunk_no"],
+                "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+                "status": "failed",
+            })
         return [], []
+    if manifest is not None:
+        manifest.append({
+            "stage": "stage2", "chunk_no": chunk["chunk_no"],
+            "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+            "status": "ok",
+        })
 
     components = result.get("components") or []
     links = result.get("system_components") or []
@@ -791,7 +827,13 @@ def call_rpc(plan, supabase_url, service_key):
 # Main
 # ============================================================
 
+# Module-level so the __main__ wrapper can report crashes that escape main().
+REPORTER = None
+
+
 def main():
+    global REPORTER
+
     parser = argparse.ArgumentParser(description="AI parser: Docling markdown -> Supabase staging tables")
     parser.add_argument("--input", required=True, help="Path to output.md from Docling chunked extraction")
     parser.add_argument("--manufacturer-id", required=True, help="data_studio_manufacturers.id UUID")
@@ -800,10 +842,43 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Write plan JSON locally, skip Supabase")
     parser.add_argument("--stage", choices=["1", "2", "both"], default="both")
     parser.add_argument("--openai-model", default=None, help="Use OpenAI instead of Anthropic (e.g. gpt-4.5-preview, gpt-4o)")
-    parser.add_argument("--production", action="store_true", help="Target production Supabase (reads PRODUCTION_SUPABASE_URL + PRODUCTION_SUPABASE_SERVICE_ROLE_KEY from .env.local)")
+    parser.add_argument("--model", default="claude-sonnet-4-6", help="Anthropic model ID (ignored when --openai-model is set)")
+    parser.add_argument("--from-plan", default=None, help="Skip extraction: insert a previously saved plan JSON (every run saves one to .local/parser-dry-run/plan_*.json before inserting)")
+    parser.add_argument("--allow-partial", action="store_true", help="Proceed with the live insert even if some chunks failed extraction (they are recorded in the run manifest)")
     args = parser.parse_args()
 
-    anthropic_key, openai_key, supabase_url, service_key = load_env(production=args.production)
+    anthropic_key, openai_key, supabase_url, service_key = load_env()
+
+    # ── Resume path: insert a previously saved plan, no extraction ──────────
+    if args.from_plan:
+        REPORTER = PipelineReporter.start(
+            "parser",
+            payload={"manufacturer_name": args.manufacturer_name, "from_plan": args.from_plan},
+            manufacturer_id=args.manufacturer_id,
+        )
+        plan_file = Path(args.from_plan)
+        if not plan_file.exists():
+            sys.exit(f"[ERROR] Plan file not found: {plan_file}")
+        plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        if "_resolvedLinks" in plan:
+            sys.exit("[ERROR] This plan came from a --stage 2 standalone run (direct insert); --from-plan only supports full RPC plans")
+        if not supabase_url or not service_key:
+            sys.exit("[ERROR] NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
+        print(f"[parser] Inserting saved plan {plan_file}:")
+        for k in ("stagedSystems", "stagedSystemProfiles", "stagedSystemColours", "stagedComponents", "stagedSystemComponents"):
+            print(f"  {k:<24}: {len(plan.get(k, []))}")
+        result = call_rpc(plan, supabase_url, service_key)
+        if not result:
+            msg = f"RPC insert failed — plan still preserved at {plan_file}"
+            REPORTER.fail(msg)
+            sys.exit(f"[ERROR] {msg}")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        result_path = Path(".local/parser-dry-run") / f"rpc_result_{ts}.json"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"[parser] RPC result: {json.dumps(result.get('inserted_counts', result), indent=2)}")
+        REPORTER.done(result.get("inserted_counts", {}))
+        return
 
     use_openai = bool(args.openai_model)
 
@@ -822,11 +897,27 @@ def main():
         import anthropic
         client = anthropic.Anthropic(api_key=anthropic_key)
         client._provider = "anthropic"
+        client._model = args.model
         inter_call_delay = 65  # 8k tokens/min limit on this key
-        print(f"[parser] Provider: Anthropic (claude-sonnet-4-6)")
+        print(f"[parser] Provider: Anthropic ({args.model})")
 
     if not args.dry_run and (not supabase_url or not service_key):
         sys.exit("[ERROR] NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required (or use --dry-run)")
+
+    # Every run (manual or worker-spawned) reports to pipeline_jobs so the
+    # pipeline UI can show live progress and failures — see scripts/lib/pipeline_report.py.
+    REPORTER = PipelineReporter.start(
+        "parser",
+        payload={
+            "manufacturer_name": args.manufacturer_name,
+            "input": str(args.input),
+            "dry_run": args.dry_run,
+            "stage": args.stage,
+            "provider": "openai" if use_openai else "anthropic",
+            "model": args.openai_model or args.model,
+        },
+        manufacturer_id=args.manufacturer_id,
+    )
 
     hints_text = ""
     if args.hints:
@@ -843,12 +934,17 @@ def main():
 
     all_systems, all_profiles, all_colours = [], [], []
     all_components, all_links = [], []
+    run_manifest = []  # per-chunk ok/failed record — written to disk before any insert
 
     # Stage 1 — systems, profiles, colours
     if args.stage in ("1", "both"):
         print(f"\n[parser] === Stage 1: systems, profiles, colours ===")
-        for chunk in chunks:
-            s, p, c = parse_stage1(client, chunk, args.manufacturer_name, hints_text, inter_call_delay=inter_call_delay)
+        for idx, chunk in enumerate(chunks, 1):
+            REPORTER.progress(
+                {"currentStage": "stage1", "chunk": idx, "totalChunks": len(chunks)},
+                log_line=f"stage1 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
+            )
+            s, p, c = parse_stage1(client, chunk, args.manufacturer_name, hints_text, inter_call_delay=inter_call_delay, manifest=run_manifest)
             all_systems.extend(s)
             all_profiles.extend(p)
             all_colours.extend(c)
@@ -882,8 +978,12 @@ def main():
             except Exception as e:
                 print(f"[parser] Warning: could not fetch existing systems from Supabase: {e}")
         print(f"\n[parser] === Stage 2: components ({len(system_context)} known systems) ===")
-        for chunk in chunks:
-            comps, links = parse_stage2(client, chunk, args.manufacturer_name, hints_text, system_context, inter_call_delay=inter_call_delay)
+        for idx, chunk in enumerate(chunks, 1):
+            REPORTER.progress(
+                {"currentStage": "stage2", "chunk": idx, "totalChunks": len(chunks)},
+                log_line=f"stage2 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
+            )
+            comps, links = parse_stage2(client, chunk, args.manufacturer_name, hints_text, system_context, inter_call_delay=inter_call_delay, manifest=run_manifest)
             all_components.extend(comps)
             all_links.extend(links)
         print(f"\n[parser] Stage 2 total: {len(all_components)} components, {len(all_links)} links")
@@ -983,31 +1083,86 @@ def main():
     else:
         print(f"  Links      : {len(plan['stagedSystemComponents'])}")
 
-    # Dry run or insert
+    # ── Persist everything BEFORE any insert attempt (2026-07-18 audit P0) ──
+    # A failed RPC used to discard the entire multi-hour extraction; failed
+    # chunks used to exist only as scrolled-away console warnings. The plan
+    # and the chunk manifest are now durable artifacts of every run.
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     dry_run_dir = Path(".local/parser-dry-run")
+    dry_run_dir.mkdir(parents=True, exist_ok=True)
+
+    plan_path = dry_run_dir / f"plan_{ts}.json"
+    plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"\n[parser] Plan saved: {plan_path}")
+
+    failed_chunks = [m for m in run_manifest if m["status"] != "ok"]
+    if run_manifest:
+        manifest_path = dry_run_dir / f"manifest_{ts}.json"
+        manifest_path.write_text(json.dumps(run_manifest, indent=2), encoding="utf-8")
+        if failed_chunks:
+            print(f"\n[parser] WARNING: {len(failed_chunks)} chunk call(s) FAILED — manifest: {manifest_path}")
+            for m in failed_chunks:
+                print(f"    - {m['stage']} chunk {m['chunk_no']} (pages {m['pages']})")
+
+    counts_summary = {
+        "systems": len(plan.get("stagedSystems", [])),
+        "profiles": len(plan.get("stagedSystemProfiles", [])),
+        "colours": len(plan.get("stagedSystemColours", [])),
+        "components": len(plan.get("stagedComponents", [])),
+        "links": len(plan.get("_resolvedLinks", []) if standalone_stage2 else plan.get("stagedSystemComponents", [])),
+        "failedChunks": len(failed_chunks),
+    }
 
     if args.dry_run:
-        dry_run_dir.mkdir(parents=True, exist_ok=True)
-        plan_path = dry_run_dir / f"plan_{ts}.json"
-        plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"\n[parser] Dry run — plan written to: {plan_path}")
-    elif standalone_stage2:
+        print(f"\n[parser] Dry run — no Supabase writes. Insert later with:\n  --from-plan \"{plan_path}\"")
+        REPORTER.done({**counts_summary, "dryRun": True})
+        return
+
+    # A run with failed chunks means products are missing. Refuse to insert a
+    # silently incomplete catalogue unless the operator explicitly opts in.
+    if failed_chunks and not args.allow_partial:
+        msg = (f"{len(failed_chunks)} chunk(s) failed extraction — refusing live insert. "
+               f"Fix and re-run, or insert this partial result with --allow-partial, "
+               f"or resume later with --from-plan \"{plan_path}\"")
+        REPORTER.fail(msg)
+        sys.exit(f"[FATAL] {msg}")
+
+    if standalone_stage2:
         print(f"\n[parser] Stage 2 standalone — inserting components + links directly...")
         insert_stage2_direct(plan, supabase_url, service_key, dry_run_dir, ts)
+        REPORTER.done(counts_summary)
     else:
         print(f"\n[parser] Calling Supabase RPC...")
         result = call_rpc(plan, supabase_url, service_key)
         if result:
             # Save result alongside plan for audit
-            dry_run_dir.mkdir(parents=True, exist_ok=True)
             result_path = dry_run_dir / f"rpc_result_{ts}.json"
             result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
             print(f"\n[parser] RPC result:")
             print(json.dumps(result, indent=2))
+            REPORTER.done({**counts_summary, "inserted": result.get("inserted_counts", {})})
         else:
-            sys.exit(1)
+            msg = (f"RPC insert failed — extraction is NOT lost. "
+                   f"Retry without re-extracting: --from-plan \"{plan_path}\"")
+            REPORTER.fail(msg)
+            sys.exit(f"[FATAL] {msg}")
 
 
 if __name__ == "__main__":
-    main()
+    # Crash/interrupt reporting: whatever escapes main() still marks the
+    # pipeline_jobs row as failed, so the pipeline UI never shows a silent
+    # spinner over a dead run. Explicit done()/fail() calls inside main() win.
+    try:
+        main()
+    except SystemExit as e:
+        if REPORTER is not None and not REPORTER.terminal_sent and e.code not in (0, None):
+            REPORTER.fail(str(e.code))
+        raise
+    except KeyboardInterrupt:
+        if REPORTER is not None and not REPORTER.terminal_sent:
+            REPORTER.fail("interrupted by user (Ctrl+C)")
+        raise
+    except Exception as e:
+        if REPORTER is not None and not REPORTER.terminal_sent:
+            REPORTER.fail(f"{type(e).__name__}: {e}")
+        raise

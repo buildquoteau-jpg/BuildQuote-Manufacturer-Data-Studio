@@ -23,7 +23,14 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 
+# scripts/lib is importable regardless of cwd
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.pipeline_report import PipelineReporter  # noqa: E402
+
 SAFE_OUTPUT_ROOT = Path(".local/docling-output")
+
+# Module-level so the __main__ wrapper can report crashes that escape main().
+REPORTER = None
 
 
 def _make_safe_name(text):
@@ -164,6 +171,17 @@ def main():
 
     print(f"[chunked] PDF has {total_pages} pages, extracting p{start_page}-p{end_page}, chunk size {args.chunk_size}")
 
+    # Report to pipeline_jobs so manual terminal runs are visible in the
+    # pipeline UI. Worker-spawned runs attach to the worker's job row via
+    # PIPELINE_JOB_ID (progress keys mirror the worker's shape).
+    global REPORTER
+    total_chunks = -(-(end_page - start_page + 1) // args.chunk_size)  # ceiling div
+    REPORTER = PipelineReporter.start(
+        "docling",
+        payload={"input": input_path.name, "chunk_size": args.chunk_size,
+                 "pages": f"{start_page}-{end_page}"},
+    )
+
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     stem = _make_safe_name(input_path.stem)
 
@@ -188,6 +206,11 @@ def main():
         chunk_out = chunks_dir / f"chunk_{chunk_no:02d}_out"
 
         print(f"\n[chunked] Splitting pages {page}-{page_end} -> {chunk_pdf.name}")
+        REPORTER.progress(
+            {"totalPages": total_pages, "totalChunks": total_chunks,
+             "currentChunk": {"chunkNo": chunk_no, "startPage": page, "endPage": page_end}},
+            log_line=f"docling chunk {chunk_no}/{total_chunks} (pages {page}-{page_end})",
+        )
         split_pdf_chunk(input_path, page, page_end, chunk_pdf)
 
         run_chunk(chunk_pdf, chunk_out, chunk_no)
@@ -202,8 +225,29 @@ def main():
     # of a job silently marked "done" with zero real content.
     all_complete = merge_outputs(chunk_dirs, end_page - start_page + 1, final_out, input_path)
     if not all_complete:
-        sys.exit("[ERROR] Extraction incomplete — one or more chunks failed (see errors above).")
+        msg = "Extraction incomplete — one or more chunks failed (see errors above)."
+        REPORTER.fail(msg)
+        sys.exit(f"[ERROR] {msg}")
+
+    REPORTER.done({
+        "chunks": len(chunk_dirs),
+        "pages": end_page - start_page + 1,
+        "outputDir": str(final_out),
+    })
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as e:
+        if REPORTER is not None and not REPORTER.terminal_sent and e.code not in (0, None):
+            REPORTER.fail(str(e.code))
+        raise
+    except KeyboardInterrupt:
+        if REPORTER is not None and not REPORTER.terminal_sent:
+            REPORTER.fail("interrupted by user (Ctrl+C)")
+        raise
+    except Exception as e:
+        if REPORTER is not None and not REPORTER.terminal_sent:
+            REPORTER.fail(f"{type(e).__name__}: {e}")
+        raise
