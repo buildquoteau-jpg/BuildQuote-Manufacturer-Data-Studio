@@ -59,11 +59,17 @@ RETURNING id;
 
 Copy the returned `id` — you'll use it as `--manufacturer-id` throughout.
 
-Also insert a `catalogue_sources` row and capture its `id` as `source_document_id`:
+Also create a **`source_documents`** row and capture its `id` as `source_document_id`.
+(⚠️ Earlier versions of this doc said `catalogue_sources` — that table does not
+exist in the Data Studio project; it lives only in the RFQ production DB as the
+publish-time traceability table. 2026-07-18 audit fix.)
+
+Preferred: upload the PDF through the app (Documents section) — that creates the
+row and stores the file in R2 in one step. SQL fallback:
 
 ```sql
-INSERT INTO catalogue_sources (manufacturer_id, label, file_name)
-VALUES ('<manufacturer_id>', 'Product Catalogue 2026', 'catalogue.pdf')
+INSERT INTO source_documents (manufacturer_id, document_name, document_type, original_filename, status)
+VALUES ('<manufacturer_id>', 'Product Catalogue 2026', 'brochure', 'catalogue.pdf', 'uploaded')
 RETURNING id;
 ```
 
@@ -168,6 +174,18 @@ python scripts/parser/run_parser.py `
   --openai-model "gpt-5.4"
 ```
 
+**Safety rails (added 2026-07-18):**
+- Every run saves the full plan to `.local/parser-dry-run/plan_<ts>.json`
+  **before** inserting. If the insert fails, nothing is lost — retry with
+  `--from-plan ".local/parser-dry-run/plan_<ts>.json"` (no re-extraction, no
+  new LLM spend).
+- If any chunk's LLM call fails, the run writes a manifest
+  (`manifest_<ts>.json`) and **refuses the live insert** rather than shipping
+  an incomplete catalogue. Re-run, or accept the gaps with `--allow-partial`.
+- Progress is visible live on the app's **Pipeline page** (Funnel tab → Live
+  pipeline activity) — including terminal runs like this one. Failures show
+  red with the error and log tail; you don't need to watch the console.
+
 ---
 
 ## Step 4b — Fix mojibake characters
@@ -263,7 +281,6 @@ python scripts/web-enricher/run_web_enricher.py `
   --manufacturer-name "Manufacturer Name" `
   --hints "prompts/manufacturer-hints/web_enricher/<slug>.md" `
   --skip-gpt-match `
-  --skip-gpt-pdf `
   --limit 5 `
   --dry-run
 ```
@@ -278,7 +295,6 @@ python scripts/web-enricher/run_web_enricher.py `
   --manufacturer-name "Manufacturer Name" `
   --hints "prompts/manufacturer-hints/web_enricher/<slug>.md" `
   --skip-gpt-match `
-  --skip-gpt-pdf `
   --require-null hero_image_url
 ```
 
@@ -380,40 +396,38 @@ print(json.dumps(backup['meta']['counts'], indent=2))
 
 Output file: `.local/<manufacturer-slug>_backup_YYYYMMDD.json`
 
+> ⚠️ Each REST call above returns at most 1000 rows (PostgREST default cap).
+> Fine at current catalogue sizes, but sanity-check the printed counts against
+> Step 5 — if any table hits exactly 1000, page with `Range` headers.
+
 ---
 
-## Step 10 — Promote staging → production
+## Step 10 — Publish to the live library
 
-> **Do not promote until the backup JSON exists and Step 8 checks pass.**
+> **Do not publish until the backup JSON exists and Step 8 checks pass.**
 
-Promotion copies all staging rows to the **Data Studio Production** Supabase project
-(`ovndokzwkxpfjfobewaq`). This is NOT the RFQ/BuildQuote production database.
+**Current flow (hybrid publishing):** cards go live through the app — open the
+manufacturer's systems, verify, and use the **Publish** action. That writes an
+immutable `card_versions` row and the production `published_cards` row via
+`apps/web/lib/studio-admin/publish.ts` (upsert-by-natural-key, safe to re-run).
+There is no separate promotion step: `ovndokzwkxpfjfobewaq` IS the live Data
+Studio project — the staging tables you just filled are the live draft state.
 
-**Always dry-run first:**
-```powershell
-python scripts/promote_to_data_studio_production.py `
-  --manufacturer-id "<uuid>" `
-  --dry-run
-```
-
-**Live promotion:**
-```powershell
-python scripts/promote_to_data_studio_production.py `
-  --manufacturer-id "<uuid>"
-```
-
-The script:
-- Copies `data_studio_manufacturers`, `staged_systems`, `staged_system_profiles`, `staged_system_colours`, `staged_components`, `staged_system_components`
-- Preserves all UUIDs (same IDs on local and production)
-- Uses `resolution=ignore-duplicates` — safe to re-run if rows already exist
-- Reads `PRODUCTION_SUPABASE_URL` and `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` from `.env.local`
+**Legacy script (rare):** `scripts/promote_to_data_studio_production.py` exists
+only for copying staging data between two *Data Studio* projects (e.g. seeding
+a fresh environment). It no longer reads `PRODUCTION_SUPABASE_URL` (that var
+points at the RFQ project) — it requires an explicit `DATA_STUDIO_PROD_URL` +
+`DATA_STUDIO_PROD_SERVICE_ROLE_KEY` pair, probes the target for `staged_*`
+tables before writing, and refuses to touch the RFQ database. Note its
+`ignore-duplicates` semantics: re-running never propagates edits or deletes to
+rows that already exist on the target.
 
 ---
 
 ## Quick checklist
 
 - [ ] Manufacturer row created, `id` noted
-- [ ] `catalogue_sources` row inserted, `id` noted
+- [ ] `source_documents` row created (app upload preferred), `id` noted
 - [ ] Docling extraction complete, chunks reviewed
 - [ ] Parser hints file created/updated
 - [ ] Parser dry run reviewed — names, profiles, component roles look correct

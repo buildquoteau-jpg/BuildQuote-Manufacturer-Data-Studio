@@ -3,7 +3,7 @@
 patch_ametalin_accessories.py
 =============================
 Inserts Ametalin insulation accessories as staged_components, links them to
-all Ametalin staged_systems, and patches every system with install_guide_url.
+all Ametalin staged_systems, and patches every system with install_guide_urls (jsonb, migration 026).
 
 Data sourced from: Ametalin Insulation Accessories Range Guide (APS-21223-0).
   - sku                = Bunnings item number (from "Item Number" column)
@@ -248,7 +248,7 @@ def main():
         print("Components to insert:")
         for c in COMPONENTS:
             print(f"  [{c['category']}] {c['name']} — SKU: {c['sku']} / MPN: {c['mpn']}")
-        print(f"\nAll systems will be patched with install_guide_url.")
+        print(f"\nAll systems will be patched with install_guide_urls.")
         return
 
     headers = {

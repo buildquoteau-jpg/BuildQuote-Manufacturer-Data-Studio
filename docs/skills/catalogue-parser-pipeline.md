@@ -96,7 +96,8 @@ python scripts/parser/run_parser.py `
 | `scripts/docling/extract_docling_chunked.py` | Splits PDF into chunks, runs Docling on each, merges output |
 | `scripts/parser/run_parser.py` | Two-pass AI parser → Supabase RPC |
 | `prompts/manufacturer-hints/<slug>.md` | Per-manufacturer extraction hints injected into prompts |
-| `supabase/migrations/012_implement_parser_insertion_rpc.sql` | The RPC that handles all inserts in one transaction |
+| `supabase/migrations/012_implement_parser_insertion_rpc.sql` | The RPC that handles all inserts in one transaction (current body: migration 058; 057/058 fixed schema drift) |
+| `scripts/lib/pipeline_report.py` | Reports every run to `pipeline_jobs` → live progress/failures on the app's Pipeline page |
 
 ---
 
@@ -126,9 +127,15 @@ SUPABASE_SERVICE_ROLE_KEY=... # Service role key for RPC
 
 | Flag | Model | Notes |
 |------|-------|-------|
-| *(no flag)* | `claude-sonnet-4-6` | Anthropic — 8k TPM limit on this key, needs 65s delays |
-| `--openai-model gpt-5.4` | GPT-5.4 | Preferred — higher limits, uses `max_completion_tokens` |
+| *(no flag)* | `claude-sonnet-4-6` | Anthropic default — 8k TPM limit on this key, needs 65s delays |
+| `--model <id>` | any Anthropic model | Overrides the Anthropic default (was hardcoded before 2026-07-18) |
+| `--openai-model gpt-5.4` | GPT-5.4 | Higher limits, uses `max_completion_tokens` — requires `OPENAI_API_KEY` in `.env.local` (currently not set) |
 | `--openai-model gpt-4o` | GPT-4o | Fallback if gpt-5.4 unavailable |
+
+Recovery flags (2026-07-18): every run saves its plan before inserting —
+`--from-plan <file>` re-inserts without re-extracting; `--allow-partial`
+overrides the refuse-to-insert gate when some chunks failed (failures are
+listed in `.local/parser-dry-run/manifest_*.json`).
 
 ---
 

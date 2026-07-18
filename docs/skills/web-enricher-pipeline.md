@@ -1,7 +1,9 @@
 # Web Enricher Pipeline
 
-Fills `hero_image_url`, `website_url`, `source_url`, `install_guide_url`, `tech_data_url`
+Fills `hero_image_url`, `website_url`, `source_url`, `install_guide_urls`, `tech_data_url`
 in `staged_systems` from the manufacturer's official website.
+(`install_guide_urls` is the jsonb array of `{label, url}` from migration 026 —
+the singular `install_guide_url` column no longer exists.)
 
 Runs **after** the PDF catalogue parser has populated the core product data.
 Only writes to columns that are currently NULL — safe to re-run.
@@ -30,14 +32,15 @@ Known mappings in the hints file skip GPT entirely.
 
 **Step 2 — Scrape** (per product page, no AI needed for hero images):
 Each matched product page is fetched with `requests` + parsed with `BeautifulSoup`.
-- `hero_image_url` → `og:image` meta tag (most reliable)
+- `hero_image_url` → `__NEXT_DATA__` blob, then `og:image`, then CDN `<img>` tags
 - `website_url` + `source_url` → the product page URL
-- `install_guide_url` + `tech_data_url` → scanned from anchor tags (PDF links)
+- `install_guide_urls` (list of `{label, url}`) + `tech_data_url` → scanned from
+  anchor tags whose text/href look like install or tech-data PDFs
 
-**Step 3 — GPT fallback for PDFs** (optional, per page):
-If BeautifulSoup finds no PDF links, the page's link/resource text is sent to GPT
-to identify any installation guide or tech data sheet URLs.
-Use `--skip-gpt-pdf` to disable this and save tokens.
+(The old "Step 3 — GPT fallback for PDFs" and its `--skip-gpt-pdf` flag were
+removed from the script; this doc previously described a flag that no longer
+exists. For JS-rendered technical libraries, add the PDF URLs to the hints
+file or the row manually — see the James Hardie notes below.)
 
 ---
 
@@ -79,7 +82,6 @@ python scripts/web-enricher/run_web_enricher.py \
     --manufacturer-name "James Hardie" \
     --hints "prompts/manufacturer-hints/web_enricher/james_hardie.md" \
     --skip-gpt-match \
-    --skip-gpt-pdf \
     --dry-run
 ```
 
@@ -93,7 +95,6 @@ python scripts/web-enricher/run_web_enricher.py \
 | `--limit N` | Process only the first N unresolved rows (token control) |
 | `--ids a,b,c` | Target specific staged_system UUIDs |
 | `--skip-gpt-match` | Use hints slug mappings only, no GPT name matching |
-| `--skip-gpt-pdf` | No GPT fallback for PDF link extraction |
 | `--openai-model` | Override model (default: `gpt-5.4`) |
 
 ---
@@ -130,7 +131,7 @@ so future runs skip GPT for those products.
 
 - **hero_image_url**: reliable via `og:image`. Always populated if the page is reachable.
 - **website_url / source_url**: always populated once matched.
-- **install_guide_url / tech_data_url**: James Hardie's Technical Library is JS-rendered —
+- **install_guide_urls / tech_data_url**: James Hardie's Technical Library is JS-rendered —
   direct PDF links are not in the plain HTML. These will likely remain null after scraping.
   
   To populate PDF URLs: open the Technical Library in Chrome DevTools, search by product,
@@ -145,8 +146,7 @@ so future runs skip GPT for those products.
 |---|---|---|
 | 34 rows, hints only | 0 | 0 |
 | 34 rows, GPT match only | 1 | ~2k–4k |
-| 34 rows, match + PDF fallback | 1 + up to 34 | ~10k–20k |
-| 5-row limit with both GPT steps | 1 + up to 5 | ~3k–6k |
+| 5-row limit with GPT match | 1 | ~2k–4k |
 
 Use `--limit 5` for initial test runs. Add slug mappings to hints after each run
 to reduce GPT usage on subsequent runs.

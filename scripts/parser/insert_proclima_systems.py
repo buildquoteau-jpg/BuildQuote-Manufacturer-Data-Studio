@@ -5,7 +5,7 @@ insert_proclima_systems.py
 Clears existing staged data for Proclima and inserts the canonical 42 systems
 directly from the hints file — no AI needed for this part.
 
-Leaves hero_image_url, website_url, install_guide_url, tech_data_url as NULL
+Leaves hero_image_url, website_url, install_guide_urls, tech_data_url as NULL
 so the web enricher and secondary parse stages can fill them in.
 
 Run from repo root:
@@ -490,7 +490,7 @@ def main():
                 "verification_status": "pending_review",
                 "extracted_at": now,
                 # These are intentionally NULL — filled by web enricher / secondary parse:
-                # hero_image_url, website_url, source_url, install_guide_url, tech_data_url
+                # hero_image_url, website_url, source_url, install_guide_urls, tech_data_url
             }
 
             r = client.post(

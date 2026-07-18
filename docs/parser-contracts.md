@@ -306,7 +306,7 @@ Human corrections must use audit records, not silent overwrites.
   "structural_grade": "string-or-null",
   "double_sided": null,
   "sheet_format": "string-or-null",
-  "install_guide_url": null,
+  "install_guide_urls": null,
   "tech_data_url": null,
   "sort_order": null,
   "extraction_confidence": 0.85,
@@ -338,7 +338,7 @@ Human corrections must use audit records, not silent overwrites.
 | `structural_grade` | no | As stated |
 | `double_sided` | no | Boolean if stated |
 | `sheet_format` | no | e.g. "Custom length", "Fixed 6m" |
-| `install_guide_url` | no | Only if a URL is explicitly present in the source |
+| `install_guide_urls` | no | jsonb `[{label, url}]` (migration 026) — only if URLs are explicitly present in the source |
 | `tech_data_url` | no | Only if a URL is explicitly present in the source |
 | `extraction_confidence` | yes | Overall record confidence 0.0–1.0 |
 | `field_sources` | yes | One entry per extracted non-null field |

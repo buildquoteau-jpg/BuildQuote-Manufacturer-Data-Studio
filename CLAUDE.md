@@ -4,25 +4,36 @@ PDF catalogue ingestion pipeline and review UI for BuildQuote.
 
 ## Two Supabase projects
 
-| | Project | URL |
-|---|---|---|
-| **This repo** | Data Studio (local dev) | http://localhost:54323 |
-| **Production** | BuildQuote production | oxvhmulxuvlfjyjzleki.supabase.co |
+| | Project | URL | env vars |
+|---|---|---|---|
+| **Data Studio (this repo, LIVE)** | staging tables + app + pipeline | ovndokzwkxpfjfobewaq.supabase.co | `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` |
+| **RFQ / BuildQuote production** | published cards, RFQ, buildquote.com.au | oxvhmulxuvlfjyjzleki.supabase.co | `PRODUCTION_SUPABASE_URL` / `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` |
 
-**Never run data-studio migrations against the production project.**
+**Never run data-studio migrations against the RFQ production project.** The
+RFQ project is written to only by the hybrid-publishing flow
+(`apps/web/lib/studio-admin/publish.ts`). There is no separate "Data Studio
+production" project anymore — ovndok IS live Data Studio; the old local-dev
+topology this doc used to describe is gone (2026-07-18 audit).
 
 ## Schema reference
 
-**`supabase/schema_complete.sql`** — canonical `CREATE TABLE` reference for all tables in this repo's Supabase project. Read this first before any DB work. Refreshed by re-running the columns query and updating the file.
+**`supabase/schema_complete.sql`** — GENERATED reference for all tables in the
+live Data Studio project. Read this first before any DB work, and **regenerate
+it after every applied migration**:
 
-To refresh:
-```sql
-SELECT table_schema, table_name, ordinal_position, column_name, data_type, udt_name, is_nullable, column_default
-FROM information_schema.columns
-WHERE table_schema = 'public'
-ORDER BY table_name, ordinal_position;
+```powershell
+node scripts/refresh_schema_reference.mjs
 ```
-Export CSV → save to `supabase/snippets/` → update `schema_complete.sql`.
+
+It pulls the PostgREST OpenAPI spec from the live project (creds from
+`.env.local`) — never hand-edit it. A surprising diff after regeneration IS the
+schema-drift alarm; the hand-maintained version of this file went two months
+stale and enabled the migration-026 RPC breakage.
+
+**After any migration touching `staged_*` tables or the parser RPC**, also run
+the tests in `supabase/tests/` (see its README) — `012_06` round-trips every
+plan field through the RPC and catches both loud (42703) and silent
+(dropped-field) drift.
 
 ## Table groups
 
@@ -51,4 +62,6 @@ Step-by-step guides for common pipeline tasks live in `docs/skills/`:
 - All staged tables have `verification_status` (default `pending_review`), `parser_notes` (jsonb), `extracted_at`
 - `staged_*.production_*_id` is NULL until promoted; set on publish
 - Binary files (PDFs, page images) are never stored in Supabase — always Cloudflare R2; Supabase holds only the `storage_key`
-- Parser inserts go through the `insert_parser_output_plan_v1` RPC (service role only) — see migration 012
+- Parser inserts go through the `insert_parser_output_plan_v1` RPC (service role only) — see migrations 012/057/058
+- Every pipeline script run (worker-spawned or manual terminal) reports to `pipeline_jobs` via `scripts/lib/pipeline_report.py`; the app's Pipeline page (Funnel tab) shows live progress, stalled jobs, and failures
+- The parser saves its plan to `.local/parser-dry-run/plan_*.json` BEFORE inserting; a failed insert is retried with `--from-plan` (no re-extraction)
