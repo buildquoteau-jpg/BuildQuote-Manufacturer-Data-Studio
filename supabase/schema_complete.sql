@@ -1,5 +1,5 @@
 -- schema_complete.sql — GENERATED FILE, do not hand-edit.
--- Last refreshed: 2026-07-18 from live project ovndokzwkxpfjfobewaq (PostgREST OpenAPI).
+-- Last refreshed: 2026-07-19 from live project ovndokzwkxpfjfobewaq (PostgREST OpenAPI).
 -- Regenerate after every applied migration:
 --     node scripts/refresh_schema_reference.mjs
 --
