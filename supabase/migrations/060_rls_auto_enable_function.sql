@@ -1,61 +1,91 @@
--- BuildQuote Data Studio — rls_auto_enable() function (reverse drift fixup)
+-- BuildQuote Data Studio — rls_auto_enable() event trigger (reverse drift fixup)
 -- Migration: 060_rls_auto_enable_function.sql
 --
--- STATUS: STUB — needs Melia to fill in the real function body before this
--- can be applied. Do NOT run this file as-is; it will fail (or worse,
--- silently overwrite the live function with an empty placeholder) until the
--- CREATE OR REPLACE FUNCTION block below is replaced with the real definition.
---
--- WHY THIS EXISTS (2026-07-18 audit, Brief E item 2): a callable RPC named
--- `rls_auto_enable` exists on the LIVE Data Studio project with no
--- corresponding migration file anywhere in this repo — reverse drift, found
--- via the PostgREST OpenAPI spec (GET /rest/v1/ lists it under
--- "(rpc) rls_auto_enable", confirmed 2026-07-19). The repo's migration
+-- WHY THIS EXISTS (2026-07-18 audit, Brief E item 2): a DDL event trigger
+-- function named `rls_auto_enable` exists on the LIVE Data Studio project
+-- with no corresponding migration file anywhere in this repo — reverse
+-- drift, found via the PostgREST OpenAPI spec (GET /rest/v1/ lists it under
+-- "(rpc) rls_auto_enable"; it errors if actually invoked that way, since
+-- event trigger functions can only run as triggers). The repo's migration
 -- history is supposed to be the source of truth for the schema (see
 -- supabase/README.md); a function that only exists in the dashboard means a
 -- fresh environment (a new dev, a disaster-recovery restore from
 -- schema_complete.sql + migrations) would silently be missing it.
 --
--- What's confirmed about it from the outside (PostgREST introspection only —
--- the function body itself is NOT retrievable via the REST API, only via the
--- SQL editor):
---   * Callable as POST /rest/v1/rpc/rls_auto_enable
---   * Takes no required arguments (empty body schema)
---   * Name strongly implies it bulk-enables Row Level Security across tables
---     (likely `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` looped over
---     information_schema/pg_tables, possibly scoped to public schema tables
---     missing RLS) — but this is inference from the name, not confirmed.
+-- WHAT IT DOES: fires on every CREATE TABLE / CREATE TABLE AS / SELECT INTO
+-- in the `public` schema and auto-enables Row Level Security on the new
+-- table, logging success/failure per table via RAISE LOG. Confirmed from the
+-- function body (pasted by Melia from the dashboard 2026-07-19).
 --
--- TODO (Melia): Supabase Dashboard → Database → Functions → find
--- `rls_auto_enable` → copy its exact definition (the "Show definition" /
--- source view gives the full CREATE OR REPLACE FUNCTION statement including
--- language, security definer/invoker, and search_path) → paste it in place
--- of the placeholder body below → delete this comment block once done →
--- commit. Pay particular attention to:
---   * SECURITY DEFINER vs SECURITY INVOKER (get this wrong and the function's
---     privilege level changes on re-apply)
---   * search_path (a mutable search_path on a SECURITY DEFINER function is a
---     real privilege-escalation vector — pin it explicitly if the original
---     does)
---   * the exact return type (void vs a result set)
+-- ⚠️ THREE THINGS NOT CONFIRMED FROM THE PASTED BODY — VERIFY AGAINST THE
+-- DASHBOARD BEFORE APPLYING:
+--   1. RETURNS event_trigger — required (it calls pg_event_trigger_ddl_commands()),
+--      assumed here since the body only made sense as an event trigger fn.
+--   2. SECURITY DEFINER + search_path pinned to '' — defaulted here as the
+--      safe choice for a function that must ALTER TABLE regardless of who
+--      created it. Check the dashboard function header (Database > Functions
+--      > rls_auto_enable) for the real SECURITY DEFINER/INVOKER setting and
+--      search_path — get this wrong and the function's privilege level
+--      changes on re-apply.
+--   3. The CREATE EVENT TRIGGER binding below — the function alone does
+--      nothing until something fires it. Check whether an event trigger
+--      already exists bound to this function (Database > Triggers, or
+--      `SELECT evtname FROM pg_event_trigger WHERE evtfoid =
+--      'public.rls_auto_enable()'::regprocedure;`) BEFORE applying this —
+--      if one already exists, drop the CREATE EVENT TRIGGER block below (the
+--      DO block already guards against creating a duplicate, but confirm the
+--      WHEN TAG list and event name match the live one).
 --
--- After filling this in, regenerate the schema reference and confirm no
--- diff beyond what's expected:
+-- After applying, regenerate the schema reference and confirm no diff beyond
+-- what's expected:
 --     node scripts/refresh_schema_reference.mjs
 --
--- IDEMPOTENT once filled in (CREATE OR REPLACE): safe to re-run.
+-- IDEMPOTENT (CREATE OR REPLACE + guarded event trigger creation): safe to re-run.
 -- Do NOT run against the RFQ/BuildQuote production Supabase project.
 
--- ⚠️ PLACEHOLDER — replace this entire block with the real definition from
--- the dashboard before applying. As written, this intentionally does nothing
--- destructive (RAISEs instead of silently no-op'ing) so an accidental apply
--- fails loudly instead of clobbering the live function with a no-op.
 CREATE OR REPLACE FUNCTION public.rls_auto_enable()
-RETURNS void
+RETURNS event_trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
+DECLARE
+  cmd record;
 BEGIN
-  RAISE EXCEPTION
-    'rls_auto_enable() migration stub not filled in — copy the real definition from the Supabase dashboard (Database > Functions) before applying this migration. See supabase/migrations/060_rls_auto_enable_function.sql.';
+  FOR cmd IN
+    SELECT *
+    FROM pg_event_trigger_ddl_commands()
+    WHERE command_tag IN ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+      AND object_type IN ('table','partitioned table')
+  LOOP
+     IF cmd.schema_name IS NOT NULL AND cmd.schema_name IN ('public') AND cmd.schema_name NOT IN ('pg_catalog','information_schema') AND cmd.schema_name NOT LIKE 'pg_toast%' AND cmd.schema_name NOT LIKE 'pg_temp%' THEN
+      BEGIN
+        EXECUTE format('alter table if exists %s enable row level security', cmd.object_identity);
+        RAISE LOG 'rls_auto_enable: enabled RLS on %', cmd.object_identity;
+      EXCEPTION
+        WHEN OTHERS THEN
+          RAISE LOG 'rls_auto_enable: failed to enable RLS on %', cmd.object_identity;
+      END;
+     ELSE
+        RAISE LOG 'rls_auto_enable: skip % (either system schema or not in enforced list: %.)', cmd.object_identity, cmd.schema_name;
+     END IF;
+  END LOOP;
+END;
+$$;
+
+-- Bind the event trigger only if nothing is already bound to this function —
+-- see point 3 above. Remove this DO block if the dashboard check confirms
+-- one already exists.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_event_trigger
+    WHERE evtfoid = 'public.rls_auto_enable()'::regprocedure
+  ) THEN
+    CREATE EVENT TRIGGER rls_auto_enable_on_create_table
+      ON ddl_command_end
+      WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+      EXECUTE FUNCTION public.rls_auto_enable();
+  END IF;
 END;
 $$;
