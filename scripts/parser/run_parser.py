@@ -7,11 +7,16 @@ Two-pass approach:
   Stage 2: Extract components + system-component links per section.
 
 Default mode submits every chunk in a stage as one Message Batches API call
-(50% cheaper than interactive, no per-chunk rate-limit pacing) and uses
-structured outputs (output_config.format) so a chunk either produces
-schema-valid JSON or a clean batch-result failure — no more invalid-JSON
-retry loop. Pass --interactive to fall back to the old one-call-per-chunk
-loop (used automatically for --openai-model, which has no Batches API here).
+(50% cheaper than interactive, no per-chunk rate-limit pacing). Both providers
+use plain JSON-in-prompt + fence-stripped parsing (see call_openai_legacy /
+call_claude_interactive) rather than Anthropic's output_config.format
+structured outputs — that API caps requests at 16 union/nullable-typed schema
+parameters, which STAGE1_JSON_SCHEMA and STAGE2_JSON_SCHEMA both exceed by
+design (many optional dimension/weight/etc fields) and will keep exceeding as
+fields are added. The schemas below are kept as documentation of the expected
+shape only; they are not passed to either API. Pass --interactive to fall
+back to the old one-call-per-chunk loop (used automatically for
+--openai-model, which has no Batches API here).
 
 Writes to Supabase via insert_parser_output_plan_v1 RPC (service role).
 
@@ -250,8 +255,13 @@ STAGE2_SYSTEM_CONTEXT_SECTION = "Known systems already extracted (for linking co
 
 
 # ============================================================
-# Structured-output JSON schemas (Claude models that support
-# output_config.format — see claude-api skill § Structured Outputs)
+# Reference-only JSON schemas — document the expected shape of each stage's
+# output. NOT passed to either API (see module docstring): Anthropic's
+# output_config.format structured outputs cap requests at 16 union/nullable
+# schema parameters, and these schemas both exceed that by design. The user
+# prompts below (STAGE1_USER_TEMPLATE / STAGE2_USER_TEMPLATE) already spell
+# out this exact shape in full, so plain JSON-in-prompt parsing works without
+# the API-side schema at all.
 # ============================================================
 
 def _obj(properties):
@@ -480,6 +490,9 @@ def build_system_blocks(base_prompt, hints_text=None, extra_text=None):
 # ============================================================
 
 _LEGACY_JSON_ONLY_NOTE = "\n\nReturn JSON only. No markdown. No prose. No text before or after the JSON."
+# Same note, shared by the Anthropic path now that it also parses plain JSON
+# out of the response text instead of using structured outputs.
+_JSON_ONLY_NOTE = _LEGACY_JSON_ONLY_NOTE
 
 
 def legacy_stage1_user_prompt(chunk, manufacturer_name, hints_text):
@@ -520,7 +533,7 @@ def stage1_user_prompt(chunk, manufacturer_name):
         page_start=chunk["page_start"],
         page_end=chunk["page_end"],
         chunk_text=chunk["text"],
-    )
+    ) + _JSON_ONLY_NOTE
 
 
 def stage2_user_prompt(chunk, manufacturer_name):
@@ -529,7 +542,7 @@ def stage2_user_prompt(chunk, manufacturer_name):
         page_start=chunk["page_start"],
         page_end=chunk["page_end"],
         chunk_text=chunk["text"],
-    )
+    ) + _JSON_ONLY_NOTE
 
 
 # ============================================================
@@ -537,20 +550,27 @@ def stage2_user_prompt(chunk, manufacturer_name):
 # ============================================================
 
 def call_claude_interactive(client, system, user_prompt, schema, label="", max_retries=3, inter_call_delay=0):
-    """Anthropic path: structured outputs guarantee schema-valid JSON, so
-    there's no markdown-fence stripping or invalid-JSON retry loop — a
-    non-refusal, non-max_tokens response is valid JSON by construction."""
+    """Anthropic path: plain JSON-in-prompt + fence-stripped parsing, same
+    approach as call_openai_legacy (see module docstring for why — Anthropic's
+    output_config.format structured outputs cap requests at 16 union/nullable
+    schema parameters, which these schemas exceed by design). `schema` is
+    unused here now; kept in the call signature to avoid touching every
+    caller."""
     delay = 30
 
     for attempt in range(1, max_retries + 1):
         try:
-            response = client.messages.create(
+            # max_tokens=32000 crosses Anthropic's non-streaming request-time
+            # estimate threshold ("Streaming is required for operations that
+            # may take longer than 10 minutes") — stream and reassemble
+            # instead of a plain .create() call.
+            with client.messages.stream(
                 model=getattr(client, "_model", "claude-sonnet-5"),
-                max_tokens=16000,
+                max_tokens=32000,
                 system=system,
                 messages=[{"role": "user", "content": user_prompt}],
-                output_config={"format": {"type": "json_schema", "schema": schema}},
-            )
+            ) as stream:
+                response = stream.get_final_message()
         except Exception as e:
             err_str = str(e)
             is_rate_limit = "429" in err_str or "rate_limit" in err_str.lower() or "rate limit" in err_str.lower()
@@ -577,15 +597,17 @@ def call_claude_interactive(client, system, user_prompt, schema, label="", max_r
             print(f"    [WARN] {label}: hit max_tokens — output may be truncated")
 
         raw = next((b.text for b in response.content if b.type == "text"), "")
+        raw = raw.strip()
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw)
         try:
             result = json.loads(raw)
             if inter_call_delay > 0:
                 time.sleep(inter_call_delay)
             return result
         except json.JSONDecodeError as e:
-            # Should not happen under output_config.format, but structured
-            # outputs can still be truncated at max_tokens — treat as retryable.
-            print(f"    [WARN] Unexpected invalid JSON ({label}) attempt {attempt}/{max_retries}: {e}")
+            print(f"    [WARN] Invalid JSON ({label}) attempt {attempt}/{max_retries}: {e}")
+            print(f"    Raw (last 500): ...{raw[-500:]}")
             if attempt < max_retries:
                 time.sleep(5)
                 continue
@@ -649,15 +671,52 @@ def call_openai_legacy(client, system_prompt, user_prompt, label="", max_retries
 # Message Batches API (default Anthropic path)
 # ============================================================
 
-def submit_batch(client, requests):
-    batch = client.messages.batches.create(requests=requests)
-    print(f"  [batch] submitted {batch.id} ({len(requests)} requests)")
-    return batch
+def submit_batch(client, requests, max_retries=5):
+    """Transient 502/503s from Anthropic/Cloudflare infra are common enough
+    on a call this size to warrant their own retry — unlike per-chunk calls,
+    this one has no fallback path if it just raises, so a bad gateway would
+    otherwise kill the whole run even though Stage 1's checkpoint (if this is
+    Stage 2) survives it."""
+    delay = 15
+    for attempt in range(1, max_retries + 1):
+        try:
+            batch = client.messages.batches.create(requests=requests)
+            print(f"  [batch] submitted {batch.id} ({len(requests)} requests)")
+            return batch
+        except Exception as e:
+            err_str = str(e)
+            is_transient = any(s in err_str for s in (
+                "502", "503", "504", "Bad Gateway", "overloaded", "InternalServerError",
+                "Connection error", "APIConnectionError", "RemoteProtocolError",
+                "peer closed connection", "Timeout", "ConnectionError",
+            ))
+            if is_transient and attempt < max_retries:
+                print(f"  [batch] submit failed (attempt {attempt}/{max_retries}, transient): {err_str[:200]}")
+                print(f"  [batch] retrying in {delay}s...")
+                time.sleep(delay)
+                delay = min(delay * 2, 120)
+                continue
+            raise
 
 
 def poll_batch(client, batch_id, reporter, stage_label, poll_interval=20):
     while True:
-        batch = client.messages.batches.retrieve(batch_id)
+        try:
+            batch = client.messages.batches.retrieve(batch_id)
+        except Exception as e:
+            # A single flaky poll shouldn't kill a run that's otherwise
+            # progressing fine server-side — just retry the poll itself.
+            err_str = str(e)
+            is_transient = any(s in err_str for s in (
+                "502", "503", "504", "Bad Gateway", "overloaded", "InternalServerError",
+                "Connection error", "APIConnectionError", "RemoteProtocolError",
+                "peer closed connection", "Timeout", "ConnectionError",
+            ))
+            if is_transient:
+                print(f"  [batch] poll failed (transient): {err_str[:200]} — retrying in {poll_interval}s...")
+                time.sleep(poll_interval)
+                continue
+            raise
         counts = batch.request_counts
         log_line = (f"{stage_label} batch {batch_id}: {batch.processing_status} "
                     f"(processing={counts.processing} succeeded={counts.succeeded} "
@@ -700,11 +759,15 @@ def collect_batch_results(client, batch_id, chunks, manifest, stage_label):
                 print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: model refused")
             else:
                 text = next((b.text for b in msg.content if b.type == "text"), "")
+                text = text.strip()
+                text = re.sub(r'^```(?:json)?\s*', '', text)
+                text = re.sub(r'\s*```$', '', text)
                 try:
                     data = json.loads(text)
                     status = "ok"
                 except json.JSONDecodeError as e:
-                    print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: invalid JSON despite structured output: {e}")
+                    print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: invalid JSON: {e}")
+                    print(f"    Raw (last 500): ...{text[-500:]}")
         else:
             print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: batch result '{result.result.type}'")
 
@@ -718,23 +781,51 @@ def collect_batch_results(client, batch_id, chunks, manifest, stage_label):
     return parsed
 
 
+def retry_failed_chunks(client, chunks, parsed, manifest, stage_label, system, prompt_fn, manufacturer_name):
+    """Batch results have no retry loop of their own (unlike the interactive
+    path) — a chunk that got cut off at max_tokens or came back with slightly
+    malformed JSON just fails outright. Since both are one-off, non-schema
+    failures rather than a systemic problem, retry each failed chunk once as
+    a plain interactive call (same prompt) before giving up for good."""
+    failed = [c for c in chunks if parsed.get(c["chunk_no"]) is None]
+    if not failed:
+        return
+    print(f"  [retry] {len(failed)} {stage_label} chunk(s) failed in the batch — retrying individually...")
+    for chunk in failed:
+        result = call_claude_interactive(
+            client, system, prompt_fn(chunk, manufacturer_name), None,
+            label=f"{stage_label}-retry-chunk{chunk['chunk_no']}",
+        )
+        if result is not None:
+            print(f"    [retry] {stage_label} chunk {chunk['chunk_no']}: recovered")
+            parsed[chunk["chunk_no"]] = result
+        else:
+            print(f"    [retry] {stage_label} chunk {chunk['chunk_no']}: still failed")
+        manifest.append({
+            "stage": stage_label, "chunk_no": chunk["chunk_no"],
+            "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+            "status": "ok (retried)" if result is not None else "failed (retried)",
+        })
+
+
 def run_stage1_batch(client, chunks, manufacturer_name, system, reporter, manifest):
     requests = [
         {
             "custom_id": f"chunk_{chunk['chunk_no']}",
             "params": {
                 "model": getattr(client, "_model", "claude-sonnet-5"),
-                "max_tokens": 16000,
+                "max_tokens": 32000,
                 "system": system,
                 "messages": [{"role": "user", "content": stage1_user_prompt(chunk, manufacturer_name)}],
-                "output_config": {"format": {"type": "json_schema", "schema": STAGE1_JSON_SCHEMA}},
             },
         }
         for chunk in chunks
     ]
     batch = submit_batch(client, requests)
     poll_batch(client, batch.id, reporter, "stage1")
-    return collect_batch_results(client, batch.id, chunks, manifest, "stage1")
+    parsed = collect_batch_results(client, batch.id, chunks, manifest, "stage1")
+    retry_failed_chunks(client, chunks, parsed, manifest, "stage1", system, stage1_user_prompt, manufacturer_name)
+    return parsed
 
 
 def run_stage2_batch(client, chunks, manufacturer_name, system, reporter, manifest):
@@ -743,17 +834,18 @@ def run_stage2_batch(client, chunks, manufacturer_name, system, reporter, manife
             "custom_id": f"chunk_{chunk['chunk_no']}",
             "params": {
                 "model": getattr(client, "_model", "claude-sonnet-5"),
-                "max_tokens": 16000,
+                "max_tokens": 32000,
                 "system": system,
                 "messages": [{"role": "user", "content": stage2_user_prompt(chunk, manufacturer_name)}],
-                "output_config": {"format": {"type": "json_schema", "schema": STAGE2_JSON_SCHEMA}},
             },
         }
         for chunk in chunks
     ]
     batch = submit_batch(client, requests)
     poll_batch(client, batch.id, reporter, "stage2")
-    return collect_batch_results(client, batch.id, chunks, manifest, "stage2")
+    parsed = collect_batch_results(client, batch.id, chunks, manifest, "stage2")
+    retry_failed_chunks(client, chunks, parsed, manifest, "stage2", system, stage2_user_prompt, manufacturer_name)
+    return parsed
 
 
 # ============================================================
@@ -1338,6 +1430,7 @@ def main():
                          help="Use the old one-call-per-chunk loop with inter-call pacing instead of the "
                               "Message Batches API (always used automatically for --openai-model)")
     parser.add_argument("--from-plan", default=None, help="Skip extraction: insert a previously saved plan JSON (every run saves one to .local/parser-dry-run/plan_*.json before inserting)")
+    parser.add_argument("--from-stage1-checkpoint", default=None, help="Skip Stage 1 entirely: resume from a stage1_checkpoint_*.json written automatically right after Stage 1 completes. Use this if Stage 2 crashed/was interrupted — avoids re-paying for and re-waiting on Stage 1.")
     parser.add_argument("--allow-partial", action="store_true", help="Proceed with the live insert even if some chunks failed extraction (they are recorded in the run manifest)")
     args = parser.parse_args()
 
@@ -1440,6 +1533,22 @@ def main():
     all_components, all_links = [], []
     run_manifest = []  # per-chunk ok/failed record — written to disk before any insert
 
+    stage1_checkpoint_path = Path(".local/parser-dry-run") / f"stage1_checkpoint_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+
+    # ── Resume path: skip Stage 1, load its output from a checkpoint ────────
+    if args.from_stage1_checkpoint:
+        ckpt_file = Path(args.from_stage1_checkpoint)
+        if not ckpt_file.exists():
+            sys.exit(f"[ERROR] Stage 1 checkpoint not found: {ckpt_file}")
+        ckpt = json.loads(ckpt_file.read_text(encoding="utf-8"))
+        all_systems = ckpt["all_systems"]
+        all_profiles = ckpt["all_profiles"]
+        all_colours = ckpt["all_colours"]
+        run_manifest.extend(ckpt.get("run_manifest", []))
+        print(f"[parser] Resumed Stage 1 from checkpoint {ckpt_file}: "
+              f"{len(all_systems)} systems, {len(all_profiles)} profiles, {len(all_colours)} colours")
+        args.stage = "2"  # Stage 1 already done — only run Stage 2 below
+
     # Stage 1 — systems, profiles, colours
     if args.stage in ("1", "both"):
         print("\n[parser] === Stage 1: systems, profiles, colours ===")
@@ -1494,6 +1603,19 @@ def main():
         print("\n[parser] Deduplicating systems...")
         all_systems = deduplicate_systems(all_systems, all_profiles)
         print(f"[parser] {len(all_systems)} unique systems after dedup")
+
+        # Checkpoint Stage 1's output before Stage 2 (a batch call + poll of
+        # its own, taking just as long) can crash or get interrupted and lose
+        # it. Resume with --from-stage1-checkpoint instead of re-running
+        # Stage 1 (re-paying for and re-waiting on the same LLM calls).
+        stage1_checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        stage1_checkpoint_path.write_text(json.dumps({
+            "all_systems": all_systems,
+            "all_profiles": all_profiles,
+            "all_colours": all_colours,
+            "run_manifest": run_manifest,
+        }, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"[parser] Stage 1 checkpoint saved: {stage1_checkpoint_path}")
 
     # Stage 2 — components
     existing_systems_by_id = {}  # id -> {name, product_code} for standalone stage 2 direct insert
