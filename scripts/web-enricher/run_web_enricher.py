@@ -574,7 +574,7 @@ def main():
 
     openai_key, supabase_url, service_key = load_env()
 
-    if not openai_key:
+    if not args.skip_gpt_match and not openai_key:
         sys.exit("[ERROR] OPENAI_API_KEY not set in .env.local")
     if not supabase_url or not service_key:
         sys.exit("[ERROR] NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")

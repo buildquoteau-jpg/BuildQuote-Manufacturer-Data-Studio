@@ -309,6 +309,12 @@ def main():
     parser.add_argument("--hints", default=None)
     parser.add_argument("--openai-model", default=None)
     parser.add_argument("--use-anthropic", action="store_true", help="Use Anthropic claude-sonnet-4-6 instead of OpenAI")
+    parser.add_argument(
+        "--chunks",
+        default=None,
+        help="Comma-separated chunk numbers to process (for example: 4,53). "
+             "Omit to process every chunk in the input.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -358,6 +364,16 @@ def main():
     # Parse chunks
     md_text = Path(args.input).read_text(encoding="utf-8")
     chunks = split_into_chunks(md_text)
+    if args.chunks:
+        try:
+            requested_chunks = {int(value.strip()) for value in args.chunks.split(",") if value.strip()}
+        except ValueError:
+            sys.exit("[ERROR] --chunks must be a comma-separated list of integers")
+        chunks = [chunk for chunk in chunks if chunk["chunk_no"] in requested_chunks]
+        found_chunks = {chunk["chunk_no"] for chunk in chunks}
+        missing_chunks = sorted(requested_chunks - found_chunks)
+        if missing_chunks:
+            sys.exit(f"[ERROR] Requested chunk(s) not found in input: {missing_chunks}")
     print(f"[patch] {len(chunks)} chunks in input | Stage 2 only")
 
     all_components, all_links = [], []
