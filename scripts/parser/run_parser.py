@@ -772,6 +772,8 @@ def assemble_stage1(chunk, result):
     for item in systems:
         item["_chunk_no"] = chunk["chunk_no"]
         item["_page_start"] = chunk["page_start"]
+    for item in profiles:
+        item["_chunk_no"] = chunk["chunk_no"]
 
     print(f"    -> chunk {chunk['chunk_no']}: {len(systems)} systems, {len(profiles)} profiles, {len(colours)} colours")
     if result.get("warnings"):
@@ -787,6 +789,9 @@ def assemble_stage2(chunk, result):
 
     components = result.get("components") or []
     links = result.get("system_components") or []
+
+    for item in components:
+        item["_chunk_no"] = chunk["chunk_no"]
 
     print(f"    -> chunk {chunk['chunk_no']}: {len(components)} components, {len(links)} links")
     if result.get("warnings"):
@@ -1070,6 +1075,127 @@ def apply_qa_flags(all_profiles, issues):
                 })
                 flagged += 1
     return flagged
+
+
+# ============================================================
+# Grounding checks — deterministic, non-LLM cross-checks against the raw
+# source chunk text. Catches the class of error an LLM can't reliably catch
+# reviewing its own (or another chunk's) output: a hallucinated product code
+# that never appears anywhere in the source (the US71/US92 class from the
+# 2026-07-18 audit), a dimension field that doesn't match the raw dimensions
+# string it claims to summarize, an invented unit of measure, or a numeric
+# value outside any plausible range for that field. Never blocks a run —
+# every finding is a parser_notes.qa_flag for human review, same mechanism
+# as run_qa_checks/apply_qa_flags above.
+# ============================================================
+
+UOM_ALLOWLIST = {
+    "each", "ea", "pack", "box", "carton", "bag", "bundle", "set", "pair",
+    "roll", "length", "lm", "linear metre", "linear m",
+    "sheet", "board", "panel", "m", "mm", "m2", "sqm",
+    "kg", "g", "l", "ml", "tube", "unit", "piece", "pieces", "no",
+}
+
+# (min, max) plausible range in the field's own unit — wide enough to never
+# flag a real construction product, tight enough to catch garbage like a
+# decimal point dropped or a page number captured as a dimension.
+NUMERIC_RANGE_FIELDS = {
+    "length_mm": (1, 20000), "width_mm": (1, 6000), "height_mm": (1, 6000),
+    "thickness_mm": (0.1, 500), "depth_mm": (0.1, 2000), "gauge_mm": (0.01, 50),
+    "diameter_mm": (0.1, 2000), "roll_m": (0.01, 500), "length_m": (0.001, 500),
+    "weight_kg": (0.001, 5000), "weight_g": (0.001, 500000), "volume_ml": (0.001, 1000000),
+    "pieces": (1, 100000), "supplier_pack_qty": (1, 100000), "coverage_m2": (0.001, 10000),
+}
+
+DIMENSION_STRING_FIELDS = [
+    "length_mm", "width_mm", "height_mm", "thickness_mm", "depth_mm",
+    "gauge_mm", "diameter_mm", "roll_m", "length_m",
+]
+
+_NUM_RE = re.compile(r'\d+(?:\.\d+)?')
+
+
+def _numbers_in_text(text):
+    return [float(m) for m in _NUM_RE.findall(text or "")]
+
+
+def _value_near_any(value, candidates, tol=0.51):
+    return any(abs(value - c) <= tol for c in candidates)
+
+
+def run_grounding_checks(all_systems, all_profiles, all_components, chunks):
+    """Ground every extracted product_code/uom/dimension against the chunk
+    text it was actually extracted from. Flags land directly on the row's
+    parser_notes (mutates in place) and are also returned so callers can
+    print/persist them alongside run_qa_checks' cross-check issues."""
+    chunk_text_by_no = {c["chunk_no"]: c["text"] for c in chunks}
+    issues = []
+
+    def flag(row, issue_type, severity, detail):
+        notes = row.setdefault("parser_notes", [])
+        if isinstance(notes, list):
+            notes.append({
+                "qa_flag": issue_type,
+                "severity": severity,
+                "detail": detail,
+                "source": "grounding_check",
+                "needs_human_review": True,
+            })
+        issues.append({"severity": severity, "type": issue_type, "detail": detail})
+
+    def check_row(row, label, check_dimensions):
+        chunk_text = chunk_text_by_no.get(row.get("_chunk_no"))
+
+        # Components use "sku" for the same join-key concept profiles/systems
+        # call "product_code" — ground whichever one the row actually has.
+        code_field = "product_code" if "product_code" in row else "sku"
+        code = (row.get(code_field) or "").strip()
+        if code and chunk_text is not None and code not in chunk_text:
+            flag(row, "product_code_not_in_source", "high",
+                 f"{label}: {code_field} '{code}' does not literally appear in its own source chunk "
+                 f"(chunk {row.get('_chunk_no')}) — likely hallucinated or misattributed.")
+
+        uom = (row.get("uom") or "").strip().lower()
+        if uom and uom not in UOM_ALLOWLIST:
+            flag(row, "uom_not_recognised", "low",
+                 f"{label}: uom '{uom}' is not in the known unit vocabulary — verify it's a real unit, not a typo/invention.")
+
+        if check_dimensions:
+            dims_text = row.get("dimensions") or ""
+            dims_numbers = _numbers_in_text(dims_text) if dims_text else None
+            for field in DIMENSION_STRING_FIELDS:
+                value = row.get(field)
+                if value is None or dims_numbers is None:
+                    continue
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not _value_near_any(value, dims_numbers):
+                    flag(row, "dimension_not_in_source_string", "medium",
+                         f"{label}: {field}={value} does not appear in the raw dimensions text '{dims_text}' "
+                         f"— possible transcription error.")
+
+        for field, (lo, hi) in NUMERIC_RANGE_FIELDS.items():
+            value = row.get(field)
+            if value is None:
+                continue
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not (lo <= value <= hi):
+                flag(row, "numeric_implausible", "medium",
+                     f"{label}: {field}={value} is outside the plausible range [{lo}, {hi}] for this field.")
+
+    for s in all_systems:
+        check_row(s, s.get("name") or "system", check_dimensions=False)
+    for p in all_profiles:
+        check_row(p, p.get("profile_name") or p.get("name") or "profile", check_dimensions=True)
+    for c in all_components:
+        check_row(c, c.get("name") or c.get("sku") or "component", check_dimensions=False)
+
+    return issues
 
 
 _TM_STRIP = re.compile(r'[™®]')
@@ -1498,6 +1624,22 @@ def main():
             print(f"  [WARN] {skipped} component links dropped — unresolved FK")
         print(f"  {len(resolved_links)} links resolved to existing system UUIDs")
 
+        print("\n[parser] === Grounding checks (source-text cross-check) ===")
+        grounding_issues = run_grounding_checks([], [], all_components, chunks)
+        if grounding_issues:
+            for iss in grounding_issues:
+                print(f"  [QA-{iss['severity'].upper()}] {iss['detail']}")
+            print(f"  Flagged {len(grounding_issues)} issue(s) with parser_notes.qa_flag for human review")
+        else:
+            print("  No grounding issues found.")
+        qa_dir = Path(".local/parser-qa")
+        qa_dir.mkdir(parents=True, exist_ok=True)
+        qa_slug = re.sub(r'[^a-z0-9]+', '_', args.manufacturer_name.lower()).strip('_')
+        qa_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        qa_path = qa_dir / f"{qa_slug}_{qa_ts}.json"
+        qa_path.write_text(json.dumps(grounding_issues, indent=2), encoding="utf-8")
+        print(f"  QA report: {qa_path}")
+
         plan = {
             "stagedSystems": [],
             "stagedSystemProfiles": [],
@@ -1520,6 +1662,17 @@ def main():
             print(f"  Flagged {flagged} row(s) with parser_notes.qa_flag for human review in Verify Systems")
         else:
             print("  No cross-check issues found.")
+
+        print("\n[parser] === Grounding checks (source-text cross-check) ===")
+        grounding_issues = run_grounding_checks(all_systems, all_profiles, all_components, chunks)
+        if grounding_issues:
+            for iss in grounding_issues:
+                print(f"  [QA-{iss['severity'].upper()}] {iss['detail']}")
+            print(f"  Flagged {len(grounding_issues)} issue(s) with parser_notes.qa_flag for human review")
+        else:
+            print("  No grounding issues found.")
+        qa_issues = qa_issues + grounding_issues
+
         qa_dir = Path(".local/parser-qa")
         qa_dir.mkdir(parents=True, exist_ok=True)
         qa_slug = re.sub(r'[^a-z0-9]+', '_', args.manufacturer_name.lower()).strip('_')
