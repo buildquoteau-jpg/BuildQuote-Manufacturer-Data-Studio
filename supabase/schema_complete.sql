@@ -417,7 +417,8 @@ CREATE TABLE public.pipeline_jobs (
     created_at                   timestamp with time zone NOT NULL DEFAULT now(),
     started_at                   timestamp with time zone,
     completed_at                 timestamp with time zone,
-    worker_id                    text
+    worker_id                    text,
+    heartbeat_at                 timestamp with time zone
 );
 
 -- ============================================================
@@ -662,7 +663,8 @@ CREATE TABLE public.staged_systems (
     publish_status               text NOT NULL DEFAULT draft,
     published_version            text,
     owner_account_id             uuid,
-    custom_document_links        jsonb
+    custom_document_links        jsonb,
+    hero_image_zoom              numeric NOT NULL DEFAULT 1
 );
 
 -- ============================================================
