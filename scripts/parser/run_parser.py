@@ -46,6 +46,8 @@ from pathlib import Path
 # scripts/lib is importable regardless of cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.pipeline_report import PipelineReporter  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from table_stitcher import stitch_split_tables  # noqa: E402
 
 # Force unbuffered stdout so output appears immediately when piped. Also force
 # UTF-8 — Windows' default console codepage (cp1252) can't encode characters
@@ -1300,6 +1302,13 @@ def main():
     md_text = Path(args.input).read_text(encoding="utf-8")
     chunks = split_into_chunks(md_text)
     print(f"[parser] {len(chunks)} chunks | manufacturer: {args.manufacturer_name}")
+
+    # The 7-page chunk boundary is a Docling memory constraint, not a
+    # semantic one — a spec table straddling it gets header+rows in chunk N
+    # and headerless continuation rows in chunk N+1, which two isolated
+    # Claude calls can't reassemble. Stitch those back together before either
+    # chunk is sent for extraction. See table_stitcher.py.
+    chunks = stitch_split_tables(chunks)
 
     all_systems, all_profiles, all_colours = [], [], []
     all_components, all_links = [], []
