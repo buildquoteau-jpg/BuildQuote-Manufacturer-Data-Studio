@@ -801,11 +801,24 @@ def retry_failed_chunks(client, chunks, parsed, manifest, stage_label, system, p
             parsed[chunk["chunk_no"]] = result
         else:
             print(f"    [retry] {stage_label} chunk {chunk['chunk_no']}: still failed")
-        manifest.append({
-            "stage": stage_label, "chunk_no": chunk["chunk_no"],
-            "pages": f"{chunk['page_start']}-{chunk['page_end']}",
-            "status": "ok (retried)" if result is not None else "failed (retried)",
-        })
+        # Update the original manifest entry in place (mutate, don't append) —
+        # an appended second entry would leave the original "failed" row
+        # sitting in the manifest even after a successful retry, and the
+        # final failed_chunks count/live-insert gate reads the whole
+        # manifest, so a recovered chunk would still wrongly block a live
+        # insert or be double-counted as failed.
+        new_status = "ok (retried)" if result is not None else "failed (retried)"
+        updated = False
+        for m in manifest:
+            if m["stage"] == stage_label and m["chunk_no"] == chunk["chunk_no"]:
+                m["status"] = new_status
+                updated = True
+        if not updated:
+            manifest.append({
+                "stage": stage_label, "chunk_no": chunk["chunk_no"],
+                "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+                "status": new_status,
+            })
 
 
 def run_stage1_batch(client, chunks, manufacturer_name, system, reporter, manifest):
@@ -1827,7 +1840,7 @@ def main():
     plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\n[parser] Plan saved: {plan_path}")
 
-    failed_chunks = [m for m in run_manifest if m["status"] != "ok"]
+    failed_chunks = [m for m in run_manifest if not m["status"].startswith("ok")]
     if run_manifest:
         manifest_path = dry_run_dir / f"manifest_{ts}.json"
         manifest_path.write_text(json.dumps(run_manifest, indent=2), encoding="utf-8")
