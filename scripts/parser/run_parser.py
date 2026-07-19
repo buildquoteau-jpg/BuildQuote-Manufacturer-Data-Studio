@@ -6,6 +6,13 @@ Two-pass approach:
   Stage 1: Extract systems + profiles + colours per catalogue section.
   Stage 2: Extract components + system-component links per section.
 
+Default mode submits every chunk in a stage as one Message Batches API call
+(50% cheaper than interactive, no per-chunk rate-limit pacing) and uses
+structured outputs (output_config.format) so a chunk either produces
+schema-valid JSON or a clean batch-result failure — no more invalid-JSON
+retry loop. Pass --interactive to fall back to the old one-call-per-chunk
+loop (used automatically for --openai-model, which has no Batches API here).
+
 Writes to Supabase via insert_parser_output_plan_v1 RPC (service role).
 
 Usage:
@@ -14,7 +21,7 @@ Usage:
         --manufacturer-id "6092e3a5-a542-4869-a2b2-6fc34cc82c83" \
         --manufacturer-name "James Hardie" \
         --hints "prompts/manufacturer-hints/james_hardie.md" \
-        [--dry-run]
+        [--dry-run] [--interactive]
 
 Environment (.env.local):
     NEXT_PUBLIC_SUPABASE_URL
@@ -32,6 +39,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -66,12 +74,12 @@ CLASSIFICATION RULES:
 - If a product is pre-primed or site-painted with no stocked colours, leave system_colours empty and note it in the system's notes field.
 
 RULES:
-1. Return JSON only. No markdown. No prose. No text before or after the JSON.
-2. Do not invent products. Extract only what is explicitly in the source.
-3. Set any unknown field to null.
-4. All dimension values must be numeric (no units inside the value).
-5. Extract every profile row — even if there are 8+ variants of the same system.
-6. source_page_number should be the catalogue page number if visible in the content."""
+1. Do not invent products. Extract only what is explicitly in the source.
+2. Set any unknown field to null.
+3. All dimension values must be numeric (no units inside the value).
+4. Extract every profile row — even if there are 8+ variants of the same system.
+5. source_page_number should be the catalogue page number if visible in the content.
+6. Every system_match / staged_system_match "system_name" you emit must be copied VERBATIM (same casing, same trademark symbols) from a "name" you emitted in this response's own "systems" array — do not paraphrase or abbreviate it. This is the join key used to link profiles/colours back to their system."""
 
 STAGE1_USER_TEMPLATE = """Manufacturer: {manufacturer_name}
 Catalogue section (pages {page_start}–{page_end}):
@@ -79,11 +87,10 @@ Catalogue section (pages {page_start}–{page_end}):
 {chunk_text}
 
 ---
-{hints_section}
 
 Extract all systems, profiles, and colours from this section.
 
-Return this exact JSON shape (no other text):
+Return this exact JSON shape:
 
 {{
   "systems": [
@@ -154,6 +161,8 @@ Return this exact JSON shape (no other text):
   "ignored_content_notes": []
 }}"""
 
+STAGE1_HINTS_SECTION = "Manufacturer hints:\n{hints_text}"
+
 STAGE2_SYSTEM_PROMPT = """You are a structured data extraction assistant for BuildQuote, a construction product catalogue platform for Australia.
 
 Your task: extract ALL components, accessories, fixings, tools, and installation products from a section of a manufacturer product catalogue.
@@ -169,12 +178,12 @@ CLASSIFICATION RULES:
 - A component can be shared across multiple systems — create one component row and multiple link rows.
 
 RULES:
-1. Return JSON only. No markdown. No prose.
-2. Do not invent products.
-3. Set unknown fields to null.
-4. All dimension values must be numeric.
-5. Use "uom" not "unit".
-6. supplier_pack_qty is the manufacturer pack size, not the customer order quantity."""
+1. Do not invent products.
+2. Set unknown fields to null.
+3. All dimension values must be numeric.
+4. Use "uom" not "unit".
+5. supplier_pack_qty is the manufacturer pack size, not the customer order quantity.
+6. Every staged_system_match "system_name" you emit must be copied VERBATIM (same casing, same trademark symbols) from the "Known systems" list provided below — do not paraphrase or abbreviate it. This is the join key used to link the component to its system."""
 
 STAGE2_USER_TEMPLATE = """Manufacturer: {manufacturer_name}
 Catalogue section (pages {page_start}–{page_end}):
@@ -182,15 +191,10 @@ Catalogue section (pages {page_start}–{page_end}):
 {chunk_text}
 
 ---
-Known systems already extracted (for linking components):
-{system_context}
-
----
-{hints_section}
 
 Extract all components, accessories, fixings, and tools from this section.
 
-Return this exact JSON shape (no other text):
+Return this exact JSON shape:
 
 {{
   "components": [
@@ -238,6 +242,135 @@ Return this exact JSON shape (no other text):
   "warnings": [],
   "ignored_content_notes": []
 }}"""
+
+STAGE2_HINTS_SECTION = "Manufacturer hints:\n{hints_text}"
+STAGE2_SYSTEM_CONTEXT_SECTION = "Known systems already extracted (for linking components):\n{system_context}"
+
+
+# ============================================================
+# Structured-output JSON schemas (Claude models that support
+# output_config.format — see claude-api skill § Structured Outputs)
+# ============================================================
+
+def _obj(properties):
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties.keys()),
+        "additionalProperties": False,
+    }
+
+
+_STR = {"type": "string"}
+_STR_N = {"type": ["string", "null"]}
+_BOOL_N = {"type": ["boolean", "null"]}
+_NUM_N = {"type": ["number", "null"]}
+_INT_N = {"type": ["integer", "null"]}
+_NULL = {"type": "null"}
+_NOTES = {"type": "array", "items": {"type": "string"}}
+_STR_ARR = {"type": "array", "items": {"type": "string"}}
+
+_SYSTEM_MATCH = _obj({"system_name": _STR, "product_code": _STR_N})
+_COMPONENT_MATCH = _obj({"sku": _STR_N, "name": _STR})
+
+_SYSTEM_ITEM = _obj({
+    "name": _STR,
+    "product_code": _STR_N,
+    "category": _STR,
+    "subcategory": _STR_N,
+    "description": _STR_N,
+    "bal_rating": _STR_N,
+    "acoustic_rating": _STR_N,
+    "moisture_resistant": _BOOL_N,
+    "structural_grade": _STR_N,
+    "double_sided": _BOOL_N,
+    "install_guide_urls": _NULL,
+    "tech_data_url": _NULL,
+    "notes": _STR_N,
+    "australian_made": _BOOL_N,
+    "source_page_number": _INT_N,
+    "extraction_confidence": {"type": "number"},
+    "parser_notes": _NOTES,
+})
+
+_PROFILE_ITEM = _obj({
+    "system_match": _SYSTEM_MATCH,
+    "name": _STR,
+    "profile_name": _STR,
+    "product_code": _STR_N,
+    "dimensions": _STR,
+    "length_mm": _NUM_N, "width_mm": _NUM_N, "height_mm": _NUM_N,
+    "thickness_mm": _NUM_N, "depth_mm": _NUM_N, "gauge_mm": _NUM_N,
+    "diameter_mm": _NUM_N, "roll_m": _NUM_N, "length_m": _NUM_N,
+    "weight_kg": _NUM_N, "weight_g": _NUM_N, "volume_ml": _NUM_N, "pieces": _NUM_N,
+    "uom": _STR,
+    "pack_format": _STR_N,
+    "supplier_pack_qty": _NUM_N,
+    "supplier_pack_uom": _STR_N,
+    "supplier_pack_note": _STR_N,
+    "bal_rating": _STR_N,
+    "sheet_format": _STR_N,
+    "sort_order": _NUM_N,
+    "source_page_number": _INT_N,
+    "extraction_confidence": {"type": "number"},
+    "parser_notes": _NOTES,
+})
+
+_COLOUR_ITEM = _obj({
+    "system_match": _SYSTEM_MATCH,
+    "colour_name": _STR,
+    "sku": _STR_N,
+    "sku_suffix": _STR_N,
+    "is_stocked": _BOOL_N,
+    "sort_order": _NUM_N,
+})
+
+STAGE1_JSON_SCHEMA = _obj({
+    "systems": {"type": "array", "items": _SYSTEM_ITEM},
+    "system_profiles": {"type": "array", "items": _PROFILE_ITEM},
+    "system_colours": {"type": "array", "items": _COLOUR_ITEM},
+    "warnings": _STR_ARR,
+    "ignored_content_notes": _STR_ARR,
+})
+
+_COMPONENT_ITEM = _obj({
+    "sku": _STR_N,
+    "name": _STR,
+    "description": _STR_N,
+    "category": _STR,
+    "uom": _STR,
+    "length_mm": _NUM_N, "width_mm": _NUM_N, "height_mm": _NUM_N,
+    "thickness_mm": _NUM_N, "depth_mm": _NUM_N, "gauge_mm": _NUM_N,
+    "diameter_mm": _NUM_N, "roll_m": _NUM_N,
+    "weight_kg": _NUM_N, "weight_g": _NUM_N, "volume_ml": _NUM_N, "pieces": _NUM_N,
+    "pack_format": _STR_N,
+    "supplier_pack_qty": _NUM_N,
+    "supplier_pack_uom": _STR_N,
+    "supplier_pack_note": _STR_N,
+    "material": _STR_N,
+    "finish": _STR_N,
+    "coverage_m2": _NUM_N,
+    "sort_order": _NUM_N,
+    "source_page_number": _INT_N,
+    "extraction_confidence": {"type": "number"},
+    "parser_notes": _NOTES,
+})
+
+_LINK_ITEM = _obj({
+    "staged_system_match": _SYSTEM_MATCH,
+    "component_match": _COMPONENT_MATCH,
+    "role": _STR,
+    "notes": _STR_N,
+    "sort_order": _NUM_N,
+    "extraction_confidence": {"type": "number"},
+})
+
+STAGE2_JSON_SCHEMA = _obj({
+    "components": {"type": "array", "items": _COMPONENT_ITEM},
+    "system_components": {"type": "array", "items": _LINK_ITEM},
+    "warnings": _STR_ARR,
+    "ignored_content_notes": _STR_ARR,
+})
 
 
 # ============================================================
@@ -324,45 +457,105 @@ def split_into_chunks(md_text):
     return chunks
 
 
-def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, inter_call_delay=0):
-    import time
+def build_system_blocks(base_prompt, hints_text=None, extra_text=None):
+    """System-prompt content blocks for the Anthropic path, with prompt
+    caching on the last (largest, most stable) block. Hints and any extra
+    static context (e.g. stage 2's known-systems list) are appended as
+    additional blocks so the whole prefix — not just the base prompt —
+    gets cached and reused across every chunk in the run."""
+    blocks = [{"type": "text", "text": base_prompt}]
+    if hints_text:
+        blocks.append({"type": "text", "text": STAGE1_HINTS_SECTION.format(hints_text=hints_text)})
+    if extra_text:
+        blocks.append({"type": "text", "text": extra_text})
+    blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+    return blocks
 
-    delay = 30  # seconds to wait after a 429 before retrying
-    provider = getattr(client, "_provider", "anthropic")
+
+# ============================================================
+# Legacy (OpenAI-only) prompt assembly — inlines hints/context since
+# OpenAI has neither prompt caching nor structured outputs here.
+# ============================================================
+
+_LEGACY_JSON_ONLY_NOTE = "\n\nReturn JSON only. No markdown. No prose. No text before or after the JSON."
+
+
+def legacy_stage1_user_prompt(chunk, manufacturer_name, hints_text):
+    base = STAGE1_USER_TEMPLATE.format(
+        manufacturer_name=manufacturer_name,
+        page_start=chunk["page_start"],
+        page_end=chunk["page_end"],
+        chunk_text=chunk["text"],
+    )
+    if hints_text:
+        hints_section = STAGE1_HINTS_SECTION.format(hints_text=hints_text)
+        base = base.replace("---\n\nExtract", f"---\n{hints_section}\n\nExtract")
+    return base + _LEGACY_JSON_ONLY_NOTE
+
+
+def legacy_stage2_user_prompt(chunk, manufacturer_name, hints_text, system_context):
+    base = STAGE2_USER_TEMPLATE.format(
+        manufacturer_name=manufacturer_name,
+        page_start=chunk["page_start"],
+        page_end=chunk["page_end"],
+        chunk_text=chunk["text"],
+    )
+    prefix_parts = [STAGE2_SYSTEM_CONTEXT_SECTION.format(system_context=json.dumps(system_context, indent=2))]
+    if hints_text:
+        prefix_parts.append(STAGE2_HINTS_SECTION.format(hints_text=hints_text))
+    prefix = "\n\n".join(prefix_parts)
+    return base.replace("---\n\nExtract", f"---\n{prefix}\n\nExtract") + _LEGACY_JSON_ONLY_NOTE
+
+
+# ============================================================
+# Anthropic prompt assembly (interactive + batch) — chunk text only;
+# hints and system context live in the cached system blocks.
+# ============================================================
+
+def stage1_user_prompt(chunk, manufacturer_name):
+    return STAGE1_USER_TEMPLATE.format(
+        manufacturer_name=manufacturer_name,
+        page_start=chunk["page_start"],
+        page_end=chunk["page_end"],
+        chunk_text=chunk["text"],
+    )
+
+
+def stage2_user_prompt(chunk, manufacturer_name):
+    return STAGE2_USER_TEMPLATE.format(
+        manufacturer_name=manufacturer_name,
+        page_start=chunk["page_start"],
+        page_end=chunk["page_end"],
+        chunk_text=chunk["text"],
+    )
+
+
+# ============================================================
+# Interactive (non-batch) API calls
+# ============================================================
+
+def call_claude_interactive(client, system, user_prompt, schema, label="", max_retries=3, inter_call_delay=0):
+    """Anthropic path: structured outputs guarantee schema-valid JSON, so
+    there's no markdown-fence stripping or invalid-JSON retry loop — a
+    non-refusal, non-max_tokens response is valid JSON by construction."""
+    delay = 30
 
     for attempt in range(1, max_retries + 1):
         try:
-            if provider == "openai":
-                response = client.chat.completions.create(
-                    model=client._model,
-                    max_completion_tokens=16000,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                )
-                raw = response.choices[0].message.content or ""
-                stop_reason = response.choices[0].finish_reason
-                output_tokens = response.usage.completion_tokens if response.usage else "?"
-            else:
-                import anthropic
-                response = client.messages.create(
-                    model=getattr(client, "_model", "claude-sonnet-4-6"),
-                    max_tokens=16000,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": user_prompt}],
-                )
-                raw = response.content[0].text
-                stop_reason = response.stop_reason
-                output_tokens = response.usage.output_tokens if response.usage else "?"
-
+            response = client.messages.create(
+                model=getattr(client, "_model", "claude-sonnet-5"),
+                max_tokens=16000,
+                system=system,
+                messages=[{"role": "user", "content": user_prompt}],
+                output_config={"format": {"type": "json_schema", "schema": schema}},
+            )
         except Exception as e:
             err_str = str(e)
             is_rate_limit = "429" in err_str or "rate_limit" in err_str.lower() or "rate limit" in err_str.lower()
             is_credit_error = "credit" in err_str.lower() or "billing" in err_str.lower() or "balance" in err_str.lower()
             if is_credit_error:
                 print(f"    [FATAL] API credit/billing error — aborting parser run: {e}")
-                sys.exit(f"[FATAL] Insufficient API credits. Top up your Anthropic account or use --openai-model to switch provider.")
+                sys.exit("[FATAL] Insufficient API credits. Top up your Anthropic account or use --openai-model to switch provider.")
             if is_rate_limit and attempt < max_retries:
                 print(f"    [RATE LIMIT] {label} attempt {attempt} — waiting {delay}s before retry...")
                 time.sleep(delay)
@@ -370,10 +563,68 @@ def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, int
             print(f"    [ERROR] API error ({label}): {e}")
             return None
 
+        cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+        cache_write = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+        print(f"    [tokens] stop_reason={response.stop_reason} output_tokens={response.usage.output_tokens} "
+              f"cache_read={cache_read} cache_write={cache_write}")
+
+        if response.stop_reason == "refusal":
+            print(f"    [ERROR] {label}: model refused (stop_details={getattr(response, 'stop_details', None)})")
+            return None
+        if response.stop_reason == "max_tokens":
+            print(f"    [WARN] {label}: hit max_tokens — output may be truncated")
+
+        raw = next((b.text for b in response.content if b.type == "text"), "")
+        try:
+            result = json.loads(raw)
+            if inter_call_delay > 0:
+                time.sleep(inter_call_delay)
+            return result
+        except json.JSONDecodeError as e:
+            # Should not happen under output_config.format, but structured
+            # outputs can still be truncated at max_tokens — treat as retryable.
+            print(f"    [WARN] Unexpected invalid JSON ({label}) attempt {attempt}/{max_retries}: {e}")
+            if attempt < max_retries:
+                time.sleep(5)
+                continue
+            return None
+
+    return None
+
+
+def call_openai_legacy(client, system_prompt, user_prompt, label="", max_retries=3, inter_call_delay=0):
+    """OpenAI fallback path — no structured outputs / no caching here, so
+    keep the original markdown-fence-stripping + invalid-JSON retry loop."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.chat.completions.create(
+                model=client._model,
+                max_completion_tokens=16000,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            raw = response.choices[0].message.content or ""
+            stop_reason = response.choices[0].finish_reason
+            output_tokens = response.usage.completion_tokens if response.usage else "?"
+        except Exception as e:
+            err_str = str(e)
+            is_rate_limit = "429" in err_str or "rate_limit" in err_str.lower() or "rate limit" in err_str.lower()
+            is_credit_error = "credit" in err_str.lower() or "billing" in err_str.lower() or "balance" in err_str.lower()
+            if is_credit_error:
+                print(f"    [FATAL] API credit/billing error — aborting parser run: {e}")
+                sys.exit("[FATAL] Insufficient API credits.")
+            if is_rate_limit and attempt < max_retries:
+                print(f"    [RATE LIMIT] {label} attempt {attempt} — waiting 30s before retry...")
+                time.sleep(30)
+                continue
+            print(f"    [ERROR] API error ({label}): {e}")
+            return None
+
         raw = raw.strip()
         raw = re.sub(r'^```(?:json)?\s*', '', raw)
         raw = re.sub(r'\s*```$', '', raw)
-
         print(f"    [tokens] stop_reason={stop_reason} output_tokens={output_tokens}")
 
         try:
@@ -384,11 +635,6 @@ def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, int
         except json.JSONDecodeError as e:
             print(f"    [WARN] Invalid JSON ({label}) attempt {attempt}/{max_retries}: {e}")
             print(f"    Raw (last 500): ...{raw[-500:]}")
-            if stop_reason in ("max_tokens", "length"):
-                print(f"    [WARN] Response hit max_tokens — JSON truncated.")
-            # Retry instead of silently dropping the chunk (2026-07-18 audit:
-            # a single bad generation used to lose the whole chunk's products
-            # with only this console warning as a trace).
             if attempt < max_retries:
                 time.sleep(5)
                 continue
@@ -397,31 +643,125 @@ def call_claude(client, system_prompt, user_prompt, label="", max_retries=3, int
     return None
 
 
-def parse_stage1(client, chunk, manufacturer_name, hints_text, inter_call_delay=0, manifest=None):
-    print(f"  [stage1] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
-    user_prompt = STAGE1_USER_TEMPLATE.format(
-        manufacturer_name=manufacturer_name,
-        page_start=chunk["page_start"],
-        page_end=chunk["page_end"],
-        chunk_text=chunk["text"],
-        hints_section=f"Manufacturer hints:\n{hints_text}" if hints_text else "",
-    )
-    result = call_claude(client, STAGE1_SYSTEM_PROMPT, user_prompt, label=f"stage1-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay)
+# ============================================================
+# Message Batches API (default Anthropic path)
+# ============================================================
+
+def submit_batch(client, requests):
+    batch = client.messages.batches.create(requests=requests)
+    print(f"  [batch] submitted {batch.id} ({len(requests)} requests)")
+    return batch
+
+
+def poll_batch(client, batch_id, reporter, stage_label, poll_interval=20):
+    while True:
+        batch = client.messages.batches.retrieve(batch_id)
+        counts = batch.request_counts
+        log_line = (f"{stage_label} batch {batch_id}: {batch.processing_status} "
+                    f"(processing={counts.processing} succeeded={counts.succeeded} "
+                    f"errored={counts.errored} canceled={counts.canceled} expired={counts.expired})")
+        print(f"  [batch] {log_line}")
+        reporter.progress(
+            {
+                "currentStage": stage_label,
+                "batchId": batch_id,
+                "batchStatus": batch.processing_status,
+                "processing": counts.processing,
+                "succeeded": counts.succeeded,
+                "errored": counts.errored,
+            },
+            log_line=log_line,
+        )
+        if batch.processing_status == "ended":
+            return batch
+        time.sleep(poll_interval)
+
+
+def collect_batch_results(client, batch_id, chunks, manifest, stage_label):
+    """Returns {chunk_no: parsed_json_or_None}. Results arrive in any order —
+    always key by custom_id, never by position."""
+    by_custom_id = {}
+    for result in client.messages.batches.results(batch_id):
+        by_custom_id[result.custom_id] = result
+
+    parsed = {}
+    for chunk in chunks:
+        custom_id = f"chunk_{chunk['chunk_no']}"
+        result = by_custom_id.get(custom_id)
+        status = "failed"
+        data = None
+        if result is None:
+            print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: missing from batch results")
+        elif result.result.type == "succeeded":
+            msg = result.result.message
+            if msg.stop_reason == "refusal":
+                print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: model refused")
+            else:
+                text = next((b.text for b in msg.content if b.type == "text"), "")
+                try:
+                    data = json.loads(text)
+                    status = "ok"
+                except json.JSONDecodeError as e:
+                    print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: invalid JSON despite structured output: {e}")
+        else:
+            print(f"    [ERROR] {stage_label} chunk {chunk['chunk_no']}: batch result '{result.result.type}'")
+
+        manifest.append({
+            "stage": stage_label, "chunk_no": chunk["chunk_no"],
+            "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+            "status": status,
+        })
+        parsed[chunk["chunk_no"]] = data
+
+    return parsed
+
+
+def run_stage1_batch(client, chunks, manufacturer_name, system, reporter, manifest):
+    requests = [
+        {
+            "custom_id": f"chunk_{chunk['chunk_no']}",
+            "params": {
+                "model": getattr(client, "_model", "claude-sonnet-5"),
+                "max_tokens": 16000,
+                "system": system,
+                "messages": [{"role": "user", "content": stage1_user_prompt(chunk, manufacturer_name)}],
+                "output_config": {"format": {"type": "json_schema", "schema": STAGE1_JSON_SCHEMA}},
+            },
+        }
+        for chunk in chunks
+    ]
+    batch = submit_batch(client, requests)
+    poll_batch(client, batch.id, reporter, "stage1")
+    return collect_batch_results(client, batch.id, chunks, manifest, "stage1")
+
+
+def run_stage2_batch(client, chunks, manufacturer_name, system, reporter, manifest):
+    requests = [
+        {
+            "custom_id": f"chunk_{chunk['chunk_no']}",
+            "params": {
+                "model": getattr(client, "_model", "claude-sonnet-5"),
+                "max_tokens": 16000,
+                "system": system,
+                "messages": [{"role": "user", "content": stage2_user_prompt(chunk, manufacturer_name)}],
+                "output_config": {"format": {"type": "json_schema", "schema": STAGE2_JSON_SCHEMA}},
+            },
+        }
+        for chunk in chunks
+    ]
+    batch = submit_batch(client, requests)
+    poll_batch(client, batch.id, reporter, "stage2")
+    return collect_batch_results(client, batch.id, chunks, manifest, "stage2")
+
+
+# ============================================================
+# Result assembly (shared by interactive + batch paths)
+# ============================================================
+
+def assemble_stage1(chunk, result):
     if not result:
         print(f"    [ERROR] stage1 chunk {chunk['chunk_no']} produced no usable output — recorded in run manifest")
-        if manifest is not None:
-            manifest.append({
-                "stage": "stage1", "chunk_no": chunk["chunk_no"],
-                "pages": f"{chunk['page_start']}-{chunk['page_end']}",
-                "status": "failed",
-            })
         return [], [], []
-    if manifest is not None:
-        manifest.append({
-            "stage": "stage1", "chunk_no": chunk["chunk_no"],
-            "pages": f"{chunk['page_start']}-{chunk['page_end']}",
-            "status": "ok",
-        })
 
     systems = result.get("systems") or []
     profiles = result.get("system_profiles") or []
@@ -431,78 +771,109 @@ def parse_stage1(client, chunk, manufacturer_name, hints_text, inter_call_delay=
         item["_chunk_no"] = chunk["chunk_no"]
         item["_page_start"] = chunk["page_start"]
 
-    print(f"    -> {len(systems)} systems, {len(profiles)} profiles, {len(colours)} colours")
+    print(f"    -> chunk {chunk['chunk_no']}: {len(systems)} systems, {len(profiles)} profiles, {len(colours)} colours")
     if result.get("warnings"):
         for w in result["warnings"]:
             print(f"    [WARN] {w}")
     return systems, profiles, colours
 
 
-def parse_stage2(client, chunk, manufacturer_name, hints_text, system_context, inter_call_delay=0, manifest=None):
-    print(f"  [stage2] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
-    user_prompt = STAGE2_USER_TEMPLATE.format(
-        manufacturer_name=manufacturer_name,
-        page_start=chunk["page_start"],
-        page_end=chunk["page_end"],
-        chunk_text=chunk["text"],
-        system_context=json.dumps(system_context, indent=2),
-        hints_section=f"Manufacturer hints:\n{hints_text}" if hints_text else "",
-    )
-    result = call_claude(client, STAGE2_SYSTEM_PROMPT, user_prompt, label=f"stage2-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay)
+def assemble_stage2(chunk, result):
     if not result:
         print(f"    [ERROR] stage2 chunk {chunk['chunk_no']} produced no usable output — recorded in run manifest")
-        if manifest is not None:
-            manifest.append({
-                "stage": "stage2", "chunk_no": chunk["chunk_no"],
-                "pages": f"{chunk['page_start']}-{chunk['page_end']}",
-                "status": "failed",
-            })
         return [], []
-    if manifest is not None:
-        manifest.append({
-            "stage": "stage2", "chunk_no": chunk["chunk_no"],
-            "pages": f"{chunk['page_start']}-{chunk['page_end']}",
-            "status": "ok",
-        })
 
     components = result.get("components") or []
     links = result.get("system_components") or []
 
-    print(f"    -> {len(components)} components, {len(links)} links")
+    print(f"    -> chunk {chunk['chunk_no']}: {len(components)} components, {len(links)} links")
     if result.get("warnings"):
         for w in result["warnings"]:
             print(f"    [WARN] {w}")
     return components, links
 
 
+# ============================================================
+# System-name resolution
+# ============================================================
+
+def normalize_system_name(name):
+    """Normalize name for deduplication AND for match resolution — the
+    single normalizer used everywhere a system name needs comparing so the
+    two paths can't silently drift apart (2026-07-18 audit finding: dedup
+    used NFKC+™-collapse, temp-key resolution used bare lower().strip())."""
+    import unicodedata
+    name = unicodedata.normalize("NFKC", name or "")
+    name = re.sub(r'\s+', ' ', name).strip().lower()
+    # Normalize trademark symbols and spacing around them
+    name = re.sub(r'\s*[™®]\s*', '™', name)
+    return name
+
+
 def resolve_system_key(match_obj, name_map, code_map):
+    """Exact match only — product_code first, then normalized name. No
+    fuzzy/substring fallback: a system called "Stria Cladding" and one
+    called "Stria Cladding Fine Texture" must never be conflated just
+    because one name contains the other. Callers that get None back should
+    treat the row as unresolved, not guess."""
     if not match_obj:
         return None
     code = (match_obj.get("product_code") or "").strip()
-    name = (match_obj.get("system_name") or match_obj.get("name") or "").lower().strip()
     if code and code in code_map:
         return code_map[code]
+    name = normalize_system_name(match_obj.get("system_name") or match_obj.get("name") or "")
     if name and name in name_map:
         return name_map[name]
-    # Fuzzy: substring match
-    for k, v in name_map.items():
-        if name and (name in k or k in name):
-            return v
     return None
+
+
+def find_near_miss_candidates(match_obj, norm_to_display):
+    """For diagnostics only (never used to auto-link): system names whose
+    normalized form is a substring match against the unresolved match name.
+    Surfaced as a qa_flag in the QA report instead of silently guessing."""
+    name = normalize_system_name(match_obj.get("system_name") or match_obj.get("name") or "")
+    if not name:
+        return []
+    return sorted({
+        display for norm, display in norm_to_display.items()
+        if norm != name and (norm in name or name in norm)
+    })
 
 
 def assign_temp_keys(all_systems, all_profiles, all_colours, all_components, all_links):
     # Systems
-    name_map, code_map = {}, {}
+    name_map, code_map, norm_to_display = {}, {}, {}
     for i, s in enumerate(all_systems):
         key = f"system_{i}"
         s["_temp_key"] = key
-        n = (s.get("name") or "").lower().strip()
+        n = normalize_system_name(s.get("name") or "")
         c = (s.get("product_code") or "").strip()
         if n:
             name_map[n] = key
+            norm_to_display[n] = s.get("name")
         if c:
             code_map[c] = key
+
+    unresolved_diagnostics = []
+
+    def note_unresolved(kind, match_obj, label):
+        if not match_obj:
+            return
+        near = find_near_miss_candidates(match_obj, norm_to_display)
+        unmatched_name = (match_obj.get("system_name") or match_obj.get("name") or "").strip()
+        if not unmatched_name:
+            return
+        if near:
+            unresolved_diagnostics.append({
+                "severity": "medium",
+                "type": f"{kind}_system_match_ambiguous",
+                "label": label,
+                "unmatched_system_name": unmatched_name,
+                "near_miss_candidates": near,
+                "detail": (f"{kind} '{label}' referenced system '{unmatched_name}', which did not exactly "
+                           f"match any extracted system. Possible candidates (not auto-linked — needs human "
+                           f"review): {near}"),
+            })
 
     # Profiles
     skipped_profiles = 0
@@ -514,6 +885,7 @@ def assign_temp_keys(all_systems, all_profiles, all_colours, all_components, all
             p["_staged_system_temp_key"] = key
         else:
             skipped_profiles += 1
+            note_unresolved("profile", match, p.get("profile_name") or p.get("name") or f"profile_{i}")
 
     # Colours
     skipped_colours = 0
@@ -525,6 +897,7 @@ def assign_temp_keys(all_systems, all_profiles, all_colours, all_components, all
             c["_staged_system_temp_key"] = key
         else:
             skipped_colours += 1
+            note_unresolved("colour", match, c.get("colour_name") or f"colour_{i}")
 
     # Components
     comp_name_map, comp_sku_map = {}, {}
@@ -553,6 +926,8 @@ def assign_temp_keys(all_systems, all_profiles, all_colours, all_components, all
             lnk["_staged_component_temp_key"] = comp_key
         else:
             skipped_links += 1
+            if not sys_key:
+                note_unresolved("link", sys_match, comp_match.get("name") or f"link_{i}")
 
     if skipped_profiles:
         print(f"  [WARN] {skipped_profiles} profiles dropped — could not match to a system")
@@ -560,22 +935,14 @@ def assign_temp_keys(all_systems, all_profiles, all_colours, all_components, all
         print(f"  [WARN] {skipped_colours} colours dropped — could not match to a system")
     if skipped_links:
         print(f"  [WARN] {skipped_links} component links dropped — unresolved FK")
+    if unresolved_diagnostics:
+        print(f"  [WARN] {len(unresolved_diagnostics)} unresolved match(es) had near-miss candidates — see QA report")
 
     valid_profiles = [p for p in all_profiles if "_staged_system_temp_key" in p]
     valid_colours = [c for c in all_colours if "_staged_system_temp_key" in c]
     valid_links = [lnk for lnk in all_links if "_staged_system_temp_key" in lnk and "_staged_component_temp_key" in lnk]
 
-    return all_systems, valid_profiles, valid_colours, all_components, valid_links
-
-
-def normalize_system_name(name):
-    """Normalize name for deduplication: collapse whitespace, lowercase."""
-    import unicodedata
-    name = unicodedata.normalize("NFKC", name or "")
-    name = re.sub(r'\s+', ' ', name).strip().lower()
-    # Normalize trademark symbols and spacing around them
-    name = re.sub(r'\s*[™®]\s*', '™', name)
-    return name
+    return all_systems, valid_profiles, valid_colours, all_components, valid_links, unresolved_diagnostics
 
 
 def deduplicate_systems(all_systems, all_profiles):
@@ -585,8 +952,6 @@ def deduplicate_systems(all_systems, all_profiles):
     not from the TOC.  Profile _staged_system_temp_key refs are NOT assigned
     yet, so we track by list position / _chunk_no instead.
     """
-    # Count profiles per system by _chunk_no+name (profiles haven't been linked yet)
-    # We'll just prefer systems with higher extraction_confidence and from later chunks
     seen = {}  # norm_name -> index in all_systems
     kept = []
     dropped_keys = set()
@@ -598,7 +963,6 @@ def deduplicate_systems(all_systems, all_profiles):
             kept.append(s)
         else:
             existing = kept[seen[norm]]
-            # Prefer higher confidence; on tie prefer later chunk (more spec content)
             existing_conf = existing.get("extraction_confidence") or 0
             new_conf = s.get("extraction_confidence") or 0
             existing_chunk = existing.get("_chunk_no", 0)
@@ -758,7 +1122,6 @@ def insert_stage2_direct(plan, supabase_url, service_key, dry_run_dir, ts):
     components = plan["stagedComponents"]
     resolved_links = plan.get("_resolvedLinks", [])
 
-    # Strip internal temp keys before inserting
     def strip_temp(rec):
         return {k: v for k, v in rec.items() if not k.startswith("_")}
 
@@ -842,7 +1205,10 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Write plan JSON locally, skip Supabase")
     parser.add_argument("--stage", choices=["1", "2", "both"], default="both")
     parser.add_argument("--openai-model", default=None, help="Use OpenAI instead of Anthropic (e.g. gpt-4.5-preview, gpt-4o)")
-    parser.add_argument("--model", default="claude-sonnet-4-6", help="Anthropic model ID (ignored when --openai-model is set)")
+    parser.add_argument("--model", default="claude-sonnet-5", help="Anthropic model ID (ignored when --openai-model is set; must support structured outputs)")
+    parser.add_argument("--interactive", action="store_true",
+                         help="Use the old one-call-per-chunk loop with inter-call pacing instead of the "
+                              "Message Batches API (always used automatically for --openai-model)")
     parser.add_argument("--from-plan", default=None, help="Skip extraction: insert a previously saved plan JSON (every run saves one to .local/parser-dry-run/plan_*.json before inserting)")
     parser.add_argument("--allow-partial", action="store_true", help="Proceed with the live insert even if some chunks failed extraction (they are recorded in the run manifest)")
     args = parser.parse_args()
@@ -881,6 +1247,7 @@ def main():
         return
 
     use_openai = bool(args.openai_model)
+    use_batch = not use_openai and not args.interactive
 
     if use_openai:
         if not openai_key:
@@ -890,7 +1257,7 @@ def main():
         client._provider = "openai"
         client._model = args.openai_model
         inter_call_delay = 3  # OpenAI has much higher rate limits
-        print(f"[parser] Provider: OpenAI ({args.openai_model})")
+        print(f"[parser] Provider: OpenAI ({args.openai_model}) — interactive loop (no Batches API on this path)")
     else:
         if not anthropic_key:
             sys.exit("[ERROR] ANTHROPIC_API_KEY not set in .env.local or environment")
@@ -898,8 +1265,9 @@ def main():
         client = anthropic.Anthropic(api_key=anthropic_key)
         client._provider = "anthropic"
         client._model = args.model
-        inter_call_delay = 65  # 8k tokens/min limit on this key
-        print(f"[parser] Provider: Anthropic ({args.model})")
+        inter_call_delay = 0 if use_batch else 65  # batch pricing/rate-limits don't need pacing
+        mode = "Message Batches" if use_batch else "interactive (--interactive)"
+        print(f"[parser] Provider: Anthropic ({args.model}) — {mode}")
 
     if not args.dry_run and (not supabase_url or not service_key):
         sys.exit("[ERROR] NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required (or use --dry-run)")
@@ -915,6 +1283,7 @@ def main():
             "stage": args.stage,
             "provider": "openai" if use_openai else "anthropic",
             "model": args.openai_model or args.model,
+            "mode": "openai" if use_openai else ("batch" if use_batch else "interactive"),
         },
         manufacturer_id=args.manufacturer_id,
     )
@@ -938,18 +1307,56 @@ def main():
 
     # Stage 1 — systems, profiles, colours
     if args.stage in ("1", "both"):
-        print(f"\n[parser] === Stage 1: systems, profiles, colours ===")
-        for idx, chunk in enumerate(chunks, 1):
-            REPORTER.progress(
-                {"currentStage": "stage1", "chunk": idx, "totalChunks": len(chunks)},
-                log_line=f"stage1 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
-            )
-            s, p, c = parse_stage1(client, chunk, args.manufacturer_name, hints_text, inter_call_delay=inter_call_delay, manifest=run_manifest)
-            all_systems.extend(s)
-            all_profiles.extend(p)
-            all_colours.extend(c)
+        print("\n[parser] === Stage 1: systems, profiles, colours ===")
+        if use_openai:
+            for idx, chunk in enumerate(chunks, 1):
+                REPORTER.progress(
+                    {"currentStage": "stage1", "chunk": idx, "totalChunks": len(chunks)},
+                    log_line=f"stage1 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
+                )
+                print(f"  [stage1] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
+                result = call_openai_legacy(
+                    client, STAGE1_SYSTEM_PROMPT,
+                    legacy_stage1_user_prompt(chunk, args.manufacturer_name, hints_text),
+                    label=f"stage1-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay,
+                )
+                run_manifest.append({"stage": "stage1", "chunk_no": chunk["chunk_no"],
+                                      "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+                                      "status": "ok" if result else "failed"})
+                s, p, c = assemble_stage1(chunk, result)
+                all_systems.extend(s)
+                all_profiles.extend(p)
+                all_colours.extend(c)
+        elif use_batch:
+            system = build_system_blocks(STAGE1_SYSTEM_PROMPT, hints_text)
+            results_by_chunk = run_stage1_batch(client, chunks, args.manufacturer_name, system, REPORTER, run_manifest)
+            for chunk in chunks:
+                s, p, c = assemble_stage1(chunk, results_by_chunk.get(chunk["chunk_no"]))
+                all_systems.extend(s)
+                all_profiles.extend(p)
+                all_colours.extend(c)
+        else:
+            system = build_system_blocks(STAGE1_SYSTEM_PROMPT, hints_text)
+            for idx, chunk in enumerate(chunks, 1):
+                REPORTER.progress(
+                    {"currentStage": "stage1", "chunk": idx, "totalChunks": len(chunks)},
+                    log_line=f"stage1 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
+                )
+                print(f"  [stage1] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
+                result = call_claude_interactive(
+                    client, system, stage1_user_prompt(chunk, args.manufacturer_name), STAGE1_JSON_SCHEMA,
+                    label=f"stage1-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay,
+                )
+                run_manifest.append({"stage": "stage1", "chunk_no": chunk["chunk_no"],
+                                      "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+                                      "status": "ok" if result else "failed"})
+                s, p, c = assemble_stage1(chunk, result)
+                all_systems.extend(s)
+                all_profiles.extend(p)
+                all_colours.extend(c)
+
         print(f"\n[parser] Stage 1 total: {len(all_systems)} systems, {len(all_profiles)} profiles, {len(all_colours)} colours")
-        print(f"\n[parser] Deduplicating systems...")
+        print("\n[parser] Deduplicating systems...")
         all_systems = deduplicate_systems(all_systems, all_profiles)
         print(f"[parser] {len(all_systems)} unique systems after dedup")
 
@@ -977,27 +1384,68 @@ def main():
                 print(f"[parser] Fetched {len(system_context)} existing systems from Supabase for stage 2 context")
             except Exception as e:
                 print(f"[parser] Warning: could not fetch existing systems from Supabase: {e}")
+
         print(f"\n[parser] === Stage 2: components ({len(system_context)} known systems) ===")
-        for idx, chunk in enumerate(chunks, 1):
-            REPORTER.progress(
-                {"currentStage": "stage2", "chunk": idx, "totalChunks": len(chunks)},
-                log_line=f"stage2 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
-            )
-            comps, links = parse_stage2(client, chunk, args.manufacturer_name, hints_text, system_context, inter_call_delay=inter_call_delay, manifest=run_manifest)
-            all_components.extend(comps)
-            all_links.extend(links)
+
+        if use_openai:
+            for idx, chunk in enumerate(chunks, 1):
+                REPORTER.progress(
+                    {"currentStage": "stage2", "chunk": idx, "totalChunks": len(chunks)},
+                    log_line=f"stage2 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
+                )
+                print(f"  [stage2] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
+                result = call_openai_legacy(
+                    client, STAGE2_SYSTEM_PROMPT,
+                    legacy_stage2_user_prompt(chunk, args.manufacturer_name, hints_text, system_context),
+                    label=f"stage2-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay,
+                )
+                run_manifest.append({"stage": "stage2", "chunk_no": chunk["chunk_no"],
+                                      "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+                                      "status": "ok" if result else "failed"})
+                comps, links = assemble_stage2(chunk, result)
+                all_components.extend(comps)
+                all_links.extend(links)
+        elif use_batch:
+            system_context_text = STAGE2_SYSTEM_CONTEXT_SECTION.format(system_context=json.dumps(system_context, indent=2))
+            system = build_system_blocks(STAGE2_SYSTEM_PROMPT, hints_text, extra_text=system_context_text)
+            results_by_chunk = run_stage2_batch(client, chunks, args.manufacturer_name, system, REPORTER, run_manifest)
+            for chunk in chunks:
+                comps, links = assemble_stage2(chunk, results_by_chunk.get(chunk["chunk_no"]))
+                all_components.extend(comps)
+                all_links.extend(links)
+        else:
+            system_context_text = STAGE2_SYSTEM_CONTEXT_SECTION.format(system_context=json.dumps(system_context, indent=2))
+            system = build_system_blocks(STAGE2_SYSTEM_PROMPT, hints_text, extra_text=system_context_text)
+            for idx, chunk in enumerate(chunks, 1):
+                REPORTER.progress(
+                    {"currentStage": "stage2", "chunk": idx, "totalChunks": len(chunks)},
+                    log_line=f"stage2 chunk {idx}/{len(chunks)} (pages {chunk['page_start']}-{chunk['page_end']})",
+                )
+                print(f"  [stage2] chunk {chunk['chunk_no']} pages {chunk['page_start']}-{chunk['page_end']}")
+                result = call_claude_interactive(
+                    client, system, stage2_user_prompt(chunk, args.manufacturer_name), STAGE2_JSON_SCHEMA,
+                    label=f"stage2-chunk{chunk['chunk_no']}", inter_call_delay=inter_call_delay,
+                )
+                run_manifest.append({"stage": "stage2", "chunk_no": chunk["chunk_no"],
+                                      "pages": f"{chunk['page_start']}-{chunk['page_end']}",
+                                      "status": "ok" if result else "failed"})
+                comps, links = assemble_stage2(chunk, result)
+                all_components.extend(comps)
+                all_links.extend(links)
+
         print(f"\n[parser] Stage 2 total: {len(all_components)} components, {len(all_links)} links")
 
     # Resolve temp keys / FK links
-    print(f"\n[parser] Resolving FK links...")
+    print("\n[parser] Resolving FK links...")
     standalone_stage2 = args.stage == "2" and bool(existing_systems_by_id)
+    unresolved_diagnostics = []
 
     if standalone_stage2:
         # Systems already exist in Supabase — resolve links to real UUIDs directly.
         name_to_sys_id = {}
         code_to_sys_id = {}
         for sys_id, s in existing_systems_by_id.items():
-            n = (s.get("name") or "").lower().strip()
+            n = normalize_system_name(s.get("name") or "")
             c = (s.get("product_code") or "").strip()
             if n:
                 name_to_sys_id[n] = sys_id
@@ -1020,8 +1468,8 @@ def main():
             sys_match = lnk.pop("staged_system_match", None) or lnk.pop("system_match", None) or {}
             comp_match = lnk.pop("component_match", None) or {}
             sys_id = (
-                name_to_sys_id.get((sys_match.get("system_name") or sys_match.get("name") or "").lower().strip())
-                or code_to_sys_id.get((sys_match.get("product_code") or "").strip())
+                code_to_sys_id.get((sys_match.get("product_code") or "").strip())
+                or name_to_sys_id.get(normalize_system_name(sys_match.get("system_name") or sys_match.get("name") or ""))
             )
             comp_name = (comp_match.get("name") or "").lower().strip()
             comp_idx = comp_name_map.get(comp_name)
@@ -1050,12 +1498,12 @@ def main():
             "_resolvedLinks": resolved_links,  # carries real system UUIDs for direct insert
         }
     else:
-        all_systems, all_profiles, all_colours, all_components, all_links = assign_temp_keys(
+        all_systems, all_profiles, all_colours, all_components, all_links, unresolved_diagnostics = assign_temp_keys(
             all_systems, all_profiles, all_colours, all_components, all_links
         )
 
-        print(f"\n[parser] === QA review (pre-insert cross-check) ===")
-        qa_issues = run_qa_checks(all_systems, all_profiles)
+        print("\n[parser] === QA review (pre-insert cross-check) ===")
+        qa_issues = run_qa_checks(all_systems, all_profiles) + unresolved_diagnostics
         if qa_issues:
             for iss in qa_issues:
                 print(f"  [QA-{iss['severity'].upper()}] {iss['detail']}")
@@ -1073,7 +1521,7 @@ def main():
 
         plan = build_plan(args.manufacturer_id, all_systems, all_profiles, all_colours, all_components, all_links)
 
-    print(f"\n[parser] Insertion plan:")
+    print("\n[parser] Insertion plan:")
     print(f"  Systems    : {len(plan['stagedSystems'])}")
     print(f"  Profiles   : {len(plan['stagedSystemProfiles'])}")
     print(f"  Colours    : {len(plan['stagedSystemColours'])}")
@@ -1128,17 +1576,17 @@ def main():
         sys.exit(f"[FATAL] {msg}")
 
     if standalone_stage2:
-        print(f"\n[parser] Stage 2 standalone — inserting components + links directly...")
+        print("\n[parser] Stage 2 standalone — inserting components + links directly...")
         insert_stage2_direct(plan, supabase_url, service_key, dry_run_dir, ts)
         REPORTER.done(counts_summary)
     else:
-        print(f"\n[parser] Calling Supabase RPC...")
+        print("\n[parser] Calling Supabase RPC...")
         result = call_rpc(plan, supabase_url, service_key)
         if result:
             # Save result alongside plan for audit
             result_path = dry_run_dir / f"rpc_result_{ts}.json"
             result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-            print(f"\n[parser] RPC result:")
+            print("\n[parser] RPC result:")
             print(json.dumps(result, indent=2))
             REPORTER.done({**counts_summary, "inserted": result.get("inserted_counts", {})})
         else:
