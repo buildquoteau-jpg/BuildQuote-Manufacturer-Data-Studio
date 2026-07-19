@@ -3,7 +3,7 @@
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 import { createPresignedDownloadUrl } from '@/lib/r2'
-import { publishBatch, type PublishBatchResult } from './publish'
+import { publishBatch, reportOrphans, type PublishBatchResult, type OrphanReport } from './publish'
 
 async function assertBuildquoteStaff(): Promise<{ allowed: true } | { allowed: false; error: string }> {
   const session = await getStudioSession()
@@ -173,4 +173,33 @@ export async function runPublishBatch(batchId: string): Promise<PublishBatchResu
   const auth = await assertBuildquoteStaff()
   if (!auth.allowed) return { ok: false, error: auth.error }
   return publishBatch(batchId, { dryRun: false })
+}
+
+// ─── Orphan report (production hygiene — read-only) ─────────────────────────
+
+export type PublishedManufacturer = { id: string; name: string }
+
+// Manufacturers that have actually been published at least once — only those
+// can have orphaned production rows, so this is what populates the picker.
+export async function getPublishedManufacturers(): Promise<
+  { ok: true; manufacturers: PublishedManufacturer[] } | { ok: false; error: string }
+> {
+  const auth = await assertBuildquoteStaff()
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServiceClient()
+  const { data, error } = await supabase
+    .from('data_studio_manufacturers')
+    .select('id, name')
+    .not('production_manufacturer_id', 'is', null)
+    .order('name', { ascending: true })
+  if (error) return { ok: false, error: error.message }
+
+  return { ok: true, manufacturers: (data ?? []) as PublishedManufacturer[] }
+}
+
+export async function getOrphanReport(manufacturerId: string): Promise<OrphanReport> {
+  const auth = await assertBuildquoteStaff()
+  if (!auth.allowed) return { ok: false, error: auth.error }
+  return reportOrphans(manufacturerId)
 }

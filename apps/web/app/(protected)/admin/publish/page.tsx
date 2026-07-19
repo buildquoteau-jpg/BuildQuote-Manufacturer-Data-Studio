@@ -1,11 +1,15 @@
 import { StudioShell } from '@/components/studio/StudioShell'
-import { getPendingPublishBatches } from '@/lib/studio-admin/publish-actions'
+import { getPendingPublishBatches, getPublishedManufacturers } from '@/lib/studio-admin/publish-actions'
 import { PublishQueueClient } from './PublishQueueClient'
+import { OrphanReportPanel } from './OrphanReportPanel'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminPublishPage() {
-  const result = await getPendingPublishBatches()
+  const [result, publishedResult] = await Promise.all([
+    getPendingPublishBatches(),
+    getPublishedManufacturers(),
+  ])
 
   return (
     <StudioShell role="admin" subtitle="Publish queue">
@@ -22,6 +26,8 @@ export default async function AdminPublishPage() {
       ) : (
         <PublishQueueClient initialBatches={result.batches} />
       )}
+
+      {publishedResult.ok && <OrphanReportPanel manufacturers={publishedResult.manufacturers} />}
     </StudioShell>
   )
 }

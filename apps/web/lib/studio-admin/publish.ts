@@ -620,3 +620,151 @@ export async function publishBatch(batchId: string, opts: { dryRun: boolean }): 
 
   return { ok: true, batchId, dryRun: opts.dryRun, items: results, succeeded, failed }
 }
+
+// ─── reportOrphans ───────────────────────────────────────────────────────────
+// Production hygiene report — NOT part of the publish flow and NEVER writes
+// anything. Publishing is upsert-by-natural-key and never deletes: if a
+// staged row is deleted or renamed in Data Studio after it was published, the
+// production row it created stays behind forever with no staging counterpart
+// to point back at it. This function finds those orphans (production
+// systems/system_profiles/system_colours/components whose id isn't
+// referenced by any staged_*.production_*_id for the manufacturer) so a
+// human can look at the list and decide what to do — report-only, by design.
+
+export type OrphanRow = { id: string; label: string }
+
+export type OrphanReport =
+  | {
+      ok: true
+      manufacturerId: string
+      manufacturerName: string
+      productionManufacturerId: string | null
+      systems: OrphanRow[]
+      systemProfiles: OrphanRow[]
+      systemColours: OrphanRow[]
+      components: OrphanRow[]
+      totalOrphans: number
+    }
+  | { ok: false; error: string }
+
+function toIdSet(rows: { [key: string]: unknown }[] | null, field: string): Set<string> {
+  return new Set(
+    (rows ?? [])
+      .map((r) => r[field])
+      .filter((v): v is string => typeof v === 'string' && v.length > 0),
+  )
+}
+
+export async function reportOrphans(manufacturerId: string): Promise<OrphanReport> {
+  const ds = createStudioServiceClient()
+  const prod = createProductionServiceClient()
+
+  const { data: mfr, error: mfrErr } = await ds
+    .from('data_studio_manufacturers')
+    .select('id, name, production_manufacturer_id')
+    .eq('id', manufacturerId)
+    .single()
+  if (mfrErr || !mfr) {
+    return { ok: false, error: `Could not load manufacturer: ${mfrErr?.message ?? 'not found'}` }
+  }
+
+  const productionManufacturerId = mfr.production_manufacturer_id as string | null
+  if (!productionManufacturerId) {
+    // Never published — there is nothing in production to orphan yet.
+    return {
+      ok: true, manufacturerId, manufacturerName: mfr.name, productionManufacturerId: null,
+      systems: [], systemProfiles: [], systemColours: [], components: [], totalOrphans: 0,
+    }
+  }
+
+  // ── Staging side: every production id a current staged row still points at ──
+  const { data: stagedSystems, error: stagedSysErr } = await ds
+    .from('staged_systems')
+    .select('id, production_system_id')
+    .eq('manufacturer_id', manufacturerId)
+  if (stagedSysErr) return { ok: false, error: `Could not load staged systems: ${stagedSysErr.message}` }
+
+  const referencedSystemIds = toIdSet(stagedSystems, 'production_system_id')
+  const stagedSystemIds = (stagedSystems ?? []).map((s) => s.id as string)
+
+  let referencedProfileIds = new Set<string>()
+  let referencedColourIds = new Set<string>()
+  if (stagedSystemIds.length > 0) {
+    const { data: stagedProfiles, error: profErr } = await ds
+      .from('staged_system_profiles')
+      .select('production_profile_id')
+      .in('staged_system_id', stagedSystemIds)
+    if (profErr) return { ok: false, error: `Could not load staged profiles: ${profErr.message}` }
+    referencedProfileIds = toIdSet(stagedProfiles, 'production_profile_id')
+
+    const { data: stagedColours, error: colErr } = await ds
+      .from('staged_system_colours')
+      .select('production_colour_id')
+      .in('staged_system_id', stagedSystemIds)
+    if (colErr) return { ok: false, error: `Could not load staged colours: ${colErr.message}` }
+    referencedColourIds = toIdSet(stagedColours, 'production_colour_id')
+  }
+
+  const { data: stagedComponents, error: compErr } = await ds
+    .from('staged_components')
+    .select('production_component_id')
+    .eq('manufacturer_id', manufacturerId)
+  if (compErr) return { ok: false, error: `Could not load staged components: ${compErr.message}` }
+  const referencedComponentIds = toIdSet(stagedComponents, 'production_component_id')
+
+  // ── Production side: every row that exists for this manufacturer ──
+  const { data: prodSystems, error: prodSysErr } = await prod
+    .from('systems')
+    .select('id, name')
+    .eq('manufacturer_id', productionManufacturerId)
+  if (prodSysErr) return { ok: false, error: `Could not load production systems: ${prodSysErr.message}` }
+
+  const orphanSystems: OrphanRow[] = (prodSystems ?? [])
+    .filter((s) => !referencedSystemIds.has(s.id as string))
+    .map((s) => ({ id: s.id as string, label: (s.name as string) ?? s.id as string }))
+
+  const prodSystemIds = (prodSystems ?? []).map((s) => s.id as string)
+
+  let orphanProfiles: OrphanRow[] = []
+  let orphanColours: OrphanRow[] = []
+  if (prodSystemIds.length > 0) {
+    const { data: prodProfiles, error: prodProfErr } = await prod
+      .from('system_profiles')
+      .select('id, name, profile_name')
+      .in('system_id', prodSystemIds)
+    if (prodProfErr) return { ok: false, error: `Could not load production profiles: ${prodProfErr.message}` }
+    orphanProfiles = (prodProfiles ?? [])
+      .filter((p) => !referencedProfileIds.has(p.id as string))
+      .map((p) => ({ id: p.id as string, label: (p.profile_name as string) ?? (p.name as string) ?? p.id as string }))
+
+    const { data: prodColours, error: prodColErr } = await prod
+      .from('system_colours')
+      .select('id, colour_name')
+      .in('system_id', prodSystemIds)
+    if (prodColErr) return { ok: false, error: `Could not load production colours: ${prodColErr.message}` }
+    orphanColours = (prodColours ?? [])
+      .filter((c) => !referencedColourIds.has(c.id as string))
+      .map((c) => ({ id: c.id as string, label: (c.colour_name as string) ?? c.id as string }))
+  }
+
+  const { data: prodComponents, error: prodCompErr } = await prod
+    .from('components')
+    .select('id, name')
+    .eq('manufacturer_id', productionManufacturerId)
+  if (prodCompErr) return { ok: false, error: `Could not load production components: ${prodCompErr.message}` }
+  const orphanComponents: OrphanRow[] = (prodComponents ?? [])
+    .filter((c) => !referencedComponentIds.has(c.id as string))
+    .map((c) => ({ id: c.id as string, label: (c.name as string) ?? c.id as string }))
+
+  return {
+    ok: true,
+    manufacturerId,
+    manufacturerName: mfr.name,
+    productionManufacturerId,
+    systems: orphanSystems,
+    systemProfiles: orphanProfiles,
+    systemColours: orphanColours,
+    components: orphanComponents,
+    totalOrphans: orphanSystems.length + orphanProfiles.length + orphanColours.length + orphanComponents.length,
+  }
+}
