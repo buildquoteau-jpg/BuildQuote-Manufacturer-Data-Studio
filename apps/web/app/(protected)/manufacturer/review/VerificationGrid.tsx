@@ -1970,11 +1970,18 @@ function ExpandedCardView({
     }
   }
 
-  async function persistNotes() {
-    if (notes === (initialSystem.notes ?? '')) return
+  async function persistNotes(): Promise<{ ok: boolean; error?: string }> {
+    if (notes === (initialSystem.notes ?? '')) return { ok: true }
     setNotesSaving(true)
-    await saveSystemNotes(system.id, manufacturerId, notes)
-    setNotesSaving(false)
+    try {
+      const res = await saveSystemNotes(system.id, manufacturerId, notes)
+      if (!res.ok) return { ok: false, error: res.error }
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to save notes.' }
+    } finally {
+      setNotesSaving(false)
+    }
   }
 
   function handleMarkVerified() {
@@ -1992,7 +1999,9 @@ function ExpandedCardView({
   }
 
   async function handleComeBackLater() {
-    await persistNotes()
+    setVerifyErr(null); setVerifyMsg(null)
+    const res = await persistNotes()
+    if (!res.ok) { setVerifyErr(`Could not save notes: ${res.error ?? 'unknown error'}. Your notes have not been saved — copy them somewhere safe before leaving, or try again.`); return }
     onClose()
   }
 
