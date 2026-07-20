@@ -17,16 +17,20 @@ import {
   saveSystemNotes,
   addMissingProfile,
   updateProfile,
+  removeProfile,
   addMissingColour,
   updateColour,
+  removeColour,
   addMissingComponent,
   updateComponent,
+  unlinkComponent,
   getManufacturerComponents,
   linkExistingComponent,
   updateSystemImageCrop,
   updateSystemHeroAsset,
   setInstallGuideUrls,
   setCustomDocumentLinks,
+  setCustomAttributes,
   createBlankSystem,
   linkSourceDocument,
   getManufacturerSourceDocuments,
@@ -1079,6 +1083,96 @@ function CustomDocumentsEditor({
   )
 }
 
+// ─── Custom technical attributes editor ───────────────────────────────────────
+// Freeform label/value pairs for spec facts with no dedicated field
+// (e.g. warranty period, R-value, weathering rating).
+
+function CustomAttributesEditor({
+  attributes, systemId, manufacturerId, onUpdated,
+}: {
+  attributes: { label: string; value: string }[]
+  systemId: string
+  manufacturerId: string
+  onUpdated: (attributes: { label: string; value: string }[]) => void
+}) {
+  const [pending, startTransition] = useTransition()
+  const [err, setErr] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newValue, setNewValue] = useState('')
+
+  function persist(next: { label: string; value: string }[]) {
+    setErr(null)
+    startTransition(async () => {
+      const res = await setCustomAttributes(systemId, manufacturerId, next)
+      if (!res.ok) { setErr(res.error); return }
+      onUpdated(next)
+    })
+  }
+
+  function handleAdd() {
+    if (!newLabel.trim() || !newValue.trim()) return
+    persist([...attributes, { label: newLabel.trim(), value: newValue.trim() }])
+    setNewLabel(''); setNewValue(''); setAdding(false)
+  }
+
+  function handleRemove(i: number) {
+    persist(attributes.filter((_, idx) => idx !== i))
+  }
+
+  function handleEdit(i: number, field: 'label' | 'value', value: string) {
+    persist(attributes.map((a, idx) => idx === i ? { ...a, [field]: value } : a))
+  }
+
+  return (
+    <div>
+      {attributes.map((a, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center', padding: '6px 0', borderBottom: i < attributes.length - 1 || adding ? '1px solid #f1f5f9' : 'none' }}>
+          <input
+            defaultValue={a.label}
+            onBlur={e => e.target.value.trim() !== a.label && handleEdit(i, 'label', e.target.value.trim())}
+            placeholder="Attribute, e.g. Warranty"
+            style={{ width: '160px', flexShrink: 0, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontWeight: 600, fontFamily: 'inherit' }}
+          />
+          <input
+            defaultValue={a.value}
+            onBlur={e => e.target.value.trim() !== a.value && handleEdit(i, 'value', e.target.value.trim())}
+            placeholder="Value, e.g. 25 years"
+            style={{ flex: 1, minWidth: 0, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
+          />
+          <button type="button" title="Remove" onClick={() => handleRemove(i)} disabled={pending}
+            style={{ width: 26, height: 26, borderRadius: '6px', border: '1.5px solid #d1d5db', background: '#fff', color: '#6b7280', cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>
+            ×
+          </button>
+        </div>
+      ))}
+      {adding ? (
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: attributes.length > 0 ? '8px' : 0 }}>
+          <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Attribute, e.g. Warranty"
+            style={{ width: '160px', flexShrink: 0, padding: '5px 7px', border: '1px solid #185D7A', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
+          <input value={newValue} onChange={e => setNewValue(e.target.value)} placeholder="Value, e.g. 25 years"
+            style={{ flex: 1, minWidth: 0, padding: '5px 7px', border: '1px solid #185D7A', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd() }} />
+          <button type="button" onClick={handleAdd} disabled={pending || !newLabel.trim() || !newValue.trim()}
+            style={{ padding: '5px 12px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !newLabel.trim() || !newValue.trim() ? 0.5 : 1 }}>
+            Add
+          </button>
+          <button type="button" onClick={() => { setAdding(false); setNewLabel(''); setNewValue('') }}
+            style={{ padding: '5px 10px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setAdding(true)}
+          style={{ marginTop: attributes.length > 0 ? '8px' : 0, background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '6px', padding: '4px 12px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
+          + Add custom attribute
+        </button>
+      )}
+      {err && <div style={{ marginTop: '6px', fontSize: '11px', color: '#dc2626' }}>{err}</div>}
+    </div>
+  )
+}
+
 // ─── Field section heading ────────────────────────────────────────────────────
 
 function FieldSection({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
@@ -1103,12 +1197,13 @@ function FieldSection({ label, children, action }: { label: string; children: Re
 // ─── Inline profile editor ────────────────────────────────────────────────────
 
 function ProfileItem({
-  profile, systemId, manufacturerId, onUpdated,
+  profile, systemId, manufacturerId, onUpdated, onRemoved,
 }: {
   profile: VerificationSystemProfile
   systemId: string
   manufacturerId: string
   onUpdated: (id: string, data: Partial<VerificationSystemProfile>) => void
+  onRemoved: (id: string) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [name,    setName]    = useState(profile.profile_name ?? '')
@@ -1119,6 +1214,18 @@ function ProfileItem({
   const [uom,     setUom]     = useState(profile.uom ?? '')
   const [pending, startTransition] = useTransition()
   const [err,     setErr]     = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [delPending, startDelTransition] = useTransition()
+  const [delErr, setDelErr] = useState<string | null>(null)
+
+  function handleDelete() {
+    setDelErr(null)
+    startDelTransition(async () => {
+      const res = await removeProfile(profile.id, systemId, manufacturerId)
+      if (!res.ok) { setDelErr(res.error); return }
+      onRemoved(profile.id)
+    })
+  }
 
   function handleSave() {
     setErr(null)
@@ -1145,6 +1252,26 @@ function ProfileItem({
   }
 
   if (!editing) {
+    if (confirmDelete) {
+      return (
+        <div style={{ padding: '8px 10px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ color: '#991b1b' }}>
+            Remove <strong>{profile.profile_name}</strong>?
+            {delErr && <div style={{ color: '#dc2626', marginTop: '2px' }}>{delErr}</div>}
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+            <button type="button" onClick={handleDelete} disabled={delPending}
+              style={{ padding: '4px 10px', borderRadius: '6px', background: '#dc2626', color: '#fff', border: 'none', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: delPending ? 0.5 : 1 }}>
+              {delPending ? 'Removing…' : 'Confirm'}
+            </button>
+            <button type="button" onClick={() => setConfirmDelete(false)} disabled={delPending}
+              style={{ padding: '4px 10px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '11px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )
+    }
     return (
       <div style={{ padding: '8px 10px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
@@ -1157,10 +1284,16 @@ function ProfileItem({
             ].filter(Boolean).join(' · ')}
           </div>
         </div>
-        <button type="button" onClick={() => setEditing(true)}
-          style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
-          Edit
-        </button>
+        <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
+          <button type="button" onClick={() => setEditing(true)}
+            style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer' }}>
+            Edit
+          </button>
+          <button type="button" title="Remove profile" onClick={() => setConfirmDelete(true)}
+            style={{ background: 'none', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#dc2626', cursor: 'pointer' }}>
+            Remove
+          </button>
+        </div>
       </div>
     )
   }
@@ -1319,18 +1452,22 @@ function AddProfileForm({
 // ─── Colour item ──────────────────────────────────────────────────────────────
 
 function ColourItem({
-  colour, systemId, manufacturerId, onUpdated,
+  colour, systemId, manufacturerId, onUpdated, onRemoved,
 }: {
   colour: VerificationSystemColour
   systemId: string
   manufacturerId: string
   onUpdated: (id: string, data: Partial<VerificationSystemColour>) => void
+  onRemoved: (id: string) => void
 }) {
   const [editing, setEditing]   = useState(false)
   const [name,    setName]      = useState(colour.colour_name)
   const [suffix,  setSuffix]    = useState(colour.sku_suffix ?? '')
   const [pending, startTransition] = useTransition()
   const [err,     setErr]       = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [delPending, startDelTransition] = useTransition()
+  const [delErr, setDelErr] = useState<string | null>(null)
 
   function handleSave() {
     setErr(null)
@@ -1345,6 +1482,32 @@ function ColourItem({
     })
   }
 
+  function handleDelete() {
+    setDelErr(null)
+    startDelTransition(async () => {
+      const res = await removeColour(colour.id, systemId, manufacturerId)
+      if (!res.ok) { setDelErr(res.error); return }
+      onRemoved(colour.id)
+    })
+  }
+
+  if (confirmDelete) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '99px', fontSize: '11px', color: '#991b1b' }}>
+        Remove {colour.colour_name}?
+        <button type="button" onClick={handleDelete} disabled={delPending}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontWeight: 700, fontSize: '11px', padding: 0 }}>
+          {delPending ? '…' : 'Yes'}
+        </button>
+        <button type="button" onClick={() => setConfirmDelete(false)} disabled={delPending}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '11px', padding: 0 }}>
+          No
+        </button>
+        {delErr && <span style={{ color: '#dc2626' }}>{delErr}</span>}
+      </span>
+    )
+  }
+
   if (!editing) {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '99px', fontSize: '11px', color: '#374151' }}>
@@ -1353,6 +1516,10 @@ function ColourItem({
         <button type="button" onClick={() => setEditing(true)}
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '10px', padding: '0 2px', lineHeight: 1 }}>
           ✏
+        </button>
+        <button type="button" title="Remove colour" onClick={() => setConfirmDelete(true)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '10px', padding: '0 2px', lineHeight: 1 }}>
+          🗑
         </button>
       </span>
     )
@@ -1442,11 +1609,13 @@ function groupComponentsByCategory(
 // ─── Component item ───────────────────────────────────────────────────────────
 
 function ComponentItem({
-  component, manufacturerId, onUpdated,
+  component, systemId, manufacturerId, onUpdated, onRemoved,
 }: {
   component: VerificationSystemComponent
+  systemId: string
   manufacturerId: string
   onUpdated: (id: string, data: Partial<VerificationSystemComponent>) => void
+  onRemoved: (id: string) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [name,    setName]    = useState(component.name)
@@ -1456,6 +1625,18 @@ function ComponentItem({
   const [routePending, startRouteTransition] = useTransition()
   const [err,     setErr]     = useState<string | null>(null)
   const [route,   setRoute]   = useState<'specialist_supplier' | 'trade_merchant' | null>(component.procurement_route)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [delPending, startDelTransition] = useTransition()
+  const [delErr, setDelErr] = useState<string | null>(null)
+
+  function handleDelete() {
+    setDelErr(null)
+    startDelTransition(async () => {
+      const res = await unlinkComponent(component.id, systemId, manufacturerId)
+      if (!res.ok) { setDelErr(res.error); return }
+      onRemoved(component.id)
+    })
+  }
 
   function handleRouteChange(val: 'specialist_supplier' | 'trade_merchant' | null) {
     startRouteTransition(async () => {
@@ -1486,6 +1667,27 @@ function ComponentItem({
   }
 
   if (!editing) {
+    if (confirmDelete) {
+      return (
+        <div style={{ padding: '8px 10px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ color: '#991b1b' }}>
+            Remove <strong>{component.name}</strong> from this system?
+            <div style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 400, marginTop: '2px' }}>The component itself isn't deleted — it stays available to link to other systems.</div>
+            {delErr && <div style={{ color: '#dc2626', marginTop: '2px' }}>{delErr}</div>}
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+            <button type="button" onClick={handleDelete} disabled={delPending}
+              style={{ padding: '4px 10px', borderRadius: '6px', background: '#dc2626', color: '#fff', border: 'none', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: delPending ? 0.5 : 1 }}>
+              {delPending ? 'Removing…' : 'Confirm'}
+            </button>
+            <button type="button" onClick={() => setConfirmDelete(false)} disabled={delPending}
+              style={{ padding: '4px 10px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '11px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )
+    }
     return (
       <div style={{ padding: '8px 10px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', color: '#374151' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1494,10 +1696,16 @@ function ComponentItem({
             {component.description && <div style={{ color: '#6b7280', marginTop: '2px' }}>{component.description}</div>}
             {component.sku && <code style={{ fontSize: '11px', color: '#4b5563' }}>{component.sku}</code>}
           </div>
-          <button type="button" onClick={() => setEditing(true)}
-            style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
-            Edit
-          </button>
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
+            <button type="button" onClick={() => setEditing(true)}
+              style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer' }}>
+              Edit
+            </button>
+            <button type="button" title="Remove from this system" onClick={() => setConfirmDelete(true)}
+              style={{ background: 'none', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#dc2626', cursor: 'pointer' }}>
+              Remove
+            </button>
+          </div>
         </div>
         {/* Procurement route toggle */}
         <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -2023,6 +2231,9 @@ function ExpandedCardView({
     setSystem(prev => ({ ...prev, profiles: [...prev.profiles, profile] }))
     setShowAddProfile(false)
   }
+  function removeProfileLocal(id: string) {
+    setSystem(prev => ({ ...prev, profiles: prev.profiles.filter(p => p.id !== id) }))
+  }
   function updateColourLocal(id: string, data: Partial<VerificationSystemColour>) {
     setSystem(prev => ({ ...prev, colours: prev.colours.map(c => c.id === id ? { ...c, ...data } : c) }))
   }
@@ -2030,12 +2241,18 @@ function ExpandedCardView({
     setSystem(prev => ({ ...prev, colours: [...prev.colours, colour] }))
     setShowAddColour(false)
   }
+  function removeColourLocal(id: string) {
+    setSystem(prev => ({ ...prev, colours: prev.colours.filter(c => c.id !== id) }))
+  }
   function updateComponentLocal(id: string, data: Partial<VerificationSystemComponent>) {
     setSystem(prev => ({ ...prev, components: prev.components.map(c => c.id === id ? { ...c, ...data } : c) }))
   }
   function addComponentLocal(component: VerificationSystemComponent) {
     setSystem(prev => ({ ...prev, components: [...prev.components, component] }))
     setShowAddComponent(false)
+  }
+  function removeComponentLocal(id: string) {
+    setSystem(prev => ({ ...prev, components: prev.components.filter(c => c.id !== id) }))
   }
 
   const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
@@ -2385,6 +2602,12 @@ function ExpandedCardView({
               />
               {system.fire_rating     && <FieldRow {...fieldRowProps('Fire rating (FRL)', 'fire_rating')} />}
               {system.structural_grade && <FieldRow {...fieldRowProps('Structural grade', 'structural_grade')} />}
+              <CustomAttributesEditor
+                attributes={Array.isArray(system.custom_technical_attributes) ? system.custom_technical_attributes : []}
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                onUpdated={(attrs) => setSystem(prev => ({ ...prev, custom_technical_attributes: attrs.length > 0 ? attrs : null }))}
+              />
             </FieldSection>
 
             {/* Profiles */}
@@ -2393,7 +2616,7 @@ function ExpandedCardView({
               action={<AddButton label="Add profile / variant" onClick={() => { setShowAddProfile(true); setShowAddColour(false); setShowAddComponent(false) }} />}
             >
               {system.profiles.map(p => (
-                <ProfileItem key={p.id} profile={p} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateProfileLocal} />
+                <ProfileItem key={p.id} profile={p} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateProfileLocal} onRemoved={removeProfileLocal} />
               ))}
               {system.profiles.length === 0 && !showAddProfile && (
                 <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>No profiles — add one using the button above.</div>
@@ -2410,7 +2633,7 @@ function ExpandedCardView({
             >
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {system.colours.map(c => (
-                  <ColourItem key={c.id} colour={c} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateColourLocal} />
+                  <ColourItem key={c.id} colour={c} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateColourLocal} onRemoved={removeColourLocal} />
                 ))}
               </div>
               {system.colours.length === 0 && !showAddColour && (
@@ -2437,7 +2660,7 @@ function ExpandedCardView({
                     </div>
                   )}
                   {items.map(c => (
-                    <ComponentItem key={c.id} component={c} manufacturerId={manufacturerId} onUpdated={updateComponentLocal} />
+                    <ComponentItem key={c.id} component={c} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateComponentLocal} onRemoved={removeComponentLocal} />
                   ))}
                 </div>
               ))}

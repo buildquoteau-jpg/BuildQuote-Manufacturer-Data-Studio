@@ -625,6 +625,7 @@ export type VerificationSystem = {
   // Extra named document buttons (energy ratings, sustainability reports…).
   // Optional — degrades to null pre-migration-055 (column absent).
   custom_document_links?: { label: string; url: string }[] | null
+  custom_technical_attributes?: { label: string; value: string }[] | null
   notes: string | null
   verification_status: string
   reviewer_notes: string | null
@@ -657,7 +658,7 @@ export async function getManufacturerVerificationData(
       .select(
         'id, name, slug, product_code, category, subcategory, description, hero_image_url, hero_image_asset_id, ' +
         'hero_image_position_x, hero_image_position_y, ' +
-        (withGallery ? 'gallery_images, publish_status, published_version, hero_image_zoom, custom_document_links, ' : '') +
+        (withGallery ? 'gallery_images, publish_status, published_version, hero_image_zoom, custom_document_links, custom_technical_attributes, ' : '') +
         'australian_made, bal_rating, fire_rating, acoustic_rating, moisture_resistant, ' +
         'structural_grade, website_url, source_url, install_guide_urls, design_guide_url, tech_data_url, ' +
         'notes, verification_status, reviewer_notes, verified_at, source_document_id, ' +
@@ -711,6 +712,7 @@ export async function getManufacturerVerificationData(
     source_url: string | null; source_document_id: string | null
     install_guide_urls: { label: string; url: string }[] | null
     custom_document_links?: { label: string; url: string }[] | null
+    custom_technical_attributes?: { label: string; value: string }[] | null
     design_guide_url: string | null; tech_data_url: string | null; notes: string | null
     verification_status: string; reviewer_notes: string | null
     verified_at: string | null

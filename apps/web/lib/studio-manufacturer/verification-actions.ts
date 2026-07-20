@@ -650,6 +650,102 @@ export async function updateComponent(
   return { ok: true }
 }
 
+// ─── removeProfile ────────────────────────────────────────────────────────────
+
+export async function removeProfile(
+  profileId: string,
+  systemId: string,
+  manufacturerId: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_system_profiles')
+    .delete()
+    .eq('id', profileId)
+    .eq('staged_system_id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  await markDraftChanged(supabase, systemId)
+  return { ok: true }
+}
+
+// ─── removeColour ─────────────────────────────────────────────────────────────
+
+export async function removeColour(
+  colourId: string,
+  systemId: string,
+  manufacturerId: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_system_colours')
+    .delete()
+    .eq('id', colourId)
+    .eq('staged_system_id', systemId)
+
+  if (error) return { ok: false, error: error.message }
+  await markDraftChanged(supabase, systemId)
+  return { ok: true }
+}
+
+// ─── unlinkComponent ──────────────────────────────────────────────────────────
+// Removes the component from this system only (deletes the join row). The
+// underlying staged_components record is left alone — it may be linked to
+// other systems, and deleting it outright would silently break those too.
+
+export async function unlinkComponent(
+  componentId: string,
+  systemId: string,
+  manufacturerId: string,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_system_components')
+    .delete()
+    .eq('staged_system_id', systemId)
+    .eq('staged_component_id', componentId)
+
+  if (error) return { ok: false, error: error.message }
+  await markDraftChanged(supabase, systemId)
+  return { ok: true }
+}
+
+// ─── setCustomAttributes ──────────────────────────────────────────────────────
+// Freeform label/value technical facts with no dedicated column (migration 061).
+
+export async function setCustomAttributes(
+  systemId: string,
+  manufacturerId: string,
+  attributes: { label: string; value: string }[],
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ custom_technical_attributes: attributes.length > 0 ? attributes : null, updated_at: new Date().toISOString() })
+    .eq('id', systemId)
+
+  if (error) {
+    if (/custom_technical_attributes|does not exist/i.test(error.message ?? '')) {
+      return { ok: false, error: 'Custom technical attributes need migration 061 applied first.' }
+    }
+    return { ok: false, error: error.message }
+  }
+  await markDraftChanged(supabase, systemId)
+  return { ok: true }
+}
+
 // ─── reopenSystem ─────────────────────────────────────────────────────────────
 // Reopens a verified system for re-checking.
 
