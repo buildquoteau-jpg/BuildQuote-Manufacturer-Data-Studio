@@ -318,32 +318,6 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
             </div>
           </Section>
 
-          <Section title="Technical attributes">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
-              {ATTR_TEXT_FIELDS.map(f => (
-                <Field key={f.name} label={f.label}>
-                  <input
-                    value={(system[f.name] as string | null) ?? ''}
-                    onChange={e => { patch({ [f.name]: e.target.value } as Partial<VerificationSystem>); saveField(f.name, e.target.value) }}
-                    style={inputStyle}
-                  />
-                </Field>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '1.4rem', marginTop: '0.5rem' }}>
-              <Checkbox
-                label="Australian made"
-                checked={system.australian_made ?? false}
-                onChange={v => { patch({ australian_made: v }); saveField('australian_made', String(v)) }}
-              />
-              <Checkbox
-                label="Moisture resistant"
-                checked={system.moisture_resistant ?? false}
-                onChange={v => { patch({ moisture_resistant: v }); saveField('moisture_resistant', String(v)) }}
-              />
-            </div>
-          </Section>
-
           <Section title="Links & guides">
             {LINK_FIELDS.map(f => (
               <Field key={f.name} label={f.label}>
