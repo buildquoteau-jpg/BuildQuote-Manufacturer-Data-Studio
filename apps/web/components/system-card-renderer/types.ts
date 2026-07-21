@@ -91,6 +91,9 @@ export type SystemCardSystem = {
   // Arbitrary named document buttons (energy ratings, sustainability reports,
   // warranty PDFs…). `label` is the button text, `url` is a PDF or web page.
   custom_document_links?: { label: string; url: string }[] | null
+  // Freeform label/value spec facts with no dedicated column (warranty
+  // period, R-value, etc.) — rendered as extra attribute pills.
+  custom_technical_attributes?: { label: string; value: string }[] | null
   manufacturer: {
     name: string
     slug: string

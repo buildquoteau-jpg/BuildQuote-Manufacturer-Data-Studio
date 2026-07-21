@@ -59,6 +59,7 @@ export interface SystemCardData {
   design_guide_url: string | null
   tech_data_url: string | null
   custom_document_links?: { label: string; url: string }[] | null
+  custom_technical_attributes?: { label: string; value: string }[] | null
   profiles: SystemProfile[]
   components: SystemComponent[]
   colours: SystemColour[]
@@ -581,7 +582,7 @@ function ComponentsSection({
 
 // ─── Attribute pills ──────────────────────────────────────────────────────────
 
-function AttributePills({ systemName, balRating, fireRating, moistureResistant, acousticRating, structuralGrade, australianMade, notes }: {
+function AttributePills({ systemName, balRating, fireRating, moistureResistant, acousticRating, structuralGrade, australianMade, notes, customAttributes }: {
   systemName: string
   balRating: string | null
   fireRating: string | null
@@ -590,6 +591,7 @@ function AttributePills({ systemName, balRating, fireRating, moistureResistant, 
   structuralGrade: string | null
   australianMade: boolean | null
   notes: string | null
+  customAttributes?: { label: string; value: string }[] | null
 }) {
   const badges: { label: string; bg: string; color: string }[] = []
 
@@ -601,6 +603,8 @@ function AttributePills({ systemName, balRating, fireRating, moistureResistant, 
   if (australianMade)    badges.push({ label: 'Australian made',            bg: '#f0fdf4', color: '#166534' })
   if (notes?.toLowerCase().includes('primed') || notes?.toLowerCase().includes('site paint'))
     badges.push({ label: 'Pre-primed / site painted',                       bg: '#f8fafc', color: '#475569' })
+  for (const attr of customAttributes ?? [])
+    badges.push({ label: `${attr.label}: ${attr.value}`,                    bg: '#f8fafc', color: '#334155' })
 
   if (badges.length === 0) return null
   return (
@@ -725,6 +729,7 @@ export function SystemCard({ data }: { data: SystemCardData }) {
           structuralGrade={data.structural_grade}
           australianMade={data.australian_made}
           notes={data.notes}
+          customAttributes={data.custom_technical_attributes}
         />
 
         <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>

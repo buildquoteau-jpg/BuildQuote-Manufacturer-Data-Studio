@@ -508,6 +508,8 @@ function AttributePills({ system }: { system: SystemCardSystem }) {
   if (system.australian_made)    badges.push({ label: 'Australian made',             bg: '#f0fdf4', color: '#166534' })
   if (system.notes?.toLowerCase().includes('primed') || system.notes?.toLowerCase().includes('site paint'))
     badges.push({ label: 'Pre-primed / site painted', bg: '#f8fafc', color: '#475569' })
+  for (const attr of system.custom_technical_attributes ?? [])
+    badges.push({ label: `${attr.label}: ${attr.value}`, bg: '#f8fafc', color: '#334155' })
 
   if (badges.length === 0) return null
 
