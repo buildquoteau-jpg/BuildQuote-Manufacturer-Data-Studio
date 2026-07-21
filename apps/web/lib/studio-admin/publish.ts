@@ -276,7 +276,7 @@ export async function publishSystem(
       hero_image_position_x, hero_image_position_y,
       website_url, source_label, source_url, sheet_format, fire_rating, acoustic_rating,
       moisture_resistant, structural_grade, tech_data_url, bal_rating, australian_made,
-      install_guide_urls, design_guide_url, custom_document_links, sort_order
+      install_guide_urls, design_guide_url, custom_document_links, custom_technical_attributes, sort_order
     `)
     .eq('id', systemId)
     .single()
@@ -334,6 +334,7 @@ export async function publishSystem(
       design_guide_url: sys.design_guide_url,
       tech_data_url: sys.tech_data_url,
       custom_document_links: sys.custom_document_links,
+      custom_technical_attributes: sys.custom_technical_attributes,
       bal_rating: sys.bal_rating,
       australian_made: sys.australian_made,
       sort_order: sys.sort_order,
