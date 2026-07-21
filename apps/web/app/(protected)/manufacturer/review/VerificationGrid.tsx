@@ -1621,6 +1621,7 @@ function ComponentItem({
   const [name,    setName]    = useState(component.name)
   const [sku,     setSku]     = useState(component.sku ?? '')
   const [desc,    setDesc]    = useState(component.description ?? '')
+  const [uom,     setUom]     = useState(component.uom ?? '')
   const [pending, startTransition] = useTransition()
   const [routePending, startRouteTransition] = useTransition()
   const [err,     setErr]     = useState<string | null>(null)
@@ -1654,9 +1655,10 @@ function ComponentItem({
         name: name.trim() || undefined,
         sku: sku.trim() || null,
         description: desc.trim() || null,
+        uom: uom.trim() || null,
       })
       if (!res.ok) { setErr(res.error); return }
-      onUpdated(component.id, { name: name.trim(), sku: sku.trim() || null, description: desc.trim() || null })
+      onUpdated(component.id, { name: name.trim(), sku: sku.trim() || null, description: desc.trim() || null, uom: uom.trim() || null })
       setEditing(false)
     })
   }
@@ -1695,6 +1697,7 @@ function ComponentItem({
             <div style={{ fontWeight: 600 }}>{component.name}</div>
             {component.description && <div style={{ color: '#6b7280', marginTop: '2px' }}>{component.description}</div>}
             {component.sku && <code style={{ fontSize: '11px', color: '#4b5563' }}>{component.sku}</code>}
+            {component.uom && <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginLeft: component.sku ? '8px' : 0 }}>{component.uom}</span>}
           </div>
           <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
             <button type="button" onClick={() => setEditing(true)}
@@ -1748,6 +1751,11 @@ function ComponentItem({
         <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
           Description
           <input value={desc} onChange={e => setDesc(e.target.value)}
+            style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+        </label>
+        <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
+          UOM
+          <input value={uom} onChange={e => setUom(e.target.value)} placeholder="e.g. EA, LM, SHEET"
             style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
         </label>
       </div>

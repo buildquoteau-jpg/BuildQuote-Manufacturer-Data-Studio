@@ -472,6 +472,11 @@ function ComponentRow({ c, i, selected, onToggle }: {
               {c.sku}
             </span>
           )}
+          {fmtUom(c.uom) && (
+            <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: isSel ? '#185D7A' : '#6b7280' }}>
+              {fmtUom(c.uom)}
+            </span>
+          )}
         </div>
       </div>
       <Checkbox checked={isSel} />
