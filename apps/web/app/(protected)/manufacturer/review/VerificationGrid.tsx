@@ -1124,20 +1124,25 @@ function CustomAttributesEditor({
     persist(attributes.map((a, idx) => idx === i ? { ...a, [field]: value } : a))
   }
 
+  function handleEditCombined(i: number, raw: string) {
+    const a = attributes[i]
+    const combined = `${a.label}: ${a.value}`
+    if (raw.trim() === combined) return
+    const sep = raw.indexOf(':')
+    const label = (sep === -1 ? raw : raw.slice(0, sep)).trim()
+    const value = (sep === -1 ? '' : raw.slice(sep + 1)).trim()
+    if (!label) return
+    persist(attributes.map((att, idx) => idx === i ? { label, value } : att))
+  }
+
   return (
     <div>
       {attributes.map((a, i) => (
         <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center', padding: '6px 0', borderBottom: i < attributes.length - 1 || adding ? '1px solid #f1f5f9' : 'none' }}>
           <input
-            defaultValue={a.label}
-            onBlur={e => e.target.value.trim() !== a.label && handleEdit(i, 'label', e.target.value.trim())}
-            placeholder="Attribute, e.g. Warranty"
-            style={{ width: '160px', flexShrink: 0, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontWeight: 600, fontFamily: 'inherit' }}
-          />
-          <input
-            defaultValue={a.value}
-            onBlur={e => e.target.value.trim() !== a.value && handleEdit(i, 'value', e.target.value.trim())}
-            placeholder="Value, e.g. 25 years"
+            defaultValue={`${a.label}: ${a.value}`}
+            onBlur={e => handleEditCombined(i, e.target.value)}
+            placeholder="Attribute: value, e.g. Warranty: 25 years"
             style={{ flex: 1, minWidth: 0, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
           />
           <button type="button" title="Remove" onClick={() => handleRemove(i)} disabled={pending}
@@ -1197,9 +1202,11 @@ function FieldSection({ label, children, action }: { label: string; children: Re
 // ─── Inline profile editor ────────────────────────────────────────────────────
 
 function ProfileItem({
-  profile, systemId, manufacturerId, onUpdated, onRemoved,
+  profile, rowIndex, systemName, systemId, manufacturerId, onUpdated, onRemoved,
 }: {
   profile: VerificationSystemProfile
+  rowIndex: number
+  systemName: string
   systemId: string
   manufacturerId: string
   onUpdated: (id: string, data: Partial<VerificationSystemProfile>) => void
@@ -1254,51 +1261,61 @@ function ProfileItem({
   if (!editing) {
     if (confirmDelete) {
       return (
-        <div style={{ padding: '8px 10px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-          <div style={{ color: '#991b1b' }}>
-            Remove <strong>{profile.profile_name}</strong>?
-            {delErr && <div style={{ color: '#dc2626', marginTop: '2px' }}>{delErr}</div>}
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-            <button type="button" onClick={handleDelete} disabled={delPending}
-              style={{ padding: '4px 10px', borderRadius: '6px', background: '#dc2626', color: '#fff', border: 'none', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: delPending ? 0.5 : 1 }}>
-              {delPending ? 'Removing…' : 'Confirm'}
-            </button>
-            <button type="button" onClick={() => setConfirmDelete(false)} disabled={delPending}
-              style={{ padding: '4px 10px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '11px', cursor: 'pointer' }}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <tr style={{ background: '#fef2f2' }}>
+          <td colSpan={5} style={{ padding: '8px 10px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <div style={{ color: '#991b1b' }}>
+                Remove <strong>{profile.profile_name}</strong>?
+                {delErr && <div style={{ color: '#dc2626', marginTop: '2px' }}>{delErr}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                <button type="button" onClick={handleDelete} disabled={delPending}
+                  style={{ padding: '4px 10px', borderRadius: '6px', background: '#dc2626', color: '#fff', border: 'none', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: delPending ? 0.5 : 1 }}>
+                  {delPending ? 'Removing…' : 'Confirm'}
+                </button>
+                <button type="button" onClick={() => setConfirmDelete(false)} disabled={delPending}
+                  style={{ padding: '4px 10px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '11px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </td>
+        </tr>
       )
     }
+
+    const specs = [
+      profile.dimensions,
+      profile.length_mm ? `${profile.length_mm}mm` : null,
+      profile.width_mm  ? `${profile.width_mm}mm`  : null,
+      profile.thickness_mm ? `${profile.thickness_mm}mm thick` : null,
+    ].filter(Boolean).join(' · ')
+
     return (
-      <div style={{ padding: '8px 10px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>{profile.profile_name}</div>
-          <div style={{ color: '#6b7280', marginTop: '2px' }}>
-            {[profile.product_code, profile.dimensions,
-              profile.length_mm ? `${profile.length_mm}mm` : null,
-              profile.width_mm  ? `${profile.width_mm}mm`  : null,
-              profile.thickness_mm ? `${profile.thickness_mm}mm thick` : null,
-            ].filter(Boolean).join(' · ')}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
+      <tr style={{ borderBottom: '1px solid #e2e8f0', background: rowIndex % 2 === 0 ? '#ffffff' : '#f5f7f9' }}>
+        <td style={{ padding: '8px 10px', fontSize: '13px', color: '#111827' }}>
+          <a style={{ color: '#185D7A', fontWeight: 600, textDecoration: 'none' }}>{systemName} · {profile.profile_name}</a>
+        </td>
+        <td style={{ padding: '8px 10px', fontSize: '12px', color: '#6b7280' }}>{specs || '—'}</td>
+        <td style={{ padding: '8px 10px', fontSize: '12px', color: '#4b5563', fontFamily: 'monospace' }}>{profile.product_code ?? '—'}</td>
+        <td style={{ padding: '8px 10px', fontSize: '12px', color: '#6b7280' }}>{profile.uom ?? '—'}</td>
+        <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
           <button type="button" onClick={() => setEditing(true)}
-            style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer' }}>
+            style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer', marginRight: '4px' }}>
             Edit
           </button>
           <button type="button" title="Remove profile" onClick={() => setConfirmDelete(true)}
             style={{ background: 'none', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#dc2626', cursor: 'pointer' }}>
             Remove
           </button>
-        </div>
-      </div>
+        </td>
+      </tr>
     )
   }
 
   return (
+    <tr>
+    <td colSpan={5}>
     <div style={{ padding: '10px', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '8px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
         <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
@@ -1344,6 +1361,8 @@ function ProfileItem({
         </button>
       </div>
     </div>
+    </td>
+    </tr>
   )
 }
 
@@ -1513,13 +1532,17 @@ function ColourItem({
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '99px', fontSize: '11px', color: '#374151' }}>
         {colour.colour_name}
         {colour.sku_suffix && <span style={{ color: '#9ca3af', fontFamily: 'monospace' }}>{colour.sku_suffix}</span>}
-        <button type="button" onClick={() => setEditing(true)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '10px', padding: '0 2px', lineHeight: 1 }}>
-          ✏
+        <button type="button" title="Edit colour" onClick={() => setEditing(true)}
+          style={{ display: 'inline-flex', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '0 2px', lineHeight: 1 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+          </svg>
         </button>
         <button type="button" title="Remove colour" onClick={() => setConfirmDelete(true)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '10px', padding: '0 2px', lineHeight: 1 }}>
-          🗑
+          style={{ display: 'inline-flex', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '0 2px', lineHeight: 1 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z" />
+          </svg>
         </button>
       </span>
     )
@@ -1999,6 +2022,7 @@ function SourceDocumentPicker({
   const [linked, setLinked]       = useState(docId)
   const [linkedName, setLinkedName] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [selectingId, setSelectingId] = useState<string | null>(null)
   const [err, setErr]             = useState<string | null>(null)
 
   function handleOpenPicker() {
@@ -2020,8 +2044,10 @@ function SourceDocumentPicker({
 
   function handleSelect(docId: string) {
     setErr(null)
+    setSelectingId(docId)
     startTransition(async () => {
       const res = await linkSourceDocument(systemId, manufacturerId, docId)
+      setSelectingId(null)
       if (!res.ok) { setErr(res.error); return }
       const docName = docs.find(d => d.id === docId)?.document_name ?? null
       setLinked(docId)
@@ -2072,7 +2098,7 @@ function SourceDocumentPicker({
                     textAlign: 'left', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer',
                     border: `1.5px solid ${linked === doc.id ? '#d97706' : '#e5e7eb'}`,
                     background: linked === doc.id ? '#fef3c7' : '#fff',
-                    opacity: pending ? 0.5 : 1,
+                    opacity: selectingId && selectingId !== doc.id ? 0.5 : 1,
                   }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{doc.document_name}</div>
                   <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '1px' }}>
@@ -2215,11 +2241,14 @@ function ExpandedCardView({
     })
   }
 
-  async function handleComeBackLater() {
+  function handleComeBackLater() {
     setVerifyErr(null); setVerifyMsg(null)
-    const res = await persistNotes()
-    if (!res.ok) { setVerifyErr(`Could not save notes: ${res.error ?? 'unknown error'}. Your notes have not been saved — copy them somewhere safe before leaving, or try again.`); return }
-    onClose()
+    startVerifyTransition(async () => {
+      const res = await persistNotes()
+      if (!res.ok) { setVerifyErr(`Could not save notes: ${res.error ?? 'unknown error'}. Your notes have not been saved — copy them somewhere safe before leaving, or try again.`); return }
+      setVerifyMsg('Notes saved ✓')
+      setTimeout(() => onClose(), 900)
+    })
   }
 
   function handleReopen() {
@@ -2584,9 +2613,24 @@ function ExpandedCardView({
               label={`Profiles (${system.profiles.length})`}
               action={<AddButton label="Add profile / variant" onClick={() => { setShowAddProfile(true); setShowAddColour(false); setShowAddComponent(false) }} />}
             >
-              {system.profiles.map(p => (
-                <ProfileItem key={p.id} profile={p} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateProfileLocal} onRemoved={removeProfileLocal} />
-              ))}
+              {system.profiles.length > 0 && (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#185D7A' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#fff' }}>Product Name</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#fff' }}>Description / Spec</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#fff' }}>SKU</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#fff' }}>UOM</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: '#fff' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {system.profiles.map((p, i) => (
+                      <ProfileItem key={p.id} profile={p} rowIndex={i} systemName={system.name} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateProfileLocal} onRemoved={removeProfileLocal} />
+                    ))}
+                  </tbody>
+                </table>
+              )}
               {system.profiles.length === 0 && !showAddProfile && (
                 <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>No profiles — add one using the button above.</div>
               )}
@@ -2715,8 +2759,16 @@ function ExpandedCardView({
                 {/* Come back later */}
                 <button
                   onClick={handleComeBackLater}
-                  style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1.5px solid #e2e8f0', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
-                  Save notes & come back later
+                  disabled={verifyPending}
+                  style={{
+                    marginTop: '8px', width: '100%', padding: '8px', borderRadius: '6px',
+                    background: verifyMsg ? '#f0fdf4' : '#fff',
+                    color: verifyMsg ? '#16a34a' : '#6b7280',
+                    border: `1.5px solid ${verifyMsg ? '#bbf7d0' : '#e2e8f0'}`,
+                    fontSize: '13px', fontWeight: 600, cursor: verifyPending ? 'not-allowed' : 'pointer', textAlign: 'center',
+                    opacity: verifyPending ? 0.6 : 1, transition: 'all 0.15s',
+                  }}>
+                  {verifyPending ? 'Saving…' : verifyMsg ? 'Saved ✓' : 'Save notes & come back later'}
                 </button>
                 {verifyMsg && <div style={{ marginTop: '8px', fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>{verifyMsg}</div>}
                 {verifyErr && <div style={{ marginTop: '8px', fontSize: '12px', color: '#dc2626' }}>{verifyErr}</div>}
