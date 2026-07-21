@@ -2184,6 +2184,7 @@ function ExpandedCardView({
     try {
       const res = await saveSystemNotes(system.id, manufacturerId, notes)
       if (!res.ok) return { ok: false, error: res.error }
+      onSystemFieldUpdate(system.id, 'notes', notes)
       return { ok: true }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Failed to save notes.' }
