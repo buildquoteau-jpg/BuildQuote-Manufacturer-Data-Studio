@@ -267,7 +267,7 @@ function ActionButtons({
 
 function FieldRow({
   label, fieldName, currentValue, fieldState, systemId, manufacturerId,
-  isUrl, onStateChange,
+  isUrl, multiline, onStateChange,
 }: {
   label: string
   fieldName: string
@@ -276,6 +276,7 @@ function FieldRow({
   systemId: string
   manufacturerId: string
   isUrl?: boolean
+  multiline?: boolean
   onStateChange: (fieldName: string, state: FieldState | null) => void
 }) {
   const statusToAction = (s: FieldVerificationStatus | null): 'approve' | 'edit' | 'flag' | null =>
@@ -342,7 +343,7 @@ function FieldRow({
           {displayValue ? (
             isUrl
               ? <div style={{ fontSize: '12px', color: '#185D7A', wordBreak: 'break-all', lineHeight: 1.4 }}>{displayValue}</div>
-              : <div style={{ fontSize: '13px', color: '#374151', lineHeight: 1.4 }}>{displayValue}</div>
+              : <div style={{ fontSize: '13px', color: '#374151', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{displayValue}</div>
           ) : (
             <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>Empty — paste value below to fill</div>
           )}
@@ -354,16 +355,30 @@ function FieldRow({
         />
       </div>
       {activeAction === 'edit' && (
-        <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
-          <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)}
-            placeholder={isUrl ? 'Paste URL here…' : `Enter correct ${label.toLowerCase()}…`}
-            style={{ flex: 1, padding: '6px 8px', border: '1.5px solid #185D7A', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: 'inherit' }}
-            autoFocus />
-          <button type="button" onClick={handleSaveEdit} disabled={pending || !editValue.trim()}
-            style={{ padding: '6px 12px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !editValue.trim() ? 0.5 : 1 }}>
-            Save
-          </button>
-        </div>
+        multiline ? (
+          <div style={{ marginTop: '8px' }}>
+            <textarea value={editValue} onChange={e => setEditValue(e.target.value)}
+              placeholder={`Enter correct ${label.toLowerCase()}…`}
+              rows={5}
+              style={{ width: '100%', padding: '6px 8px', border: '1.5px solid #185D7A', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4, resize: 'vertical', boxSizing: 'border-box' }}
+              autoFocus />
+            <button type="button" onClick={handleSaveEdit} disabled={pending || !editValue.trim()}
+              style={{ marginTop: '6px', padding: '6px 12px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !editValue.trim() ? 0.5 : 1 }}>
+              Save
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+            <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)}
+              placeholder={isUrl ? 'Paste URL here…' : `Enter correct ${label.toLowerCase()}…`}
+              style={{ flex: 1, padding: '6px 8px', border: '1.5px solid #185D7A', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: 'inherit' }}
+              autoFocus />
+            <button type="button" onClick={handleSaveEdit} disabled={pending || !editValue.trim()}
+              style={{ padding: '6px 12px', borderRadius: '6px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !editValue.trim() ? 0.5 : 1 }}>
+              Save
+            </button>
+          </div>
+        )
       )}
       {activeAction === 'flag' && (
         <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
@@ -2523,7 +2538,7 @@ function ExpandedCardView({
               <FieldRow {...fieldRowProps('Category', 'category')} />
               {system.subcategory && <FieldRow {...fieldRowProps('Subcategory', 'subcategory')} />}
               {system.product_code && <FieldRow {...fieldRowProps('Product code', 'product_code')} />}
-              <FieldRow {...fieldRowProps('Description', 'description')} />
+              <FieldRow {...fieldRowProps('Description', 'description')} multiline />
             </FieldSection>
 
             {/* Images & resources */}
