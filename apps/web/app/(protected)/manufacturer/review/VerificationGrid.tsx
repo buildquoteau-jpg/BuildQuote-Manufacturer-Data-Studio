@@ -2527,48 +2527,7 @@ function ExpandedCardView({
                 manufacturerId={manufacturerId}
                 onChange={(x, y, zoom) => { setCropX(x); setCropY(y); setCropZoom(zoom) }}
               />
-              {system.website_url  && <FieldRow {...fieldRowProps('Manufacturer website', 'website_url', { isUrl: true })} />}
               {system.source_url   && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
-              <InstallGuidesEditor
-                guides={Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []}
-                systemId={system.id}
-                manufacturerId={manufacturerId}
-                fieldState={fieldStates['install_guide_urls'] ?? null}
-                onUpdated={(guides) => setSystem(prev => ({ ...prev, install_guide_urls: guides.length > 0 ? guides : null }))}
-                onStateChange={handleFieldChange}
-              />
-              {system.tech_data_url
-                ? <FieldRow {...fieldRowProps('Technical data URL', 'tech_data_url', { isUrl: true })} />
-                : (
-                  <FieldRow
-                    label="Technical data URL" fieldName="tech_data_url" currentValue={null}
-                    fieldState={fieldStates['tech_data_url'] ?? null}
-                    systemId={system.id} manufacturerId={manufacturerId} isUrl
-                    onStateChange={handleFieldChange}
-                  />
-                )
-              }
-              {system.design_guide_url
-                ? <FieldRow {...fieldRowProps('Design guide URL', 'design_guide_url', { isUrl: true })} />
-                : (
-                  <FieldRow
-                    label="Design guide URL" fieldName="design_guide_url" currentValue={null}
-                    fieldState={fieldStates['design_guide_url'] ?? null}
-                    systemId={system.id} manufacturerId={manufacturerId} isUrl
-                    onStateChange={handleFieldChange}
-                  />
-                )
-              }
-              <CustomDocumentsEditor
-                links={Array.isArray(system.custom_document_links) ? system.custom_document_links : []}
-                systemId={system.id}
-                manufacturerId={manufacturerId}
-                fieldState={fieldStates['custom_document_links'] ?? null}
-                onUpdated={(links) => setSystem(prev => ({ ...prev, custom_document_links: links.length > 0 ? links : null }))}
-                linkLibrary={linkLibrary}
-                onLibraryAdd={onLibraryAdd}
-                onStateChange={handleFieldChange}
-              />
             </FieldSection>
 
             {/* Technical attributes */}
