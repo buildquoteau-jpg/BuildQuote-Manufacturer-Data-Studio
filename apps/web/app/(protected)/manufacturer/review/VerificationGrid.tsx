@@ -1639,6 +1639,16 @@ function groupComponentsByCategory(
     if (!byCat.has(cat)) byCat.set(cat, [])
     byCat.get(cat)!.push(c)
   }
+  // Within each category, respect sort_order when set; components without a
+  // sort_order (never manually reordered) keep their original relative order.
+  for (const items of Array.from(byCat.values())) {
+    items.sort((a: VerificationSystemComponent, b: VerificationSystemComponent) => {
+      if (a.sort_order == null && b.sort_order == null) return 0
+      if (a.sort_order == null) return 1
+      if (b.sort_order == null) return -1
+      return a.sort_order - b.sort_order
+    })
+  }
   return Array.from(byCat.entries()).sort(
     (a, b) => (/service|delivery/i.test(a[0]) ? 1 : 0) - (/service|delivery/i.test(b[0]) ? 1 : 0)
   )
@@ -1647,13 +1657,17 @@ function groupComponentsByCategory(
 // ─── Component item ───────────────────────────────────────────────────────────
 
 function ComponentItem({
-  component, systemId, manufacturerId, onUpdated, onRemoved,
+  component, systemId, manufacturerId, onUpdated, onRemoved, onMoveUp, onMoveDown, canMoveUp, canMoveDown,
 }: {
   component: VerificationSystemComponent
   systemId: string
   manufacturerId: string
   onUpdated: (id: string, data: Partial<VerificationSystemComponent>) => void
   onRemoved: (id: string) => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
+  canMoveUp?: boolean
+  canMoveDown?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [name,    setName]    = useState(component.name)
@@ -1738,6 +1752,18 @@ function ComponentItem({
             {component.uom && <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginLeft: component.sku ? '8px' : 0 }}>{component.uom}</span>}
           </div>
           <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
+            {(onMoveUp || onMoveDown) && (
+              <>
+                <button type="button" title="Move up" onClick={onMoveUp} disabled={!canMoveUp}
+                  style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 6px', fontSize: '11px', color: '#6b7280', cursor: canMoveUp ? 'pointer' : 'default', opacity: canMoveUp ? 1 : 0.35 }}>
+                  ↑
+                </button>
+                <button type="button" title="Move down" onClick={onMoveDown} disabled={!canMoveDown}
+                  style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 6px', fontSize: '11px', color: '#6b7280', cursor: canMoveDown ? 'pointer' : 'default', opacity: canMoveDown ? 1 : 0.35 }}>
+                  ↓
+                </button>
+              </>
+            )}
             <button type="button" onClick={() => setEditing(true)}
               style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', color: '#6b7280', cursor: 'pointer' }}>
               Edit
@@ -2307,6 +2333,19 @@ function ExpandedCardView({
   function removeComponentLocal(id: string) {
     setSystem(prev => ({ ...prev, components: prev.components.filter(c => c.id !== id) }))
   }
+  // Swaps sort_order between two adjacent (within-category) components and
+  // persists both — groupComponentsByCategory re-sorts by sort_order on render.
+  function moveComponent(categoryItems: VerificationSystemComponent[], index: number, direction: -1 | 1) {
+    const other = categoryItems[index + direction]
+    const current = categoryItems[index]
+    if (!other || !current) return
+    const currentOrder = current.sort_order ?? index
+    const otherOrder = other.sort_order ?? index + direction
+    updateComponentLocal(current.id, { sort_order: otherOrder })
+    updateComponentLocal(other.id, { sort_order: currentOrder })
+    updateComponent(current.id, manufacturerId, { sort_order: otherOrder })
+    updateComponent(other.id, manufacturerId, { sort_order: currentOrder })
+  }
 
   const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
   const [cropY, setCropY] = useState(system.hero_image_position_y ?? 50)
@@ -2687,8 +2726,13 @@ function ExpandedCardView({
                       {cat}
                     </div>
                   )}
-                  {items.map(c => (
-                    <ComponentItem key={c.id} component={c} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateComponentLocal} onRemoved={removeComponentLocal} />
+                  {items.map((c, i) => (
+                    <ComponentItem
+                      key={c.id} component={c} systemId={system.id} manufacturerId={manufacturerId}
+                      onUpdated={updateComponentLocal} onRemoved={removeComponentLocal}
+                      onMoveUp={() => moveComponent(items, i, -1)} onMoveDown={() => moveComponent(items, i, 1)}
+                      canMoveUp={i > 0} canMoveDown={i < items.length - 1}
+                    />
                   ))}
                 </div>
               ))}

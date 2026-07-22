@@ -634,7 +634,7 @@ export async function addMissingComponent(
 export async function updateComponent(
   componentId: string,
   manufacturerId: string,
-  data: { name?: string; sku?: string | null; description?: string | null; uom?: string | null; procurement_route?: 'specialist_supplier' | 'trade_merchant' | null },
+  data: { name?: string; sku?: string | null; description?: string | null; uom?: string | null; procurement_route?: 'specialist_supplier' | 'trade_merchant' | null; sort_order?: number | null },
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }

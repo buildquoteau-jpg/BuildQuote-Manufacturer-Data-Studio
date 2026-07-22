@@ -785,19 +785,6 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
         )}
       />
 
-      {/* Primary resources — pinned directly beneath the gallery so the two
-          most-used actions are reachable before any scrolling. */}
-      {(system.website_url?.trim() || (system.install_guide_urls?.length ?? 0) > 0) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px 20px 0' }}>
-          {system.website_url?.trim() && (
-            <GuideLink href={docHref(system.website_url.trim(), 'Website')} context={`View ${mfrName}`} label="Website" />
-          )}
-          {(Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []).map((guide, i) => (
-            <GuideLink key={i} href={docHref(guide.url, 'Installation guide')} context={`View ${mfrName}`} label="Installation guide" />
-          ))}
-        </div>
-      )}
-
       {/* Body */}
       <div style={{ padding: '20px 20px 24px' }}>
 
@@ -1017,8 +1004,14 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
             </div>
           )}
 
-          {/* Website + install guides moved beneath the hero gallery (top of
-              card) — only the secondary guides remain here. */}
+          {/* Website + install guides — moved to the bottom of the card
+              alongside the other resource links. */}
+          {system.website_url?.trim() && (
+            <GuideLink href={docHref(system.website_url.trim(), 'Website')} context={`View ${mfrName}`} label="Website" />
+          )}
+          {(Array.isArray(system.install_guide_urls) ? system.install_guide_urls : []).map((guide, i) => (
+            <GuideLink key={i} href={docHref(guide.url, 'Installation guide')} context={`View ${mfrName}`} label="Installation guide" />
+          ))}
 
           {/* Design guide */}
           {system.design_guide_url && (
