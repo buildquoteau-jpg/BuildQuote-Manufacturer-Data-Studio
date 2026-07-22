@@ -565,6 +565,7 @@ export type VerificationSystemProfile = {
   id: string
   product_code: string | null
   profile_name: string
+  description: string | null
   dimensions: string | null
   length_mm: number | null
   height_mm: number | null
@@ -738,7 +739,7 @@ export async function getManufacturerVerificationData(
     c.supabase
       .from('staged_system_profiles')
       .select(
-        'id, staged_system_id, product_code, profile_name, dimensions, ' +
+        'id, staged_system_id, product_code, profile_name, description, dimensions, ' +
         'length_mm, height_mm, width_mm, thickness_mm, uom, ' +
         'supplier_pack_qty, supplier_pack_uom, sort_order',
       )

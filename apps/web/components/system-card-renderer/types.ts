@@ -33,6 +33,7 @@ export type SystemCardProfile = {
   profile_name: string | null
   name: string | null
   product_code: string | null
+  description: string | null
   dimensions: string | null
   length_mm: number | null
   width_mm: number | null

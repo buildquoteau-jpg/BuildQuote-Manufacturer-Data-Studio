@@ -405,7 +405,7 @@ async function publishProfiles(
   const { data: rows, error } = await ds
     .from('staged_system_profiles')
     .select(`
-      id, production_profile_id, name, profile_name, product_code, dimensions, length_m, sheet_format,
+      id, production_profile_id, name, profile_name, product_code, description, dimensions, length_m, sheet_format,
       length_mm, width_mm, height_mm, thickness_mm, depth_mm, gauge_mm, diameter_mm, roll_m,
       weight_kg, pieces, volume_ml, weight_g, pack_format, bal_rating,
       supplier_pack_qty, supplier_pack_uom, supplier_pack_note, uom, procurement_route, sort_order
@@ -417,7 +417,7 @@ async function publishProfiles(
   for (const p of rows ?? []) {
     const payload = {
       system_id: productionSystemId,
-      name: p.name, profile_name: p.profile_name, product_code: p.product_code,
+      name: p.name, profile_name: p.profile_name, product_code: p.product_code, description: p.description,
       dimensions: p.dimensions, length_m: p.length_m, sheet_format: p.sheet_format,
       length_mm: p.length_mm, width_mm: p.width_mm, height_mm: p.height_mm, thickness_mm: p.thickness_mm,
       depth_mm: p.depth_mm, gauge_mm: p.gauge_mm, diameter_mm: p.diameter_mm, roll_m: p.roll_m,

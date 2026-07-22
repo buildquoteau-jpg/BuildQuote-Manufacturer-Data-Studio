@@ -1230,6 +1230,7 @@ function ProfileItem({
   const [editing, setEditing] = useState(false)
   const [name,    setName]    = useState(profile.profile_name ?? '')
   const [code,    setCode]    = useState(profile.product_code ?? '')
+  const [desc,    setDesc]    = useState(profile.description ?? '')
   const [len,     setLen]     = useState(profile.length_mm != null ? String(profile.length_mm) : '')
   const [width,   setWidth]   = useState(profile.width_mm != null ? String(profile.width_mm) : '')
   const [thick,   setThick]   = useState(profile.thickness_mm != null ? String(profile.thickness_mm) : '')
@@ -1255,6 +1256,7 @@ function ProfileItem({
       const res = await updateProfile(profile.id, systemId, manufacturerId, {
         profile_name:  name.trim() || undefined,
         product_code:  code.trim() || null,
+        description:   desc.trim() || null,
         length_mm:     len   ? parseFloat(len)   : null,
         width_mm:      width ? parseFloat(width)  : null,
         thickness_mm:  thick ? parseFloat(thick) : null,
@@ -1264,6 +1266,7 @@ function ProfileItem({
       onUpdated(profile.id, {
         profile_name: name.trim(),
         product_code: code.trim() || null,
+        description:  desc.trim() || null,
         length_mm:    len   ? parseFloat(len)  : null,
         width_mm:     width ? parseFloat(width) : null,
         thickness_mm: thick ? parseFloat(thick) : null,
@@ -1299,19 +1302,26 @@ function ProfileItem({
       )
     }
 
-    const specs = [
-      profile.dimensions,
+    // Structured L/W/T formatted here; falls back to the raw `dimensions`
+    // text only when none of those numeric fields are set (older/manually
+    // entered profiles) — never both, so the same numbers don't show twice.
+    const structuredDims = [
       profile.length_mm ? `${profile.length_mm}mm` : null,
       profile.width_mm  ? `${profile.width_mm}mm`  : null,
       profile.thickness_mm ? `${profile.thickness_mm}mm thick` : null,
     ].filter(Boolean).join(' · ')
+    const specs = structuredDims || profile.dimensions || ''
 
     return (
       <tr style={{ borderBottom: '1px solid #e2e8f0', background: rowIndex % 2 === 0 ? '#ffffff' : '#f5f7f9' }}>
         <td style={{ padding: '8px 10px', fontSize: '13px', color: '#111827' }}>
           <a style={{ color: '#185D7A', fontWeight: 600, textDecoration: 'none' }}>{systemName} · {profile.profile_name}</a>
         </td>
-        <td style={{ padding: '8px 10px', fontSize: '12px', color: '#6b7280' }}>{specs || '—'}</td>
+        <td style={{ padding: '8px 10px', fontSize: '12px', color: '#6b7280' }}>
+          {specs && <div>{specs}</div>}
+          {profile.description && <div style={{ marginTop: specs ? '2px' : 0 }}>{profile.description}</div>}
+          {!specs && !profile.description && '—'}
+        </td>
         <td style={{ padding: '8px 10px', fontSize: '12px', color: '#4b5563', fontFamily: 'monospace' }}>{profile.product_code ?? '—'}</td>
         <td style={{ padding: '8px 10px', fontSize: '12px', color: '#6b7280' }}>{profile.uom ?? '—'}</td>
         <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -1342,6 +1352,11 @@ function ProfileItem({
           Product code / SKU
           <input value={code} onChange={e => setCode(e.target.value)}
             style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace' }} />
+        </label>
+        <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', gridColumn: '1 / -1' }}>
+          Description
+          <input value={desc} onChange={e => setDesc(e.target.value)}
+            style={{ display: 'block', width: '100%', marginTop: '2px', padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit', boxSizing: 'border-box' }} />
         </label>
         <label style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
           Length (mm)
@@ -1417,6 +1432,7 @@ function AddProfileForm({
         id: res.id,
         profile_name: name.trim(),
         product_code: code.trim() || null,
+        description: null,
         dimensions: null,
         length_mm: len ? parseFloat(len) : null,
         height_mm: null,

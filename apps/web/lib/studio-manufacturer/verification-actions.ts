@@ -485,7 +485,7 @@ export async function updateProfile(
   profileId: string,
   systemId: string,
   manufacturerId: string,
-  data: { profile_name?: string; product_code?: string | null; length_mm?: number | null; width_mm?: number | null; thickness_mm?: number | null; uom?: string | null },
+  data: { profile_name?: string; product_code?: string | null; description?: string | null; length_mm?: number | null; width_mm?: number | null; thickness_mm?: number | null; uom?: string | null },
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }

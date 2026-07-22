@@ -1,5 +1,5 @@
 -- schema_complete.sql — GENERATED FILE, do not hand-edit.
--- Last refreshed: 2026-07-19 from live project ovndokzwkxpfjfobewaq (PostgREST OpenAPI).
+-- Last refreshed: 2026-07-22 from live project ovndokzwkxpfjfobewaq (PostgREST OpenAPI).
 -- Regenerate after every applied migration:
 --     node scripts/refresh_schema_reference.mjs
 --
@@ -608,7 +608,8 @@ CREATE TABLE public.staged_system_profiles (
     website_url                  text,
     extracted_at                 timestamp with time zone,
     procurement_route            text,
-    production_profile_id        uuid
+    production_profile_id        uuid,
+    description                  text
 );
 
 -- ============================================================
@@ -664,7 +665,8 @@ CREATE TABLE public.staged_systems (
     published_version            text,
     owner_account_id             uuid,
     custom_document_links        jsonb,
-    hero_image_zoom              numeric NOT NULL DEFAULT 1
+    hero_image_zoom              numeric NOT NULL DEFAULT 1,
+    custom_technical_attributes  jsonb
 );
 
 -- ============================================================

@@ -226,6 +226,9 @@ function ProfileRow({ label, profile, idx, selected, onToggle }: {
         {displaySpecs && (
           <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '8px' }}>{displaySpecs}</span>
         )}
+        {profile.description && (
+          <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>{profile.description}</div>
+        )}
       </div>
       {/* SKU */}
       {sku && (

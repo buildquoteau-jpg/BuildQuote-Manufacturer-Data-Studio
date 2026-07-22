@@ -351,6 +351,7 @@ function toRendererSystem(data: SystemCardData, id: string): SystemCardSystem {
       profile_name: p.profile_name,
       name: null,
       product_code: p.product_code,
+      description: null,
       dimensions: p.dimensions,
       length_mm: p.length_mm,
       width_mm: p.width_mm,
