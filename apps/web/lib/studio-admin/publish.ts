@@ -70,7 +70,7 @@ export type PublishBatchResult = {
 // or refreshes brand fields on every subsequent publish. Adopts an existing
 // production row by slug if one was created out-of-band, instead of duplicating.
 
-async function publishManufacturer(
+export async function publishManufacturer(
   ds: SupabaseClient,
   prod: SupabaseClient,
   manufacturerId: string,
@@ -136,6 +136,37 @@ async function publishManufacturer(
 
   await ds.from('data_studio_manufacturers').update({ production_manufacturer_id: created.id }).eq('id', manufacturerId)
   return { productionManufacturerId: created.id, action: 'created' }
+}
+
+// ─── publishManufacturerProfile ─────────────────────────────────────────────
+// Standalone entry point for pushing ONLY the brand-profile fields (hero,
+// banner, description, website, logo, phone, ABN) to production, independent
+// of the system-publish batch/approval queue.
+//
+// Why this exists: publishManufacturer() above only ever ran as a side effect
+// of publishSystem() — which only fires when a staged_system gets submitted
+// and approved. A manufacturer who edits ONLY their brand profile (no system
+// changes) had no path to production at all; their live card kept showing
+// whatever was captured at their last system publish. See saveBrandProfile()
+// in lib/studio-manufacturer/brand-actions.ts, which calls this after every
+// successful profile save.
+//
+// Deliberately un-gated by the admin approval queue — brand assets (logo,
+// hero image, description, website) are low-risk compared to catalogue data
+// (dimensions, ratings, components), so requiring staff sign-off for every
+// banner tweak would be friction with no real safety benefit. Fails soft:
+// callers should not fail the profile save if this throws.
+export async function publishManufacturerProfile(
+  manufacturerId: string,
+): Promise<{ ok: true; productionManufacturerId: string; action: EntityAction } | { ok: false; error: string }> {
+  try {
+    const ds = createStudioServiceClient()
+    const prod = createProductionServiceClient()
+    const result = await publishManufacturer(ds, prod, manufacturerId, false)
+    return { ok: true, ...result }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Unknown error publishing manufacturer profile' }
+  }
 }
 
 // ─── publishCatalogueSource ──────────────────────────────────────────────────

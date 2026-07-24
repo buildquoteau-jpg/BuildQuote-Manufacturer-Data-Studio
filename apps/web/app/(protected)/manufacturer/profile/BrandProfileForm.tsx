@@ -234,6 +234,7 @@ export function BrandProfileForm({
 
   const [saved, setSaved]   = useState(false)
   const [error, setError]   = useState<string | null>(null)
+  const [syncWarning, setSyncWarning] = useState(false)
   const [pending, startTransition] = useTransition()
 
   function pickAsset(slot: 'logo' | 'hero' | 'banner') {
@@ -295,7 +296,7 @@ export function BrandProfileForm({
   }
 
   function handleSave() {
-    setError(null); setSaved(false)
+    setError(null); setSaved(false); setSyncWarning(false)
     startTransition(async () => {
       const payload: BrandProfileFields = {
         description:    fields.description    || null,
@@ -314,6 +315,7 @@ export function BrandProfileForm({
       const res = await saveBrandProfile(manufacturerId, payload)
       if (!res.ok) { setError(res.error); return }
       setSaved(true)
+      if (!res.productionSynced) setSyncWarning(true)
       setTimeout(() => setSaved(false), 3000)
     })
   }
@@ -556,6 +558,11 @@ export function BrandProfileForm({
         {saved && (
           <span style={{ fontSize: '0.875rem', color: '#16a34a', fontWeight: 600 }}>
             Saved
+          </span>
+        )}
+        {syncWarning && (
+          <span style={{ fontSize: '0.875rem', color: '#b45309' }} title="Your changes are saved here, but the live BuildQuote card couldn't be updated right now — it may still show older branding. This should resolve on your next save; contact BuildQuote if it persists.">
+            Saved — but the live card didn&rsquo;t sync, may show old branding
           </span>
         )}
         {error && (

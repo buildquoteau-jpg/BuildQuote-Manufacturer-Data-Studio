@@ -2,6 +2,7 @@
 
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { publishManufacturerProfile } from '@/lib/studio-admin/publish'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,21 @@ export type BrandProfileFields = {
   hero_wide_image_asset_id?: string | null
 }
 
-export type BrandActionResult = { ok: true } | { ok: false; error: string }
+// productionSynced is best-effort/informational only — the Data Studio save
+// itself always succeeds (or fails) independently of whether the production
+// push worked. false means the profile saved fine here but the live
+// buildquote.com.au/search.buildquote.com.au card may still show stale
+// branding until the next successful sync.
+export type BrandActionResult = { ok: true; productionSynced: boolean } | { ok: false; error: string }
+
+async function syncToProduction(manufacturerId: string): Promise<boolean> {
+  try {
+    const result = await publishManufacturerProfile(manufacturerId)
+    return result.ok
+  } catch {
+    return false
+  }
+}
 
 // Clamp the hero vertical-position percentage to the DB-enforced 0–100 range.
 function clampPositionY(value: number): number {
@@ -80,7 +95,7 @@ export async function saveBrandProfile(
     .update(payload)
     .eq('id', manufacturerId)
 
-  if (!error) return { ok: true }
+  if (!error) return { ok: true, productionSynced: await syncToProduction(manufacturerId) }
 
   // Migration 046 may not be applied yet — retry without the asset-id columns.
   if (error.code === '42703' || /_asset_id/.test(error.message ?? '')) {
@@ -94,7 +109,7 @@ export async function saveBrandProfile(
       .from('data_studio_manufacturers')
       .update(payloadNoAssets)
       .eq('id', manufacturerId)
-    if (!retry046Err) return { ok: true }
+    if (!retry046Err) return { ok: true, productionSynced: await syncToProduction(manufacturerId) }
 
     // Migrations 031/034 may not be applied yet either — retry again without
     // whichever hero-position / wide-image columns the live schema is missing.
@@ -109,7 +124,7 @@ export async function saveBrandProfile(
         .from('data_studio_manufacturers')
         .update(payloadMinimal)
         .eq('id', manufacturerId)
-      if (!retryErr) return { ok: true }
+      if (!retryErr) return { ok: true, productionSynced: await syncToProduction(manufacturerId) }
       return { ok: false, error: retryErr.message }
     }
     return { ok: false, error: retry046Err.message }
