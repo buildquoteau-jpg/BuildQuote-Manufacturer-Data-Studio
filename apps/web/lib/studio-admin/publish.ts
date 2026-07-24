@@ -2,6 +2,39 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 import { createProductionServiceClient } from '@/lib/supabase/production'
 
+// ─── Durable image URLs ─────────────────────────────────────────────────────
+// Same guard as lib/publishing/buildCardSnapshot.ts's hybrid-publish path
+// (duplicated rather than imported — small, and this module intentionally
+// has no dependency on the newer publishing pipeline). Hero image URLs on
+// staged_systems are often presigned R2 links that expire after an hour
+// (X-Amz-Expires); this batch/queue publish path was copying them into
+// production's systems.hero_image_url verbatim with no check, so any
+// manufacturer whose raw R2 URL (rather than an Asset-linked one) got
+// published this way ended up with a dead image within the hour. Every
+// hero image must be resolved to a durable URL — or dropped — before it's
+// written to production.
+
+const STUDIO_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au'
+
+function durableAssetUrl(assetId: string): string {
+  return `${STUDIO_ORIGIN.replace(/\/$/, '')}/api/assets/${assetId}`
+}
+
+function isEphemeralUrl(url: string | null | undefined): boolean {
+  if (!url) return false
+  return /r2\.cloudflarestorage\.com|X-Amz-Signature=/i.test(url)
+}
+
+// Resolves a staged system's hero image the same way buildCardSnapshot does:
+// prefer the Asset-linked durable URL when one exists, otherwise pass
+// through a non-expiring URL untouched, otherwise drop it (null) rather
+// than publish a link that's already ticking down to a broken image.
+function resolveDurableHeroImageUrl(rawUrl: string | null, assetId: string | null): string | null {
+  if (assetId) return durableAssetUrl(assetId)
+  if (isEphemeralUrl(rawUrl)) return null
+  return rawUrl
+}
+
 // ─── Slug helper ────────────────────────────────────────────────────────────
 // Matches the toSlug() used in apps/web/app/(protected)/admin/manufacturers/NewManufacturerButton.tsx.
 
@@ -78,7 +111,7 @@ export async function publishManufacturer(
 ): Promise<{ productionManufacturerId: string; action: EntityAction }> {
   const { data: mfr, error } = await ds
     .from('data_studio_manufacturers')
-    .select('id, production_manufacturer_id, name, slug, website_url, logo_url, hero_image_url, hero_image_position_y, hero_wide_image_url, hero_wide_image_position_y, description, abn, phone')
+    .select('id, production_manufacturer_id, name, slug, website_url, logo_url, logo_asset_id, hero_image_url, hero_image_asset_id, hero_image_position_y, hero_wide_image_url, hero_wide_image_asset_id, hero_wide_image_position_y, description, abn, phone')
     .eq('id', manufacturerId)
     .single()
   if (error || !mfr) throw new Error(`Could not load manufacturer: ${error?.message ?? 'not found'}`)
@@ -86,10 +119,10 @@ export async function publishManufacturer(
   const payload = {
     name: mfr.name,
     website_url: mfr.website_url,
-    logo_url: mfr.logo_url,
-    hero_image_url: mfr.hero_image_url,
+    logo_url: resolveDurableHeroImageUrl(mfr.logo_url, mfr.logo_asset_id),
+    hero_image_url: resolveDurableHeroImageUrl(mfr.hero_image_url, mfr.hero_image_asset_id),
     hero_image_position_y: mfr.hero_image_position_y ?? 50,
-    hero_wide_image_url: mfr.hero_wide_image_url ?? null,
+    hero_wide_image_url: resolveDurableHeroImageUrl(mfr.hero_wide_image_url, mfr.hero_wide_image_asset_id),
     hero_wide_image_position_y: mfr.hero_wide_image_position_y ?? 50,
     description: mfr.description,
     abn: mfr.abn,
@@ -304,7 +337,7 @@ export async function publishSystem(
     .select(`
       id, manufacturer_id, source_document_id, production_system_id, name, product_code, slug,
       category, subcategory, description, dimensions, length_m, double_sided, hero_image_url,
-      hero_image_position_x, hero_image_position_y,
+      hero_image_asset_id, hero_image_position_x, hero_image_position_y,
       website_url, source_label, source_url, sheet_format, fire_rating, acoustic_rating,
       moisture_resistant, structural_grade, tech_data_url, bal_rating, australian_made,
       install_guide_urls, design_guide_url, custom_document_links, custom_technical_attributes, sort_order
@@ -350,7 +383,7 @@ export async function publishSystem(
       dimensions: sys.dimensions,
       length_m: sys.length_m,
       double_sided: sys.double_sided,
-      hero_image_url: sys.hero_image_url,
+      hero_image_url: resolveDurableHeroImageUrl(sys.hero_image_url, sys.hero_image_asset_id),
       hero_image_position_x: sys.hero_image_position_x ?? 50,
       hero_image_position_y: sys.hero_image_position_y ?? 50,
       website_url: sys.website_url,
