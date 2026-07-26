@@ -225,8 +225,12 @@ export async function processAndRecordAssetUpload(
       contentType: processed.mimeType,
     })
     if (!upload.ok) return { ok: false, error: `Storage upload failed: ${upload.error}` }
-    // Best-effort: the scratch original is no longer referenced by anything.
-    deleteObjectFromR2(input.storageKey).catch(() => {})
+    // Best-effort: the scratch original is no longer referenced by anything,
+    // but a delete that keeps failing means R2 is quietly accumulating them.
+    const scratchDelete = await deleteObjectFromR2(input.storageKey)
+    if (!scratchDelete.ok) {
+      console.error(`[processAndRecordAssetUpload] could not delete scratch object ${input.storageKey}:`, scratchDelete.error)
+    }
   }
 
   const c = makeClient()

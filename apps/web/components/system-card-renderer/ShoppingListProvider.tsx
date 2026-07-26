@@ -46,7 +46,10 @@ export function ShoppingListProvider({ children, storageKey }: {
     try {
       const saved = localStorage.getItem(storageKey)
       if (saved) setShoppingList(JSON.parse(saved))
-    } catch {}
+    } catch (err) {
+      // Corrupt or unavailable storage — start empty rather than break the card.
+      console.warn('[ShoppingList] could not restore the saved list:', err)
+    }
   }, [storageKey])
 
   // Persist to localStorage on change
@@ -54,7 +57,10 @@ export function ShoppingListProvider({ children, storageKey }: {
     if (!storageKey) return
     try {
       localStorage.setItem(storageKey, JSON.stringify(shoppingList))
-    } catch {}
+    } catch (err) {
+      // Private mode / quota exceeded — the list still works for this session.
+      console.warn('[ShoppingList] could not persist the list:', err)
+    }
   }, [shoppingList, storageKey])
 
   function addItems(items: ShoppingListItem[]) {

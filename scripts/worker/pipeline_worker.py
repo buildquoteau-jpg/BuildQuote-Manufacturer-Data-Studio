@@ -275,8 +275,8 @@ def notify_failure(job_id: str, error: str):
                 ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [worker] warning: desktop notification not shown: {e}")
 
 
 # ── R2 / storage download ─────────────────────────────────────────────────────
@@ -342,10 +342,9 @@ def persist_document_chunks(document_id: str, chunks: list[dict]):
     Docling chunks are page ranges; page_number holds the start page and the full
     {startPage,endPage} lives in docling_json.
     """
-    try:
-        sb_delete("document_chunks", f"source_document_id=eq.{document_id}")
-    except Exception as e:
-        print(f"  [worker] warning: could not clear old chunks for {document_id}: {e}")
+    # Inserting on top of chunks that failed to delete would duplicate the
+    # document's text everywhere it is cited, so let the caller report it.
+    sb_delete("document_chunks", f"source_document_id=eq.{document_id}")
     rows = [
         {
             "source_document_id": document_id,
@@ -535,8 +534,8 @@ def handle_docling(job: dict):
     if index_path.exists():
         try:
             index = json.loads(index_path.read_text())
-        except Exception:
-            pass
+        except Exception as e:
+            log_line(f"warning: docling index unreadable, starting a new one: {e}")
     index[document_id] = {
         "outputDir": str(output_dir),
         "outputMdPath": str(output_md),
@@ -559,15 +558,15 @@ def handle_docling(job: dict):
     # Update source_document status
     try:
         sb_patch("source_documents", f"id=eq.{document_id}", {"status": "extracted"})
-    except Exception:
-        pass
+    except Exception as e:
+        log_line(f"warning: document status not set to 'extracted': {e}")
 
     # If this docling run came from a URL-ingested system source, mark it extracted.
     if system_source_id:
         try:
             sb_patch("system_sources", f"id=eq.{system_source_id}", {"ingest_status": "extracted"})
-        except Exception:
-            pass
+        except Exception as e:
+            log_line(f"warning: source ingest_status not set to 'extracted': {e}")
 
     log_line(f"Done: {len(chunks)} chunks, {page_count} pages, {len(failed)} issues")
     complete_job(job_id, {
@@ -653,14 +652,17 @@ def handle_parser(job: dict):
         system_count = len(systems)
         profile_count = len(sb_get("staged_system_profiles", f"staged_system_id=in.({sys_ids})&select=id")) if sys_ids else 0
         component_count = len(sb_get("staged_components", f"manufacturer_id=eq.{manufacturer_id}&select=id"))
-    except Exception:
+    except Exception as e:
+        # Counts are only for the job summary — a zero here means "not counted",
+        # not "nothing parsed", so say so rather than reporting a silent 0.
+        log_line(f"warning: could not read result counts: {e}")
         system_count = profile_count = component_count = 0
 
     if not dry_run:
         try:
             sb_patch("source_documents", f"id=eq.{document_id}", {"status": "parsed"})
-        except Exception:
-            pass
+        except Exception as e:
+            log_line(f"warning: document status not set to 'parsed': {e}")
 
     log_line(f"Done: {system_count} systems, {profile_count} profiles, {component_count} components")
     complete_job(job_id, {
@@ -701,8 +703,8 @@ def handle_fetch_url(job: dict):
             data["error_message"] = error
         try:
             sb_patch("system_sources", f"id=eq.{system_source_id}", data)
-        except Exception:
-            pass
+        except Exception as e:
+            log_line(f"warning: source ingest_status not set to '{status}': {e}")
 
     log_line(f"Fetching URL: {source_url}")
     mark_source("fetching")
@@ -717,8 +719,8 @@ def handle_fetch_url(job: dict):
         mark_source("failed", msg)
         try:
             sb_patch("source_documents", f"id=eq.{document_id}", {"status": "fetch_failed"})
-        except Exception:
-            pass
+        except Exception as patch_err:
+            log_line(f"warning: document status not set to 'fetch_failed': {patch_err}")
         return
 
     if not looks_like_pdf(pdf_path, ctype):
@@ -727,8 +729,8 @@ def handle_fetch_url(job: dict):
         mark_source("failed", msg)
         try:
             sb_patch("source_documents", f"id=eq.{document_id}", {"status": "fetch_failed"})
-        except Exception:
-            pass
+        except Exception as patch_err:
+            log_line(f"warning: document status not set to 'fetch_failed': {patch_err}")
         return
 
     # Upload the durable copy to R2, keeping the manufacturer-uploads convention.
@@ -842,11 +844,13 @@ def handle_embed(job: dict):
         fail_job(job_id, f"Voyage embed failed: {e}", log)
         return
 
-    # Replace any prior embeddings for this card/version.
+    # Replace any prior embeddings for this card/version. Inserting on top of
+    # rows that failed to delete would duplicate every window in search.
     try:
         sb_delete("card_embeddings", f"card_id=eq.{card_id}&version=eq.{version}")
-    except Exception:
-        pass
+    except Exception as e:
+        fail_job(job_id, f"Could not clear previous embeddings: {e}", log)
+        return
 
     insert_rows = [
         {

@@ -60,14 +60,36 @@ async function markDraftChanged(
   supabase: ReturnType<typeof createStudioServerClient>,
   systemId: string,
 ): Promise<void> {
-  try {
-    await supabase
-      .from('staged_systems')
-      .update({ publish_status: 'published_with_changes' })
-      .eq('id', systemId)
-      .eq('publish_status', 'published')
-  } catch {
-    /* pre-053 environments — publish state tracking simply not available */
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ publish_status: 'published_with_changes' })
+    .eq('id', systemId)
+    .eq('publish_status', 'published')
+  if (!error) return
+  if (isMissingColumnError(error, 'publish_status')) return
+  console.error(`[markDraftChanged] could not flag system ${systemId} as changed:`, error.message)
+}
+
+// PostgREST reports an unknown column as 42703; the message names the column.
+function isMissingColumnError(error: { code?: string; message?: string }, column: string): boolean {
+  return error.code === '42703' || new RegExp(`${column}[^]*does not exist`, 'i').test(error.message ?? '')
+}
+
+// The field_verifications row is an audit trail, written after the value it
+// describes is already saved. Failing the whole action would be a lie (the
+// edit did persist), but the loss must not be invisible either.
+async function writeFieldVerificationAudit(
+  supabase: ReturnType<typeof createStudioServerClient>,
+  row: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from('field_verifications')
+    .upsert(row, { onConflict: 'entity_type,entity_id,field_name' })
+  if (error) {
+    console.error(
+      `[field_verifications] audit write failed for ${String(row.field_name)} on ${String(row.entity_id)}:`,
+      error.message,
+    )
   }
 }
 
@@ -162,20 +184,17 @@ export async function setInstallGuideUrls(
 
   // Audit trail only, consistent with other verified fields — not read back
   // by the UI, which uses staged_systems.install_guide_urls directly.
-  await supabase.from('field_verifications').upsert(
-    {
-      entity_type: 'staged_system',
-      entity_id: systemId,
-      field_name: 'install_guide_urls',
-      verified_value: JSON.stringify(guides),
-      status: 'edited',
-      reviewer_id: auth.userId,
-      reviewed_at: now,
-      notes: null,
-      updated_at: now,
-    },
-    { onConflict: 'entity_type,entity_id,field_name' },
-  )
+  await writeFieldVerificationAudit(supabase, {
+    entity_type: 'staged_system',
+    entity_id: systemId,
+    field_name: 'install_guide_urls',
+    verified_value: JSON.stringify(guides),
+    status: 'edited',
+    reviewer_id: auth.userId,
+    reviewed_at: now,
+    notes: null,
+    updated_at: now,
+  })
 
   return { ok: true }
 }
@@ -214,20 +233,17 @@ export async function setCustomDocumentLinks(
 
   // Audit trail only, consistent with install_guide_urls — not read back by
   // the UI, which uses staged_systems.custom_document_links directly.
-  await supabase.from('field_verifications').upsert(
-    {
-      entity_type: 'staged_system',
-      entity_id: systemId,
-      field_name: 'custom_document_links',
-      verified_value: JSON.stringify(links),
-      status: 'edited',
-      reviewer_id: auth.userId,
-      reviewed_at: now,
-      notes: null,
-      updated_at: now,
-    },
-    { onConflict: 'entity_type,entity_id,field_name' },
-  )
+  await writeFieldVerificationAudit(supabase, {
+    entity_type: 'staged_system',
+    entity_id: systemId,
+    field_name: 'custom_document_links',
+    verified_value: JSON.stringify(links),
+    status: 'edited',
+    reviewer_id: auth.userId,
+    reviewed_at: now,
+    notes: null,
+    updated_at: now,
+  })
 
   return { ok: true }
 }
@@ -256,20 +272,17 @@ export async function setGalleryImages(
   if (error) return { ok: false, error: error.message }
   await markDraftChanged(supabase, systemId)
 
-  await supabase.from('field_verifications').upsert(
-    {
-      entity_type: 'staged_system',
-      entity_id: systemId,
-      field_name: 'gallery_images',
-      verified_value: JSON.stringify(images.map((i) => i.url)),
-      status: 'edited',
-      reviewer_id: auth.userId,
-      reviewed_at: now,
-      notes: null,
-      updated_at: now,
-    },
-    { onConflict: 'entity_type,entity_id,field_name' },
-  )
+  await writeFieldVerificationAudit(supabase, {
+    entity_type: 'staged_system',
+    entity_id: systemId,
+    field_name: 'gallery_images',
+    verified_value: JSON.stringify(images.map((i) => i.url)),
+    status: 'edited',
+    reviewer_id: auth.userId,
+    reviewed_at: now,
+    notes: null,
+    updated_at: now,
+  })
 
   return { ok: true }
 }
@@ -414,14 +427,19 @@ export async function setSystemInReview(
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
-  const { data: current } = await supabase
+  const { data: current, error: currentErr } = await supabase
     .from('staged_systems')
     .select('verification_status')
     .eq('id', systemId)
     .single()
+  // Without the current status the downgrade guard below is blind — fail
+  // rather than risk moving a verified system back to in_review.
+  if (currentErr || !current) {
+    return { ok: false, error: `Could not read the current status: ${currentErr?.message ?? 'system not found'}` }
+  }
 
   // Don't downgrade a verified system
-  if ((current as any)?.verification_status === 'manufacturer_verified') return { ok: true }
+  if ((current as any).verification_status === 'manufacturer_verified') return { ok: true }
 
   const { error } = await supabase
     .from('staged_systems')
@@ -1016,12 +1034,19 @@ export async function deleteSystem(
 
   const supabase = createStudioServerClient()
 
-  // Delete child records first to avoid FK violations
-  await supabase.from('staged_system_profiles').delete().eq('staged_system_id', systemId)
-  await supabase.from('staged_system_colours').delete().eq('staged_system_id', systemId)
-  await supabase.from('staged_system_components').delete().eq('staged_system_id', systemId)
-  await supabase.from('field_verifications').delete()
-    .eq('entity_type', 'staged_system').eq('entity_id', systemId)
+  // Delete child records first to avoid FK violations. A failure here leaves
+  // orphaned rows behind, so stop instead of pressing on to the parent delete.
+  const childDeletes: [string, PromiseLike<{ error: { message: string } | null }>][] = [
+    ['profiles', supabase.from('staged_system_profiles').delete().eq('staged_system_id', systemId)],
+    ['colours', supabase.from('staged_system_colours').delete().eq('staged_system_id', systemId)],
+    ['component links', supabase.from('staged_system_components').delete().eq('staged_system_id', systemId)],
+    ['field verifications', supabase.from('field_verifications').delete()
+      .eq('entity_type', 'staged_system').eq('entity_id', systemId)],
+  ]
+  for (const [label, query] of childDeletes) {
+    const { error: childErr } = await query
+    if (childErr) return { ok: false, error: `Could not delete ${label}: ${childErr.message}` }
+  }
 
   const { error } = await supabase
     .from('staged_systems')

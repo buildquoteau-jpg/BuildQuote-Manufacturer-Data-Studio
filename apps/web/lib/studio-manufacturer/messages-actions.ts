@@ -42,7 +42,7 @@ export async function postSubmissionMessage(
   publishBatchId: string,
 ): Promise<void> {
   const supabase = createStudioServerClient()
-  await supabase.from('manufacturer_messages').insert({
+  const { error } = await supabase.from('manufacturer_messages').insert({
     manufacturer_id: manufacturerId,
     sender_type: 'manufacturer',
     sender_user_id: senderUserId,
@@ -51,6 +51,11 @@ export async function postSubmissionMessage(
     message_type: 'submission',
     related_publish_batch_id: publishBatchId,
   })
+  // Best-effort by design (the batch is already created), but a lost
+  // submission note means staff never see the request at all.
+  if (error) {
+    console.error(`[postSubmissionMessage] batch ${publishBatchId} note not posted:`, error.message)
+  }
 }
 
 // ─── getManufacturerMessages ────────────────────────────────────────────────────

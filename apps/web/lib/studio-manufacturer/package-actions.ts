@@ -266,10 +266,15 @@ export async function generateCardPackage(
   const packageId = (pkgRow as { id: string }).id
 
   const failPackage = async (message: string): Promise<GeneratePackageResult> => {
-    await supabase
+    const { error: markErr } = await supabase
       .from('card_packages')
       .update({ status: 'failed', error_message: message, updated_at: new Date().toISOString() })
       .eq('id', packageId)
+    // The caller still gets the real failure; without this the package row is
+    // also left stuck on 'generating' with no trace of why.
+    if (markErr) {
+      console.error(`[generatePackage] could not mark package ${packageId} failed:`, markErr.message)
+    }
     revalidatePath('/manufacturer/packages')
     return { ok: false, error: message }
   }
@@ -387,7 +392,8 @@ export async function generateCardPackage(
       for (let i = 0; i < cards.length; i++) {
         cards[i].containerMd = containers.get(readyCards[i].system.id)?.content_md ?? null
       }
-    } catch {
+    } catch (err) {
+      log.push(`Note: card containers unavailable (${err instanceof Error ? err.message : String(err)}) — cards ship without content.md.`)
       containers = new Map()
     }
 
@@ -414,6 +420,18 @@ export async function generateCardPackage(
     })
 
     const fullLog = [...log, ...result.buildLog]
+
+    // Post-finalisation notes. Each of these is a step that failed *after* the
+    // package itself was built: not worth failing the download over, but the
+    // build log is the only place a human will ever see them.
+    const appendBuildLog = async (note: string): Promise<void> => {
+      fullLog.push(note)
+      const { error } = await supabase
+        .from('card_packages')
+        .update({ build_log: fullLog.join('\n') })
+        .eq('id', packageId)
+      if (error) console.error(`[generatePackage] could not append to build log of ${packageId}:`, error.message)
+    }
 
     // ── Upload the ZIP to R2 ──
     const zipStorageKey = `card-packages/${manufacturerId}/v${nextVersion}-${randomUUID()}.zip`
@@ -459,10 +477,7 @@ export async function generateCardPackage(
     const { error: itemsError } = await supabase.from('card_package_items').insert(itemRows)
     if (itemsError) {
       // Items are bookkeeping — the package itself is fine. Log, don't fail.
-      await supabase
-        .from('card_packages')
-        .update({ build_log: `${fullLog.join('\n')}\nWARN: card_package_items insert failed: ${itemsError.message}` })
-        .eq('id', packageId)
+      await appendBuildLog(`WARN: card_package_items insert failed: ${itemsError.message}`)
     }
 
     // Immutable version history (049): one snapshot per card per package
@@ -497,16 +512,10 @@ export async function generateCardPackage(
         const legacyRows = versionRows.map(({ content_md, content_hash, sources_json, ...rest }) => rest)
         const { error: legacyErr } = await supabase.from('card_versions').insert(legacyRows)
         if (legacyErr) {
-          await supabase
-            .from('card_packages')
-            .update({ build_log: `${fullLog.join('\n')}\nNote: card_versions snapshot skipped (${legacyErr.message})` })
-            .eq('id', packageId)
+          await appendBuildLog(`Note: card_versions snapshot skipped (${legacyErr.message})`)
         }
       } else {
-        await supabase
-          .from('card_packages')
-          .update({ build_log: `${fullLog.join('\n')}\nNote: card_versions snapshot skipped (${versionsError.message})` })
-          .eq('id', packageId)
+        await appendBuildLog(`Note: card_versions snapshot skipped (${versionsError.message})`)
       }
     }
 
@@ -522,18 +531,24 @@ export async function generateCardPackage(
           status: 'pending',
           payload: { card_id: rc.system.id, version: nextVersion, manufacturer_id: manufacturerId },
         }))
-      if (embedJobs.length) await supabase.from('pipeline_jobs').insert(embedJobs)
-    } catch {
-      /* embeddings are best-effort — never block publish */
+      if (embedJobs.length) {
+        const { error: embedErr } = await supabase.from('pipeline_jobs').insert(embedJobs)
+        // Best-effort — never block publish, but a card whose embeddings were
+        // never enqueued is invisible to search until someone notices.
+        if (embedErr) await appendBuildLog(`Note: embedding jobs not enqueued (${embedErr.message})`)
+      }
+    } catch (err) {
+      await appendBuildLog(`Note: embedding jobs not enqueued (${err instanceof Error ? err.message : String(err)})`)
     }
 
     // Supersede older generated-but-never-downloaded packages.
-    await supabase
+    const { error: supersedeErr } = await supabase
       .from('card_packages')
       .update({ status: 'superseded', updated_at: new Date().toISOString() })
       .eq('manufacturer_id', manufacturerId)
       .eq('status', 'generated')
       .neq('id', packageId)
+    if (supersedeErr) await appendBuildLog(`Note: older packages not superseded (${supersedeErr.message})`)
 
     revalidatePath('/manufacturer/packages')
     return { ok: true, packageId, packageVersion: nextVersion, cardCount: cards.length, buildLog: fullLog }
@@ -581,10 +596,15 @@ export async function downloadPackageZip(
 
   // "Exported / Delivered" — record the handover.
   if (row.status === 'generated') {
-    await supabase
+    const { error: markErr } = await supabase
       .from('card_packages')
       .update({ status: 'downloaded', downloaded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('id', packageId)
+    // The download link is already valid, so don't fail the download; the
+    // handover record just needs to not disappear without a trace.
+    if (markErr) {
+      console.error(`[downloadPackageZip] could not mark package ${packageId} downloaded:`, markErr.message)
+    }
     revalidatePath('/manufacturer/packages')
   }
 

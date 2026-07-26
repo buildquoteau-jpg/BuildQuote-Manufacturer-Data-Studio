@@ -66,6 +66,17 @@ async function uniqueSystemSlug(prod: SupabaseClient, name: string, manufacturer
   return `${base}-${Date.now()}`
 }
 
+// ─── Error helper ───────────────────────────────────────────────────────────
+// Publishing writes to two databases and links them by id. A swallowed error
+// on either side produces a publish that *reports* success while production
+// is missing rows, or while the staging row never got its production_*_id —
+// which makes the next publish insert a duplicate instead of updating. Every
+// write and every adoption lookup goes through this.
+
+function throwOnError(error: { message: string } | null, what: string): void {
+  if (error) throw new Error(`${what}: ${error.message}`)
+}
+
 // ─── Result types ───────────────────────────────────────────────────────────
 
 export type EntityAction = 'created' | 'updated' | 'skipped'
@@ -142,16 +153,19 @@ export async function publishManufacturer(
 
   // Adopt an existing production row with the same slug rather than duplicating
   // (e.g. someone created it manually before Data Studio onboarding existed).
-  const { data: existing } = await prod
+  const { data: existing, error: lookupErr } = await prod
     .from('manufacturers')
     .select('id')
     .eq('slug', mfr.slug)
     .maybeSingle()
+  throwOnError(lookupErr, `Could not check for an existing production manufacturer "${mfr.slug}"`)
 
   if (existing) {
     if (!dryRun) {
-      await prod.from('manufacturers').update(payload).eq('id', existing.id)
-      await ds.from('data_studio_manufacturers').update({ production_manufacturer_id: existing.id }).eq('id', manufacturerId)
+      const { error: updErr } = await prod.from('manufacturers').update(payload).eq('id', existing.id)
+      throwOnError(updErr, 'Could not update production manufacturer')
+      const { error: linkErr } = await ds.from('data_studio_manufacturers').update({ production_manufacturer_id: existing.id }).eq('id', manufacturerId)
+      throwOnError(linkErr, 'Could not link manufacturer to its production row')
     }
     return { productionManufacturerId: existing.id, action: 'updated' }
   }
@@ -167,7 +181,8 @@ export async function publishManufacturer(
     .single()
   if (insErr || !created) throw new Error(`Could not create production manufacturer: ${insErr?.message}`)
 
-  await ds.from('data_studio_manufacturers').update({ production_manufacturer_id: created.id }).eq('id', manufacturerId)
+  const { error: linkErr } = await ds.from('data_studio_manufacturers').update({ production_manufacturer_id: created.id }).eq('id', manufacturerId)
+  throwOnError(linkErr, 'Could not link manufacturer to its production row')
   return { productionManufacturerId: created.id, action: 'created' }
 }
 
@@ -241,7 +256,8 @@ async function publishCatalogueSource(
     .single()
   if (insErr || !created) throw new Error(`Could not create catalogue source: ${insErr?.message}`)
 
-  await ds.from('source_documents').update({ production_catalogue_source_id: created.id }).eq('id', sourceDocumentId)
+  const { error: linkErr } = await ds.from('source_documents').update({ production_catalogue_source_id: created.id }).eq('id', sourceDocumentId)
+  throwOnError(linkErr, 'Could not link source document to its catalogue source')
   return { productionSourceId: created.id, action: 'created' }
 }
 
@@ -294,17 +310,19 @@ async function publishComponent(
   // duplicate-key error (or a silent duplicate row, where there's no
   // unique constraint to catch it) and backfills the link for next time.
   if (c.sku) {
-    const { data: existing } = await prod
+    const { data: existing, error: lookupErr } = await prod
       .from('components')
       .select('id')
       .eq('manufacturer_id', productionManufacturerId)
       .eq('sku', c.sku)
       .maybeSingle()
+    throwOnError(lookupErr, `Could not check for an existing production component "${c.sku}"`)
     if (existing) {
       if (!dryRun) {
         const { error: updErr } = await prod.from('components').update(payload).eq('id', existing.id)
         if (updErr) throw new Error(`Could not update component "${c.name}": ${updErr.message}`)
-        await ds.from('staged_components').update({ production_component_id: existing.id }).eq('id', c.id)
+        const { error: linkErr } = await ds.from('staged_components').update({ production_component_id: existing.id }).eq('id', c.id)
+        throwOnError(linkErr, `Could not link component "${c.name}" to its production row`)
       }
       return { id: c.id, name: c.name, productionComponentId: existing.id, action: 'updated' }
     }
@@ -315,7 +333,8 @@ async function publishComponent(
   const { data: created, error: insErr } = await prod.from('components').insert(payload).select('id').single()
   if (insErr || !created) throw new Error(`Could not create component "${c.name}": ${insErr?.message}`)
 
-  await ds.from('staged_components').update({ production_component_id: created.id }).eq('id', c.id)
+  const { error: linkErr } = await ds.from('staged_components').update({ production_component_id: created.id }).eq('id', c.id)
+  throwOnError(linkErr, `Could not link component "${c.name}" to its production row`)
   return { id: c.id, name: c.name, productionComponentId: created.id, action: 'created' }
 }
 
@@ -421,7 +440,8 @@ export async function publishSystem(
       if (insErr || !created) throw new Error(`Could not create system: ${insErr?.message}`)
       productionSystemId = created.id
       systemAction = 'created'
-      await ds.from('staged_systems').update({ production_system_id: created.id }).eq('id', systemId)
+      const { error: linkErr } = await ds.from('staged_systems').update({ production_system_id: created.id }).eq('id', systemId)
+      throwOnError(linkErr, 'Could not link system to its production row')
     }
 
     const profiles = await publishProfiles(ds, prod, systemId, productionSystemId, dryRun)
@@ -429,7 +449,8 @@ export async function publishSystem(
     const components = await publishComponents(ds, prod, systemId, productionSystemId, productionManufacturerId, dryRun)
 
     if (!dryRun) {
-      await ds.from('staged_systems').update({ last_published_at: new Date().toISOString() }).eq('id', systemId)
+      const { error: stampErr } = await ds.from('staged_systems').update({ last_published_at: new Date().toISOString() }).eq('id', systemId)
+      throwOnError(stampErr, 'Could not record last_published_at')
     }
 
     return {
@@ -505,15 +526,19 @@ async function publishProfiles(
     // whose catalogue already exists in production (e.g. reverse-cloned
     // into Data Studio) gets a duplicate row inserted every publish —
     // silently, since system_profiles has no unique constraint to catch it.
-    const existing = p.product_code
-      ? (await prod.from('system_profiles').select('id')
-          .eq('system_id', productionSystemId).eq('product_code', p.product_code).maybeSingle()).data
-      : null
+    let existing: { id: string } | null = null
+    if (p.product_code) {
+      const { data: found, error: lookupErr } = await prod.from('system_profiles').select('id')
+        .eq('system_id', productionSystemId).eq('product_code', p.product_code).maybeSingle()
+      throwOnError(lookupErr, `Could not check for an existing production profile "${p.product_code}"`)
+      existing = found
+    }
     if (existing) {
       if (!dryRun) {
         const { error: e } = await prod.from('system_profiles').update(payload).eq('id', existing.id)
         if (e) throw new Error(`Could not update profile "${p.profile_name ?? p.name}": ${e.message}`)
-        await ds.from('staged_system_profiles').update({ production_profile_id: existing.id }).eq('id', p.id)
+        const { error: linkErr } = await ds.from('staged_system_profiles').update({ production_profile_id: existing.id }).eq('id', p.id)
+        throwOnError(linkErr, `Could not link profile "${p.profile_name ?? p.name}" to its production row`)
       }
       results.push({ id: p.id, action: 'updated' })
     } else if (dryRun) {
@@ -521,7 +546,8 @@ async function publishProfiles(
     } else {
       const { data: created, error: e } = await prod.from('system_profiles').insert(payload).select('id').single()
       if (e || !created) throw new Error(`Could not create profile "${p.profile_name ?? p.name}": ${e?.message}`)
-      await ds.from('staged_system_profiles').update({ production_profile_id: created.id }).eq('id', p.id)
+      const { error: linkErr } = await ds.from('staged_system_profiles').update({ production_profile_id: created.id }).eq('id', p.id)
+      throwOnError(linkErr, `Could not link profile "${p.profile_name ?? p.name}" to its production row`)
       results.push({ id: p.id, action: 'created' })
     }
   }
@@ -561,13 +587,15 @@ async function publishColours(
     // constraint on this pair, so without this check a manufacturer whose
     // catalogue already exists in production throws a duplicate-key error
     // on every publish attempt instead of updating.
-    const { data: existing } = await prod.from('system_colours').select('id')
+    const { data: existing, error: lookupErr } = await prod.from('system_colours').select('id')
       .eq('system_id', productionSystemId).eq('colour_name', c.colour_name).maybeSingle()
+    throwOnError(lookupErr, `Could not check for an existing production colour "${c.colour_name}"`)
     if (existing) {
       if (!dryRun) {
         const { error: e } = await prod.from('system_colours').update(payload).eq('id', existing.id)
         if (e) throw new Error(`Could not update colour "${c.colour_name}": ${e.message}`)
-        await ds.from('staged_system_colours').update({ production_colour_id: existing.id }).eq('id', c.id)
+        const { error: linkErr } = await ds.from('staged_system_colours').update({ production_colour_id: existing.id }).eq('id', c.id)
+        throwOnError(linkErr, `Could not link colour "${c.colour_name}" to its production row`)
       }
       results.push({ id: c.id, action: 'updated' })
     } else if (dryRun) {
@@ -575,7 +603,8 @@ async function publishColours(
     } else {
       const { data: created, error: e } = await prod.from('system_colours').insert(payload).select('id').single()
       if (e || !created) throw new Error(`Could not create colour "${c.colour_name}": ${e?.message}`)
-      await ds.from('staged_system_colours').update({ production_colour_id: created.id }).eq('id', c.id)
+      const { error: linkErr } = await ds.from('staged_system_colours').update({ production_colour_id: created.id }).eq('id', c.id)
+      throwOnError(linkErr, `Could not link colour "${c.colour_name}" to its production row`)
       results.push({ id: c.id, action: 'created' })
     }
   }
@@ -598,20 +627,23 @@ async function publishComponents(
       await publishComponent(ds, prod, link.staged_component_id, productionManufacturerId, dryRun)
 
     if (!dryRun) {
-      const { data: existingLink } = await prod
+      const { data: existingLink, error: lookupErr } = await prod
         .from('system_components')
         .select('id')
         .eq('system_id', productionSystemId)
         .eq('component_id', productionComponentId)
         .maybeSingle()
+      throwOnError(lookupErr, `Could not check the system_components link for "${name}"`)
 
       const linkPayload = { role: link.role, notes: link.notes, sort_order: link.sort_order }
       if (existingLink) {
-        await prod.from('system_components').update(linkPayload).eq('id', existingLink.id)
+        const { error: updErr } = await prod.from('system_components').update(linkPayload).eq('id', existingLink.id)
+        throwOnError(updErr, `Could not update the system_components link for "${name}"`)
       } else {
-        await prod.from('system_components').insert({
+        const { error: insLinkErr } = await prod.from('system_components').insert({
           system_id: productionSystemId, component_id: productionComponentId, ...linkPayload,
         })
+        throwOnError(insLinkErr, `Could not link component "${name}" to the system`)
       }
     }
 
@@ -656,18 +688,26 @@ export async function publishBatch(batchId: string, opts: { dryRun: boolean }): 
     results.push(result)
 
     if (!opts.dryRun) {
-      if (result.ok) {
-        await ds.from('publish_batch_items').update({
-          status: 'migrated_to_production',
-          production_table: 'systems',
-          production_id: result.productionSystemId,
-          error_message: null,
-        }).eq('id', item.id)
-      } else {
-        await ds.from('publish_batch_items').update({
-          status: 'failed',
-          error_message: result.error,
-        }).eq('id', item.id)
+      const { error: itemErr } = result.ok
+        ? await ds.from('publish_batch_items').update({
+            status: 'migrated_to_production',
+            production_table: 'systems',
+            production_id: result.productionSystemId,
+            error_message: null,
+          }).eq('id', item.id)
+        : await ds.from('publish_batch_items').update({
+            status: 'failed',
+            error_message: result.error,
+          }).eq('id', item.id)
+      // The production write already happened; a bookkeeping failure must not
+      // be reported as a clean publish, or the item stays queued forever.
+      if (itemErr) {
+        results[results.length - 1] = {
+          ...result,
+          ok: false,
+          error: [result.error, `Published, but the batch item could not be updated: ${itemErr.message}`]
+            .filter(Boolean).join(' | '),
+        }
       }
     }
   }
@@ -677,10 +717,13 @@ export async function publishBatch(batchId: string, opts: { dryRun: boolean }): 
 
   if (!opts.dryRun && results.length > 0) {
     const batchStatus = failed === 0 ? 'published' : succeeded === 0 ? batch.status : 'partially_published'
-    await ds.from('publish_batches').update({
+    const { error: batchUpdErr } = await ds.from('publish_batches').update({
       status: batchStatus,
       published_at: failed === 0 ? new Date().toISOString() : null,
     }).eq('id', batchId)
+    if (batchUpdErr) {
+      return { ok: false, error: `Items were published but the batch status could not be updated: ${batchUpdErr.message}` }
+    }
   }
 
   return { ok: true, batchId, dryRun: opts.dryRun, items: results, succeeded, failed }
