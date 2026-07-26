@@ -17,7 +17,7 @@ export default async function CmsEditorPage({
   const ctx = await resolveWorkspaceContextFromRequest(session)
   if (!ctx.found) {
     return (
-      <StudioShell role="manufacturer" subtitle="System Cards">
+      <StudioShell role="manufacturer" subtitle="Assets & Publish">
         <div className="studio-info">No manufacturer workspace assigned. Contact BuildQuote admin.</div>
       </StudioShell>
     )
@@ -30,7 +30,7 @@ export default async function CmsEditorPage({
   ])
   if (!result.ok) {
     return (
-      <StudioShell role="manufacturer" subtitle="System Cards">
+      <StudioShell role="manufacturer" subtitle="Assets & Publish">
         <div className="studio-warn">Could not load card: {result.error}</div>
       </StudioShell>
     )

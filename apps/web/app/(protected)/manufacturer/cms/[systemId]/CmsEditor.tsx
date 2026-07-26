@@ -22,6 +22,8 @@ import {
   setInstallGuideUrls,
   setCustomDocumentLinks,
   setGalleryImages,
+  updateSystemHeroAsset,
+  updateSystemImageCrop,
 } from '@/lib/studio-manufacturer/verification-actions'
 import { publishCardLive } from '@/lib/studio-manufacturer/publish-live-actions'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
@@ -31,6 +33,7 @@ import type { ManufacturerAsset } from '@/lib/studio-manufacturer/assets'
 import type { LinkLibraryEntry } from '@/lib/studio-manufacturer/link-library'
 import { addLinkLibraryEntry } from '@/lib/studio-manufacturer/link-library-actions'
 import { LinkLibraryPicker } from '@/components/studio/LinkLibraryPicker'
+import { AssetSlotControl, type SlotAsset, type SlotPick } from '../../profile/AssetSlotControl'
 
 type GalleryImage = NonNullable<VerificationSystem['gallery_images']>[number]
 
@@ -127,6 +130,50 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
   )
   const [pickerOpen, setPickerOpen] = useState(false)
 
+  // ── Hero image ─────────────────────────────────────────────────────────────
+  const [heroSaveErr, setHeroSaveErr] = useState<string | null>(null)
+  const heroPickerAssets: SlotAsset[] = useMemo(() => assets.map(a => ({
+    id: a.id,
+    assetType: a.assetType,
+    title: a.title,
+    displayUrl: a.displayUrl,
+    publicUrl: a.publicUrl,
+    approvedForPublication: a.approvedForPublication,
+  })), [assets])
+
+  async function handleHeroAssetPick(pick: SlotPick) {
+    // Only persist a durable public URL into hero_image_url — pick.displayUrl
+    // can be a presigned R2 link that expires in an hour. The preview below
+    // reads the asset via the permanent /api/assets route instead, so it
+    // stays correct regardless of what's stored here.
+    const url = pick.publicUrl ?? null
+    const previous = { hero_image_asset_id: system.hero_image_asset_id, hero_image_url: system.hero_image_url }
+    patch({ hero_image_asset_id: pick.assetId, hero_image_url: url })
+    setHeroSaveErr(null)
+    const res = await updateSystemHeroAsset(system.id, manufacturerId, pick.assetId, url)
+    if (!res.ok) {
+      patch(previous)
+      setHeroSaveErr(res.error)
+    }
+  }
+
+  function handleHeroAssetClear() {
+    const previous = { hero_image_asset_id: system.hero_image_asset_id }
+    patch({ hero_image_asset_id: null })
+    setHeroSaveErr(null)
+    updateSystemHeroAsset(system.id, manufacturerId, null, null).then(res => {
+      if (!res.ok) {
+        patch(previous)
+        setHeroSaveErr(res.error)
+      }
+    })
+  }
+
+  const linkedHeroAsset = system.hero_image_asset_id
+    ? heroPickerAssets.find(a => a.id === system.hero_image_asset_id) ?? null
+    : null
+  const cropPreviewUrl = linkedHeroAsset ? `/api/assets/${linkedHeroAsset.id}` : system.hero_image_url
+
   // ── Publish ────────────────────────────────────────────────────────────────
   async function handlePublish() {
     setPublishing(true)
@@ -146,6 +193,9 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
     const adapted = adaptStagedSystem(system, manufacturer)
     adapted.gallery_images = (adapted.gallery_images ?? []).map(img =>
       img.asset_id ? { ...img, url: `/api/assets/${img.asset_id}` } : img)
+    if (system.hero_image_asset_id) {
+      adapted.hero_image_url = `/api/assets/${system.hero_image_asset_id}`
+    }
     return adapted
   }, [system, manufacturer])
 
@@ -225,6 +275,50 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </Field>
+          </Section>
+
+          <Section title="Hero image">
+            <AssetSlotControl
+              manufacturerId={manufacturerId}
+              uploadAssetType="card_hero"
+              pickerAssetTypes={['card_hero', 'product']}
+              assets={heroPickerAssets}
+              currentAssetId={system.hero_image_asset_id}
+              onPick={handleHeroAssetPick}
+              onClear={handleHeroAssetClear}
+              quickImportUrl={system.hero_image_url}
+            />
+            {heroSaveErr && (
+              <p style={{ fontSize: '0.76rem', color: '#dc2626', margin: '0.4rem 0 0' }}>
+                Couldn't save this hero image: {heroSaveErr}. Try picking it again.
+              </p>
+            )}
+            {!system.hero_image_asset_id && system.hero_image_url && (
+              <p style={{ fontSize: '0.76rem', color: '#b45309', margin: '0.4rem 0 0', lineHeight: 1.5 }}>
+                This hero image is only a URL — the static package will attempt a best-effort
+                fetch at generation time rather than a guaranteed local copy. Upload or choose an
+                asset above for a reliable, optimized result.
+              </p>
+            )}
+            {!system.hero_image_asset_id && (
+              <Field label="Hero image URL">
+                <input
+                  value={system.hero_image_url ?? ''}
+                  placeholder="https://…"
+                  onChange={e => { patch({ hero_image_url: e.target.value }); saveField('hero_image_url', e.target.value) }}
+                  style={inputStyle}
+                />
+              </Field>
+            )}
+            <CropAdjuster
+              imageUrl={cropPreviewUrl}
+              positionX={system.hero_image_position_x ?? 50}
+              positionY={system.hero_image_position_y ?? 50}
+              zoom={system.hero_image_zoom ?? 1}
+              systemId={system.id}
+              manufacturerId={manufacturerId}
+              onChange={(x, y, zoom) => patch({ hero_image_position_x: x, hero_image_position_y: y, hero_image_zoom: zoom })}
+            />
           </Section>
 
           <Section
@@ -458,6 +552,96 @@ function IconButton({ label, onClick, disabled, children }: {
     >
       {children}
     </button>
+  )
+}
+
+// ─── Image crop adjuster ──────────────────────────────────────────────────────
+
+function CropAdjuster({
+  imageUrl, positionX, positionY, zoom: initialZoom, systemId, manufacturerId, onChange,
+}: {
+  imageUrl: string | null
+  positionX: number
+  positionY: number
+  zoom: number
+  systemId: string
+  manufacturerId: string
+  onChange: (x: number, y: number, zoom: number) => void
+}) {
+  const [x, setX] = useState(positionX)
+  const [y, setY] = useState(positionY)
+  const [zoom, setZoom] = useState(initialZoom)
+  const [savedX, setSavedX] = useState(positionX)
+  const [savedY, setSavedY] = useState(positionY)
+  const [savedZoom, setSavedZoom] = useState(initialZoom)
+  const [saving, setSaving] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
+
+  if (!imageUrl) return null
+
+  const dirty = x !== savedX || y !== savedY || zoom !== savedZoom
+
+  function handleChange(newX: number, newY: number, newZoom: number) {
+    setX(newX); setY(newY); setZoom(newZoom)
+    onChange(newX, newY, newZoom)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    await updateSystemImageCrop(systemId, manufacturerId, x, y, zoom)
+    setSaving(false)
+    setSavedX(x); setSavedY(y); setSavedZoom(zoom)
+    setJustSaved(true)
+    setTimeout(() => setJustSaved(false), 1500)
+  }
+
+  return (
+    <div style={{ borderRadius: '8px', border: '1px solid var(--ds-border)', padding: '10px 12px', marginTop: '0.7rem' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Image crop position</span>
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          style={{
+            fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '4px', border: 'none', cursor: dirty && !saving ? 'pointer' : 'default',
+            background: justSaved ? '#16a34a' : dirty ? '#185D7A' : '#e5e7eb',
+            color: dirty || justSaved ? '#fff' : '#9ca3af',
+            transition: 'background 0.2s',
+          }}
+        >
+          {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save position'}
+        </button>
+      </div>
+      {/* Preview — matches system card dimensions: 220px tall × ~360px wide */}
+      <div style={{ width: '100%', maxWidth: '360px', height: '220px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={imageUrl} alt="crop preview" style={{
+          width: '100%', height: '100%', objectFit: 'cover',
+          objectPosition: `${x}% ${y}%`, display: 'block',
+          transform: zoom > 1 ? `scale(${zoom})` : undefined,
+          transformOrigin: `${x}% ${y}%`,
+        }} />
+      </div>
+      {/* X slider */}
+      <label style={{ display: 'block', fontSize: '11px', color: 'var(--ds-text-muted)', marginBottom: '6px' }}>
+        Horizontal — {x === 50 ? 'centre' : x < 50 ? `left ${x}%` : `right ${x}%`}
+        <input type="range" min={0} max={100} value={x} onChange={e => handleChange(Number(e.target.value), y, zoom)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
+      {/* Y slider */}
+      <label style={{ display: 'block', fontSize: '11px', color: 'var(--ds-text-muted)', marginBottom: '6px' }}>
+        Vertical — {y === 50 ? 'centre' : y < 50 ? `top ${y}%` : `bottom ${y}%`}
+        <input type="range" min={0} max={100} value={y} onChange={e => handleChange(x, Number(e.target.value), zoom)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
+      {/* Zoom slider — scales around the crop point above */}
+      <label style={{ display: 'block', fontSize: '11px', color: 'var(--ds-text-muted)' }}>
+        Zoom — {zoom <= 1 ? 'fit (100%)' : `${Math.round(zoom * 100)}%`}
+        <input type="range" min={100} max={300} step={5} value={Math.round(zoom * 100)}
+          onChange={e => handleChange(x, y, Number(e.target.value) / 100)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
+    </div>
   )
 }
 

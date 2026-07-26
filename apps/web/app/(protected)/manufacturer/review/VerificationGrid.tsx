@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { SystemCard } from '@/components/system-card/SystemCard'
 import type { SystemCardData } from '@/components/system-card/SystemCard'
 import type { VerificationSystem, VerificationSystemProfile, VerificationSystemColour, VerificationSystemComponent } from '@/lib/studio-manufacturer/workspace'
@@ -26,8 +27,6 @@ import {
   unlinkComponent,
   getManufacturerComponents,
   linkExistingComponent,
-  updateSystemImageCrop,
-  updateSystemHeroAsset,
   setInstallGuideUrls,
   setCustomDocumentLinks,
   setCustomAttributes,
@@ -39,7 +38,7 @@ import {
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
 import { SubmitForPublication } from './SubmitForPublication'
-import { AssetSlotControl, type SlotAsset, type SlotPick } from '../profile/AssetSlotControl'
+import { type SlotAsset } from '../profile/AssetSlotControl'
 
 // ─── Category colours ─────────────────────────────────────────────────────────
 
@@ -606,95 +605,6 @@ function BALFieldRow({
         </div>
       </div>
       {errorMsg && <div style={{ marginTop: '4px', fontSize: '11px', color: '#dc2626' }}>{errorMsg}</div>}
-    </div>
-  )
-}
-
-// ─── Image crop adjuster ──────────────────────────────────────────────────────
-
-function CropAdjuster({
-  imageUrl, positionX, positionY, zoom: initialZoom, systemId, manufacturerId, onChange,
-}: {
-  imageUrl: string | null
-  positionX: number
-  positionY: number
-  zoom: number
-  systemId: string
-  manufacturerId: string
-  onChange: (x: number, y: number, zoom: number) => void
-}) {
-  const [x, setX] = useState(positionX)
-  const [y, setY] = useState(positionY)
-  const [zoom, setZoom] = useState(initialZoom)
-  const [savedX, setSavedX] = useState(positionX)
-  const [savedY, setSavedY] = useState(positionY)
-  const [savedZoom, setSavedZoom] = useState(initialZoom)
-  const [saving, setSaving] = useState(false)
-  const [justSaved, setJustSaved] = useState(false)
-
-  if (!imageUrl) return null
-
-  const dirty = x !== savedX || y !== savedY || zoom !== savedZoom
-
-  function handleChange(newX: number, newY: number, newZoom: number) {
-    setX(newX); setY(newY); setZoom(newZoom)
-    onChange(newX, newY, newZoom)
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    await updateSystemImageCrop(systemId, manufacturerId, x, y, zoom)
-    setSaving(false)
-    setSavedX(x); setSavedY(y); setSavedZoom(zoom)
-    setJustSaved(true)
-    setTimeout(() => setJustSaved(false), 1500)
-  }
-
-  return (
-    <div style={{ borderRadius: '8px', border: '1px solid #d1d5db', padding: '10px 12px' }}>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Image crop position</span>
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          style={{
-            fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '4px', border: 'none', cursor: dirty && !saving ? 'pointer' : 'default',
-            background: justSaved ? '#16a34a' : dirty ? '#185D7A' : '#e5e7eb',
-            color: dirty || justSaved ? '#fff' : '#9ca3af',
-            transition: 'background 0.2s',
-          }}
-        >
-          {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save position'}
-        </button>
-      </div>
-      {/* Preview — matches system card dimensions: 220px tall × ~360px wide */}
-      <div style={{ width: '100%', maxWidth: '360px', height: '220px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
-        <img src={imageUrl} alt="crop preview" style={{
-          width: '100%', height: '100%', objectFit: 'cover',
-          objectPosition: `${x}% ${y}%`, display: 'block',
-          transform: zoom > 1 ? `scale(${zoom})` : undefined,
-          transformOrigin: `${x}% ${y}%`,
-        }} />
-      </div>
-      {/* X slider */}
-      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '6px' }}>
-        Horizontal — {x === 50 ? 'centre' : x < 50 ? `left ${x}%` : `right ${x}%`}
-        <input type="range" min={0} max={100} value={x} onChange={e => handleChange(Number(e.target.value), y, zoom)}
-          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
-      </label>
-      {/* Y slider */}
-      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '6px' }}>
-        Vertical — {y === 50 ? 'centre' : y < 50 ? `top ${y}%` : `bottom ${y}%`}
-        <input type="range" min={0} max={100} value={y} onChange={e => handleChange(x, Number(e.target.value), zoom)}
-          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
-      </label>
-      {/* Zoom slider — scales around the crop point above */}
-      <label style={{ display: 'block', fontSize: '11px', color: '#6b7280' }}>
-        Zoom — {zoom <= 1 ? 'fit (100%)' : `${Math.round(zoom * 100)}%`}
-        <input type="range" min={100} max={300} step={5} value={Math.round(zoom * 100)}
-          onChange={e => handleChange(x, y, Number(e.target.value) / 100)}
-          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
-      </label>
     </div>
   )
 }
@@ -2403,31 +2313,17 @@ function ExpandedCardView({
     })
   }
 
-  const [heroSaveErr, setHeroSaveErr] = useState<string | null>(null)
-  const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
-  const [cropY, setCropY] = useState(system.hero_image_position_y ?? 50)
-  const [cropZoom, setCropZoom] = useState(system.hero_image_zoom ?? 1)
-
-  // Asset Library images offered for this system's hero — Card hero and
-  // Product image types cover both a dedicated hero shot and a reused
-  // product photo. Picking/uploading here also updates hero_image_url, so
-  // the crop tool and live preview below stay in sync immediately.
-  const heroPickerAssets: SlotAsset[] = assets.map(a => ({
-    id: a.id,
-    assetType: a.assetType,
-    title: a.title,
-    displayUrl: a.displayUrl,
-    publicUrl: a.publicUrl,
-    approvedForPublication: a.approvedForPublication,
-  }))
-
-  // The card preview and crop tool should reflect the linked asset, not
-  // hero_image_url — that field may hold a presigned R2 link (set before the
-  // publicUrl-only fix below) that has since expired, or be null when the
-  // asset has no durable public URL. The asset's displayUrl is re-resolved
-  // fresh on every page load, so it's always current.
-  const linkedHeroAsset = system.hero_image_asset_id
-    ? heroPickerAssets.find(a => a.id === system.hero_image_asset_id) ?? null
+  // Hero image is edited in Assets & Publish (CmsEditor) now — this view is
+  // read-only preview only. Prefer the linked asset's live URL over
+  // hero_image_url, since that field can hold an expired presigned R2 link.
+  const linkedHeroAsset: SlotAsset | null = system.hero_image_asset_id
+    ? assets
+        .filter(a => a.id === system.hero_image_asset_id)
+        .map(a => ({
+          id: a.id, assetType: a.assetType, title: a.title,
+          displayUrl: a.displayUrl, publicUrl: a.publicUrl,
+          approvedForPublication: a.approvedForPublication,
+        }))[0] ?? null
     : null
   const cropPreviewUrl = linkedHeroAsset?.displayUrl ?? linkedHeroAsset?.publicUrl ?? system.hero_image_url
 
@@ -2439,9 +2335,9 @@ function ExpandedCardView({
     subcategory:        system.subcategory,
     description:        system.description,
     hero_image_url:     cropPreviewUrl,
-    hero_image_position_x: cropX,
-    hero_image_position_y: cropY,
-    hero_image_zoom: cropZoom,
+    hero_image_position_x: system.hero_image_position_x ?? 50,
+    hero_image_position_y: system.hero_image_position_y ?? 50,
+    hero_image_zoom: system.hero_image_zoom ?? 1,
     bal_rating:         system.bal_rating,
     fire_rating:        system.fire_rating,
     moisture_resistant: system.moisture_resistant,
@@ -2481,41 +2377,6 @@ function ExpandedCardView({
     isUrl: opts?.isUrl,
     onStateChange: handleFieldChange,
   })
-
-  async function handleHeroAssetPick(pick: SlotPick) {
-    // Only persist a durable public URL into hero_image_url — pick.displayUrl
-    // can be a presigned R2 link that expires in an hour, and saving that would
-    // leave a dead link once it lapses. The crop preview below reads the
-    // linked asset's live displayUrl instead, so it stays correct regardless.
-    // Always sync (not just when truthy) so a stale value from before this
-    // asset was linked can't survive underneath it.
-    const url = pick.publicUrl ?? null
-    const previous = { hero_image_asset_id: system.hero_image_asset_id, hero_image_url: system.hero_image_url }
-    setSystem(prev => ({ ...prev, hero_image_asset_id: pick.assetId, hero_image_url: url }))
-    setHeroSaveErr(null)
-    const res = await updateSystemHeroAsset(system.id, manufacturerId, pick.assetId, url)
-    if (!res.ok) {
-      // Roll back the optimistic update — otherwise the picker keeps showing
-      // "Linked: X" even though the write never reached staged_systems, and
-      // that false confidence is exactly what silently lost the pick before.
-      setSystem(prev => ({ ...prev, ...previous }))
-      setHeroSaveErr(res.error)
-    }
-  }
-
-  function handleHeroAssetClear() {
-    // Unlinks the asset only — leaves hero_image_url as a manual fallback
-    // rather than clearing it, in case the raw URL is still wanted.
-    const previous = { hero_image_asset_id: system.hero_image_asset_id }
-    setSystem(prev => ({ ...prev, hero_image_asset_id: null }))
-    setHeroSaveErr(null)
-    updateSystemHeroAsset(system.id, manufacturerId, null, null).then(res => {
-      if (!res.ok) {
-        setSystem(prev => ({ ...prev, ...previous }))
-        setHeroSaveErr(res.error)
-      }
-    })
-  }
 
   return (
     <>
@@ -2655,49 +2516,14 @@ function ExpandedCardView({
 
             {/* Images & resources */}
             <FieldSection label="Images & resources">
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
-                  Hero image
-                </div>
-                <AssetSlotControl
-                  manufacturerId={manufacturerId}
-                  uploadAssetType="card_hero"
-                  pickerAssetTypes={['card_hero', 'product']}
-                  assets={heroPickerAssets}
-                  currentAssetId={system.hero_image_asset_id}
-                  onPick={handleHeroAssetPick}
-                  onClear={handleHeroAssetClear}
-                  quickImportUrl={system.hero_image_url}
-                />
-                {heroSaveErr && (
-                  <p style={{ fontSize: '11px', color: '#dc2626', margin: '6px 0 0' }}>
-                    Couldn't save this hero image: {heroSaveErr}. Try picking it again.
-                  </p>
-                )}
-                {!system.hero_image_asset_id && system.hero_image_url && (
-                  <p style={{ fontSize: '11px', color: '#b45309', margin: '6px 0 0' }}>
-                    This hero image is only a URL — the static package will attempt a
-                    best-effort fetch at generation time rather than a guaranteed local
-                    copy. Upload or choose an asset above for a reliable, optimized result.
-                  </p>
-                )}
-              </div>
-              {/* Once an asset is linked, it's the single source of truth for the
-                  hero image — no need to also maintain a matching raw URL. Only
-                  show the manual URL field as a fallback when nothing is linked. */}
-              {!system.hero_image_asset_id && (
-                <FieldRow {...fieldRowProps('Hero image URL', 'hero_image_url', { isUrl: true })} />
-              )}
-              <CropAdjuster
-                imageUrl={cropPreviewUrl}
-                positionX={cropX}
-                positionY={cropY}
-                zoom={cropZoom}
-                systemId={system.id}
-                manufacturerId={manufacturerId}
-                onChange={(x, y, zoom) => { setCropX(x); setCropY(y); setCropZoom(zoom) }}
-              />
-              {system.source_url   && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
+              <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 10px', lineHeight: 1.6 }}>
+                Hero image (upload, import, crop position) is edited in{' '}
+                <Link href={`/manufacturer/cms/${system.id}`} style={{ fontWeight: 700, color: '#185D7A' }}>
+                  Assets &amp; Publish
+                </Link>{' '}
+                — changes made there flow straight back here.
+              </p>
+              {system.source_url && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
             </FieldSection>
 
             {/* Technical attributes */}

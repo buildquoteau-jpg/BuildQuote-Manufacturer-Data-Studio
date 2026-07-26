@@ -34,8 +34,8 @@ export default async function CmsListPage() {
 
   if (!ctx.found) {
     return (
-      <StudioShell role="manufacturer" subtitle="System Cards">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>System Cards</h1>
+      <StudioShell role="manufacturer" subtitle="Assets & Publish">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Assets &amp; Publish</h1>
         <div className="studio-info">
           {ctx.reason === 'admin_no_context'
             ? 'Admin support access — select a manufacturer workspace from the admin panel first.'
@@ -48,8 +48,8 @@ export default async function CmsListPage() {
   const result = await getManufacturerVerificationData(ctx.manufacturerId)
   if (!result.ok) {
     return (
-      <StudioShell role="manufacturer" subtitle="System Cards">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>System Cards</h1>
+      <StudioShell role="manufacturer" subtitle="Assets & Publish">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Assets &amp; Publish</h1>
         <div className="studio-warn">Could not load cards: {result.error}</div>
       </StudioShell>
     )
@@ -58,10 +58,10 @@ export default async function CmsListPage() {
   const { manufacturer, systems } = result
 
   return (
-    <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · System Cards`}>
+    <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Assets & Publish`}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.25rem', margin: 0 }}>System Cards</h1>
+          <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Assets &amp; Publish</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0.5rem 0 0', lineHeight: 1.65, maxWidth: 640 }}>
             Edit a card and it autosaves as a <strong>Draft</strong> — the live card never changes until
             you press <strong>Publish</strong>, which updates buildquote.com.au immediately.

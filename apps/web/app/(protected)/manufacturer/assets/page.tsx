@@ -19,8 +19,8 @@ export default async function ManufacturerAssetsPage() {
 
   if (!ctx.found) {
     return (
-      <StudioShell role="manufacturer" subtitle="Assets">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Assets</h1>
+      <StudioShell role="manufacturer" subtitle="Asset upload">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Asset upload</h1>
         <div className="studio-info">
           {ctx.reason === 'admin_no_context'
             ? 'Admin support access. Select a manufacturer workspace from the admin panel first.'
@@ -61,8 +61,8 @@ export default async function ManufacturerAssetsPage() {
     : []
 
   return (
-    <StudioShell role="manufacturer" workspaceName={workspaceName} subtitle="Assets">
-      <h1 style={{ fontSize: '1.25rem', marginBottom: '0.4rem' }}>Assets</h1>
+    <StudioShell role="manufacturer" workspaceName={workspaceName} subtitle="Asset upload">
+      <h1 style={{ fontSize: '1.25rem', marginBottom: '0.4rem' }}>Asset upload</h1>
       <p style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', marginBottom: '1.5rem', maxWidth: 720 }}>
         Public images used in your System Cards and website package: logo, hero images, banners,
         product shots. Source documents (catalogues, data sheets, install guides) stay in{' '}
