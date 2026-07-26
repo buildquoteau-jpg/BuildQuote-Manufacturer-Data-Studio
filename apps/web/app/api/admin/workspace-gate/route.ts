@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { timingSafeEqual } from 'crypto'
 import { getStudioSession } from '@/lib/studio-auth/session'
 
-const GATE_PASSWORD = 'studiogate2026'
+export const runtime = 'nodejs'
+
 const COOKIE_NAME = 'admin_workspace_gate'
 const COOKIE_MAX_AGE = 60 * 60 * 8 // 8 hours
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function passwordMatches(candidate: string, expected: string): boolean {
+  const a = Buffer.from(candidate)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
 
 export async function POST(req: NextRequest) {
   const session = await getStudioSession()
@@ -11,14 +21,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const expected = process.env.ADMIN_WORKSPACE_GATE_PASSWORD
+  if (!expected) {
+    return NextResponse.json(
+      { error: 'Workspace gate is not configured (ADMIN_WORKSPACE_GATE_PASSWORD).' },
+      { status: 503 },
+    )
+  }
+
   const body = await req.json().catch(() => null)
   const { manufacturerId, password } = body ?? {}
 
-  if (!manufacturerId || typeof manufacturerId !== 'string') {
-    return NextResponse.json({ error: 'manufacturerId required' }, { status: 400 })
+  if (!manufacturerId || typeof manufacturerId !== 'string' || !UUID_RE.test(manufacturerId)) {
+    return NextResponse.json({ error: 'manufacturerId must be a UUID' }, { status: 400 })
   }
 
-  if (password !== GATE_PASSWORD) {
+  if (typeof password !== 'string' || !passwordMatches(password, expected)) {
     return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
   }
 
