@@ -89,6 +89,20 @@ async function findAuthUserIdByEmail(svc: ServiceClient, email: string): Promise
   return null
 }
 
+/**
+ * Deletes an auth user created moments ago by a provisioning step that then
+ * failed. Never throws — the caller is already returning an error — but a
+ * failed rollback leaves an orphaned login nobody knows about.
+ */
+async function rollbackAuthUser(svc: ServiceClient, authUserId: string): Promise<void> {
+  try {
+    const { error } = await svc.auth.admin.deleteUser(authUserId)
+    if (error) console.error(`[createManufacturerLogin] rollback left auth user ${authUserId} behind:`, error.message)
+  } catch (err) {
+    console.error(`[createManufacturerLogin] rollback left auth user ${authUserId} behind:`, err)
+  }
+}
+
 // ============================================================
 // listManufacturerLogins
 // ============================================================
@@ -283,7 +297,7 @@ export async function createManufacturerLogin(
     if (profileErr || !profileRow) {
       // Roll back the auth user we just created so we don't leave an orphan.
       if (createdAuthUser) {
-        await svc.auth.admin.deleteUser(authUserId!).catch(() => {})
+        await rollbackAuthUser(svc, authUserId!)
       }
       return { ok: false, error: `Could not create profile: ${profileErr?.message ?? 'unknown error'}` }
     }
@@ -309,8 +323,11 @@ export async function createManufacturerLogin(
     // If we created a brand-new account for this, clean it up to avoid a
     // profile/auth row with no workspace.
     if (createdAuthUser) {
-      await svc.from('data_studio_user_profiles').delete().eq('id', userProfileId!)
-      await svc.auth.admin.deleteUser(authUserId!).catch(() => {})
+      const { error: profileDeleteErr } = await svc.from('data_studio_user_profiles').delete().eq('id', userProfileId!)
+      if (profileDeleteErr) {
+        console.error(`[createManufacturerLogin] rollback left profile ${userProfileId} behind:`, profileDeleteErr.message)
+      }
+      await rollbackAuthUser(svc, authUserId!)
     }
     return { ok: false, error: `Could not create membership: ${membershipErr.message}` }
   }

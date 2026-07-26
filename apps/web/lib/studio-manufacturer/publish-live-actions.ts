@@ -85,11 +85,16 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
 
   // ── URL permanence: lock the slug on first publish ──
   if (!snap.stagedSystem.slug?.trim()) {
-    await supabase
+    const { error: slugErr } = await supabase
       .from('staged_systems')
       .update({ slug: snap.slug, updated_at: new Date().toISOString() })
       .eq('id', stagedSystemId)
       .or('slug.is.null,slug.eq.')
+    // Publishing under a slug the staged row doesn't record breaks URL
+    // permanence: the next publish would generate a different one.
+    if (slugErr) {
+      return { ok: false, error: `Could not lock the card URL (${slugErr.message}) — nothing was published.` }
+    }
   }
 
   // ── Auto-approve referenced gallery/hero assets (they are now public) ──
@@ -98,11 +103,12 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     ...(snap.stagedSystem.gallery_images ?? []).map((g) => g.asset_id),
   ].filter((id): id is string => !!id)
   if (referencedAssetIds.length) {
-    await supabase
+    const { error: approveErr } = await supabase
       .from('manufacturer_assets')
       .update({ approved_for_publication: true, updated_at: new Date().toISOString() })
       .in('id', referencedAssetIds)
       .eq('manufacturer_id', snap.manufacturerId)
+    if (approveErr) warnings.push(`Gallery images were not marked approved (${approveErr.message}).`)
   }
 
   let production: ReturnType<typeof createProductionServiceClient>
@@ -129,12 +135,17 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
   const previous = (latestRows ?? [])[0] as { version: string } | undefined
   const nextVersion = previous ? bumpMinor(previous.version) : '1.0'
 
-  const { data: cvRows } = await supabase
+  const { data: cvRows, error: cvReadErr } = await supabase
     .from('card_versions')
     .select('version')
     .eq('card_id', stagedSystemId)
     .order('version', { ascending: false })
     .limit(1)
+  // Numbering a snapshot off an unread history would silently collide with an
+  // existing version, so stop before writing anything to production.
+  if (cvReadErr) {
+    return { ok: false, error: `Could not read the card's version history: ${cvReadErr.message}` }
+  }
   const nextCvVersion = (((cvRows ?? [])[0] as { version: number } | undefined)?.version ?? 0) + 1
 
   // ── Staging history (card_versions) — insert-only, fails soft ──
@@ -209,7 +220,7 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     .eq('id', stagedSystemId)
   if (stateErr) warnings.push(`Publish state not saved (${stateErr.message}).`)
 
-  await supabase.from('card_publish_events').insert({
+  const { error: eventErr } = await supabase.from('card_publish_events').insert({
     card_id: stagedSystemId,
     event_type: 'publish',
     meta: {
@@ -218,9 +229,8 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
       missing_source_document: !snap.stagedSystem.source_document_id,
       warnings,
     },
-  }).then(({ error }) => {
-    if (error) warnings.push(`Publish event not logged (${error.message}).`)
   })
+  if (eventErr) warnings.push(`Publish event not logged (${eventErr.message}).`)
 
   revalidatePath('/manufacturer/review')
   revalidatePath('/manufacturer/cms')
