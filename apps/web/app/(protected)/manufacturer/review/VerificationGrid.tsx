@@ -2352,15 +2352,24 @@ function ExpandedCardView({
   // Swaps sort_order between two adjacent (within-category) components and
   // persists both — groupComponentsByCategory re-sorts by sort_order on render.
   function moveComponent(categoryItems: VerificationSystemComponent[], index: number, direction: -1 | 1) {
-    const other = categoryItems[index + direction]
-    const current = categoryItems[index]
-    if (!other || !current) return
-    const currentOrder = current.sort_order ?? index
-    const otherOrder = other.sort_order ?? index + direction
-    updateComponentLocal(current.id, { sort_order: otherOrder })
-    updateComponentLocal(other.id, { sort_order: currentOrder })
-    updateComponent(current.id, manufacturerId, { sort_order: otherOrder })
-    updateComponent(other.id, manufacturerId, { sort_order: currentOrder })
+    const target = index + direction
+    if (target < 0 || target >= categoryItems.length) return
+    // Most components in a category have never been reordered, so their
+    // sort_order is still null. Swapping only the two touched rows' values
+    // isn't enough — null sorts after any real number in groupComponentsByCategory,
+    // so the pair would jump to the front of the list instead of trading places.
+    // Re-derive sort_order for the whole category from its current display
+    // order first, then splice the move in, so every row ends up with a real,
+    // consistent index and later moves behave the same way.
+    const reordered = [...categoryItems]
+    const [moved] = reordered.splice(index, 1)
+    reordered.splice(target, 0, moved)
+    reordered.forEach((c, i) => {
+      if (c.sort_order !== i) {
+        updateComponentLocal(c.id, { sort_order: i })
+        updateComponent(c.id, manufacturerId, { sort_order: i })
+      }
+    })
   }
 
   const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
