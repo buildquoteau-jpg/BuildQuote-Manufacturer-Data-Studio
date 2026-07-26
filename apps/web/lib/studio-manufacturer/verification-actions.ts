@@ -111,8 +111,12 @@ export async function upsertFieldVerification(
 
   if (fvError) return { ok: false, error: fvError.message }
 
-  // If the user made an edit, patch staged_systems so the card renders correctly
-  if (status === 'edited' && verifiedValue !== null) {
+  // If the user made an edit, patch staged_systems so the card renders correctly.
+  // verifiedValue can legitimately be null here — clearing a field to empty is
+  // still an edit and must persist, not just log an audit row that reverts on
+  // reload. (Status other than 'edited' — e.g. 'flagged' — never reaches here
+  // regardless of value, which is the actual guard against unwanted writes.)
+  if (status === 'edited') {
     if ((STAGED_TEXT_FIELDS as readonly string[]).includes(fieldName)) {
       const { error } = await supabase
         .from('staged_systems')

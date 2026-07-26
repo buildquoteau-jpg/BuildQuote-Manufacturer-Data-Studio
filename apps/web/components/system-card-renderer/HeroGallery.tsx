@@ -40,7 +40,14 @@ const GRADIENT = 'linear-gradient(to top, rgba(15,30,45,0.88) 0%, rgba(15,30,45,
 const FALLBACK_BG = 'linear-gradient(135deg, #185D7A 0%, #0f3d52 100%)'
 
 export function HeroGallery({ images, fallbackHero, overlay, topRight }: Props) {
-  const slides = images.filter(img => img.url?.trim())
+  // The hero image is the fixed, croppable "front of card" image — when set,
+  // it's always slide 1, with the gallery as the extra photos after it (never
+  // the other way around: gallery no longer silently replaces the hero).
+  const heroUrl = fallbackHero?.url?.trim() || null
+  const galleryOnly = images.filter(img => img.url?.trim())
+  const slides: (HeroGalleryImage & { isHero?: boolean })[] = heroUrl
+    ? [{ url: heroUrl, alt: fallbackHero!.alt, isHero: true }, ...galleryOnly]
+    : galleryOnly
   const trackRef = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const [lightboxAt, setLightboxAt] = useState<number | null>(null)
@@ -55,10 +62,11 @@ export function HeroGallery({ images, fallbackHero, overlay, topRight }: Props) 
   // ── Zero/one image: the classic hero block, unchanged ──
   if (slides.length <= 1) {
     const single = slides[0] ?? null
-    const url = single?.url ?? fallbackHero?.url ?? null
-    const posX = single ? 50 : fallbackHero?.posX ?? 50
-    const posY = single ? 50 : fallbackHero?.posY ?? 50
-    const zoom = single ? 1 : Math.max(1, Math.min(3, fallbackHero?.zoom ?? 1))
+    const url = single?.url ?? null
+    const isHero = single?.isHero ?? false
+    const posX = isHero ? fallbackHero?.posX ?? 50 : 50
+    const posY = isHero ? fallbackHero?.posY ?? 50 : 50
+    const zoom = isHero ? Math.max(1, Math.min(3, fallbackHero?.zoom ?? 1)) : 1
     return (
       <div style={{
         position: 'relative',
@@ -122,7 +130,15 @@ export function HeroGallery({ images, fallbackHero, overlay, topRight }: Props) 
               loading={i === 0 ? 'eager' : 'lazy'}
               fetchPriority={i === 0 ? 'high' : 'auto'}
               draggable={false}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                // The hero slide keeps its crop position/zoom; gallery photos
+                // after it are always shown centred, uncropped.
+                objectPosition: img.isHero ? `${fallbackHero?.posX ?? 50}% ${fallbackHero?.posY ?? 50}%` : '50% 50%',
+                transform: img.isHero && (fallbackHero?.zoom ?? 1) > 1
+                  ? `scale(${Math.max(1, Math.min(3, fallbackHero!.zoom!))})` : undefined,
+                transformOrigin: img.isHero ? `${fallbackHero?.posX ?? 50}% ${fallbackHero?.posY ?? 50}%` : undefined,
+              }}
             />
           </button>
         ))}

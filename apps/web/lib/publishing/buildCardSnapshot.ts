@@ -135,15 +135,17 @@ export async function buildCardSnapshot(
     container = null
   }
 
-  // ── Cover + og:image. Cover is gallery[0] (fallback: single hero). The
-  // og:image must be crawler-safe, so prefer the stored jpg sibling. ──
+  // ── Cover + og:image. Cover is the hero image when set (fallback:
+  // gallery[0]) — the hero is the fixed, croppable "front of card" image;
+  // the gallery is the extra photos after it. The og:image must be
+  // crawler-safe, so prefer the stored jpg sibling. ──
   const gallery = system.gallery_images ?? []
   const cover = gallery[0] ?? null
-  const coverUrl = cover?.url ?? system.hero_image_url ?? null
+  const coverUrl = system.hero_image_url ?? cover?.url ?? null
   const ogImageUrl =
+    (looksLikeJpeg(system.hero_image_url) ? system.hero_image_url : null) ??
     cover?.og_jpg_url ??
-    (looksLikeJpeg(cover?.url) ? cover!.url : null) ??
-    (looksLikeJpeg(system.hero_image_url) ? system.hero_image_url : null)
+    (looksLikeJpeg(cover?.url) ? cover!.url : null)
   if (coverUrl && !ogImageUrl) {
     warnings.push('No JPEG cover available — share previews will use the branded fallback image.')
   }

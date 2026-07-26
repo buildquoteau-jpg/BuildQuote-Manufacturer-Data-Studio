@@ -277,7 +277,10 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
             </Field>
           </Section>
 
-          <Section title="Hero image">
+          <Section
+            title="Hero image"
+            hint="The fixed cover image — always shown first on the card, and used for tiles and SMS/WhatsApp/email share previews. Gallery below adds extra photos after it."
+          >
             <AssetSlotControl
               manufacturerId={manufacturerId}
               uploadAssetType="card_hero"
@@ -323,7 +326,9 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
 
           <Section
             title={`Gallery (${gallery.length}/10)`}
-            hint="Swipeable hero images on the live card. The first image is the cover — it appears on tiles and in SMS/WhatsApp/email share previews."
+            hint={system.hero_image_asset_id || system.hero_image_url
+              ? 'Extra swipeable photos shown after the hero image on the live card.'
+              : 'Swipeable images on the live card. With no hero image set above, the first one here is the cover — it appears on tiles and in SMS/WhatsApp/email share previews.'}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
               {gallery.map((img, i) => (
@@ -345,7 +350,7 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
                       }}
                       style={{ ...inputStyle, padding: '5px 8px', fontSize: '0.78rem' }}
                     />
-                    {i === 0 && (
+                    {i === 0 && !system.hero_image_asset_id && !system.hero_image_url && (
                       <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#f97316' }}>Cover / share image</span>
                     )}
                   </div>
