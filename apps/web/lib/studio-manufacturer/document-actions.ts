@@ -1,36 +1,10 @@
 'use server'
 
-import { createStudioServerClient } from '@/lib/supabase/server'
 import { createStudioServiceClient } from '@/lib/supabase/service'
-import { getStudioSession } from '@/lib/studio-auth/session'
 import { createPresignedUploadUrl, createPresignedDownloadUrl } from '@/lib/r2'
 import { randomUUID } from 'crypto'
-
-// ─── Auth gate ────────────────────────────────────────────────────────────────
-
-async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-
-  if (session.globalRole === 'buildquote_admin') {
-    return { allowed: true, userId: session.user!.id }
-  }
-
-  if (session.globalRole !== 'manufacturer_user') {
-    return { allowed: false, error: 'Access denied.' }
-  }
-
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) {
-    return { allowed: false, error: 'Not a member of this workspace.' }
-  }
-
-  return { allowed: true, userId: session.user!.id }
-}
+import { assertManufacturerAccess } from './access'
+import { makeStudioClient } from '@/lib/supabase/helpers'
 
 // ─── Allowed MIME types ───────────────────────────────────────────────────────
 
@@ -108,12 +82,9 @@ export async function recordDocumentUpload(
     ? `${publicUrlBase.replace(/\/$/, '')}/${input.storageKey}`
     : null
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const { data, error } = await supabase
     .from('source_documents')
@@ -156,12 +127,9 @@ export async function getDocumentDownloadUrl(
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const { data, error } = await supabase
     .from('source_documents')

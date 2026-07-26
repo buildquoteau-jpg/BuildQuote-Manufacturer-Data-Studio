@@ -5,7 +5,7 @@
 // roles on data_studio_manufacturers, source_documents, staged_systems, and
 // staged_components. No policy changes are needed for these reads.
 
-import { createStudioServerClient } from '@/lib/supabase/server'
+import { makeStudioClient } from '@/lib/supabase/helpers'
 
 // ============================================================
 // Types
@@ -58,12 +58,9 @@ export type AdminManufacturerDetailResult =
 // counts are computed in JS. Safe for local seed sizes.
 
 export async function getAdminManufacturerList(): Promise<AdminManufacturerListResult> {
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured — check env vars.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const [mfrsResult, docsResult, systemsResult, componentsResult] = await Promise.all([
     supabase
@@ -118,12 +115,9 @@ export async function getAdminManufacturerList(): Promise<AdminManufacturerListR
 export async function getAdminManufacturerDetail(
   manufacturerId: string,
 ): Promise<AdminManufacturerDetailResult> {
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured — check env vars.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const [mfrResult, docsResult, systemCountResult, componentCountResult] = await Promise.all([
     supabase

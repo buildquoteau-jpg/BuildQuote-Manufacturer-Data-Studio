@@ -27,12 +27,13 @@
  *   --name          Display name for the document (default: filename without extension)
  */
 
-import { readFileSync, statSync, mkdirSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, statSync, mkdirSync, writeFileSync } from 'fs'
 import { createRequire } from 'module'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { loadEnvFile, parseArgs } from './lib/cli.mjs'
 
 const require = createRequire(import.meta.url)
 // pdf-parse v2 exports a class, not a function. The v1 pattern of calling
@@ -46,45 +47,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
 
 // ─── Load .env.local ──────────────────────────────────────────────────────────
 
-function loadEnvFile(filepath) {
-  if (!existsSync(filepath)) return
-  const lines = readFileSync(filepath, 'utf8').split('\n')
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const eqIdx = trimmed.indexOf('=')
-    if (eqIdx < 0) continue
-    const key = trimmed.slice(0, eqIdx).trim()
-    // Value: strip inline comments and surrounding quotes
-    const rawVal = trimmed.slice(eqIdx + 1).split(' #')[0].trim()
-    const val = rawVal.replace(/^["']|["']$/g, '')
-    if (key && !(key in process.env)) {
-      process.env[key] = val
-    }
-  }
-}
-
 loadEnvFile(path.join(REPO_ROOT, '.env.local'))
-
-// ─── Arg parser ───────────────────────────────────────────────────────────────
-
-function parseArgs(argv) {
-  const args = {}
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2)
-      const next = argv[i + 1]
-      if (next !== undefined && !next.startsWith('--')) {
-        args[key] = next
-        i++
-      } else {
-        args[key] = true
-      }
-    }
-  }
-  return args
-}
 
 // ─── Chunking ─────────────────────────────────────────────────────────────────
 

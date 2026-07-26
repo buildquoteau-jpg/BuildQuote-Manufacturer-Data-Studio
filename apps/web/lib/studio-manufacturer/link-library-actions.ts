@@ -5,38 +5,17 @@
 // assertManufacturerAccess gate + result envelopes, session client so RLS stays in force.
 
 import { revalidatePath } from 'next/cache'
-import { createStudioServerClient } from '@/lib/supabase/server'
-import { getStudioSession } from '@/lib/studio-auth/session'
 import type { LinkLibraryEntry } from './link-library'
+import { assertManufacturerAccess } from './access'
+import {
+  makeStudioClient,
+  friendlyDbError as sharedFriendlyDbError,
+} from '@/lib/supabase/helpers'
 
-async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-  if (session.globalRole === 'buildquote_admin') return { allowed: true, userId: session.user!.id }
-  if (session.globalRole !== 'manufacturer_user') return { allowed: false, error: 'Access denied.' }
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) return { allowed: false, error: 'Not a member of this workspace.' }
-  return { allowed: true, userId: session.user!.id }
-}
+const MISSING_SCHEMA_MESSAGE =
+  'The link library table is not set up yet (migration 056 has not been applied).'
 
-function friendlyDbError(message: string): string {
-  if (/does not exist/i.test(message)) {
-    return 'The link library table is not set up yet (migration 056 has not been applied).'
-  }
-  return message
-}
-
-function makeClient() {
-  try {
-    return { ok: true as const, supabase: createStudioServerClient() }
-  } catch {
-    return { ok: false as const, error: 'Supabase client not configured.' }
-  }
-}
+const friendlyDbError = (message: string) => sharedFriendlyDbError(message, MISSING_SCHEMA_MESSAGE)
 
 // ─── addLinkLibraryEntry ────────────────────────────────────────────────────
 
@@ -65,7 +44,7 @@ export async function addLinkLibraryEntry(
     return { ok: false, error: 'Only http(s) URLs are supported.' }
   }
 
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return client
 
   const { data, error } = await client.supabase
@@ -113,7 +92,7 @@ export async function updateLinkLibraryEntry(
     return { ok: false, error: 'That is not a valid URL.' }
   }
 
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return client
 
   const { error } = await client.supabase
@@ -136,7 +115,7 @@ export async function deleteLinkLibraryEntry(
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return client
 
   const { error } = await client.supabase

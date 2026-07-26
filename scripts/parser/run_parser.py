@@ -51,6 +51,7 @@ from pathlib import Path
 # scripts/lib is importable regardless of cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.pipeline_report import PipelineReporter  # noqa: E402
+from lib.env import load_env_local  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from table_stitcher import stitch_split_tables  # noqa: E402
 
@@ -427,17 +428,7 @@ LINK_FIELDS = {
 # ============================================================
 
 def load_env(production=False):
-    try:
-        from dotenv import dotenv_values
-        repo_root = Path(__file__).parent.parent.parent
-        env_file = repo_root / ".env.local"
-        if not env_file.exists():
-            env_file = Path(".env.local")
-        for k, v in dotenv_values(str(env_file)).items():
-            if v is not None:
-                os.environ[k] = v  # always override so empty env vars don't block
-    except ImportError:
-        pass
+    load_env_local()
     if production:
         supabase_url = os.environ.get("PRODUCTION_SUPABASE_URL")
         service_key = os.environ.get("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY")

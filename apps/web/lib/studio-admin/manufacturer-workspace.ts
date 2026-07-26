@@ -13,6 +13,7 @@
 
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { makeStudioClient } from '@/lib/supabase/helpers'
 
 // ============================================================
 // Types
@@ -144,14 +145,6 @@ export type AdminDocumentDetailResult =
 // Internal helpers
 // ============================================================
 
-function makeClient() {
-  try {
-    return { ok: true as const, supabase: createStudioServerClient() }
-  } catch {
-    return { ok: false as const, error: 'Supabase client not configured — check env vars.' }
-  }
-}
-
 function groupByStatus(
   rows: Array<{ verification_status: string }>,
 ): StatusCount[] {
@@ -223,7 +216,7 @@ export async function getAdminManufacturerWorkspace(
   const authCheck = await assertAdminOrReviewer()
   if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const mfrResult = await fetchManufacturer(c.supabase, manufacturerId)
@@ -286,7 +279,7 @@ export async function getAdminManufacturerDocuments(
   const authCheck = await assertAdminOrReviewer()
   if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [mfrResult, docsResult] = await Promise.all([
@@ -332,7 +325,7 @@ export async function getAdminManufacturerReviewData(
   const authCheck = await assertAdminOrReviewer()
   if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [mfrResult, systemsResult, componentStatusResult, componentCountResult] =
@@ -412,7 +405,7 @@ export async function getAdminManufacturerPreviewData(
   const authCheck = await assertAdminOrReviewer()
   if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [mfrResult, systemsResult] = await Promise.all([
@@ -534,7 +527,7 @@ export async function getAdminManufacturerSystemCards(
   const authCheck = await assertAdminOrReviewer()
   if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [mfrResult, systemsResult] = await Promise.all([
@@ -653,7 +646,7 @@ export async function getAdminDocumentDetail(
   const authCheck = await assertAdminOrReviewer()
   if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [mfrResult, docResult] = await Promise.all([

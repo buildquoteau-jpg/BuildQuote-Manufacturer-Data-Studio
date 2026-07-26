@@ -46,6 +46,7 @@ from urllib.parse import urlparse
 # scripts/lib is importable regardless of cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.pipeline_report import PipelineReporter  # noqa: E402
+from lib.env import load_env_local  # noqa: E402
 
 # Module-level so the __main__ wrapper can report crashes that escape main().
 REPORTER = None
@@ -100,17 +101,7 @@ TARGET_FIELDS = ("hero_image_url", "website_url", "source_url", "install_guide_u
 # ============================================================
 
 def load_env():
-    try:
-        from dotenv import dotenv_values
-        repo_root = Path(__file__).parent.parent.parent
-        env_file = repo_root / ".env.local"
-        if not env_file.exists():
-            env_file = Path(".env.local")
-        for k, v in dotenv_values(str(env_file)).items():
-            if v is not None:
-                os.environ[k] = v
-    except ImportError:
-        pass
+    load_env_local()
     return (
         os.environ.get("OPENAI_API_KEY"),
         os.environ.get("NEXT_PUBLIC_SUPABASE_URL"),

@@ -7,6 +7,10 @@
 
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { createPresignedDownloadUrl } from '@/lib/r2'
+import {
+  isMissingSchemaError,
+  makeStudioClient,
+} from '@/lib/supabase/helpers'
 
 export { ASSET_TYPE_LABELS, ASSET_TYPES, assetTypeLabel } from './asset-types'
 
@@ -60,24 +64,13 @@ type AssetRow = {
   updated_at: string
 }
 
-// Postgres "relation does not exist" (42P01) / "column does not exist" (42703)
-// — migration 046 not applied to the live project yet.
-function isMissingSchemaError(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false
-  if (err.code === '42P01' || err.code === '42703') return true
-  return /does not exist/i.test(err.message ?? '')
-}
-
 export async function getManufacturerAssets(
   manufacturerId: string,
   opts: { includeArchived?: boolean } = {},
 ): Promise<ManufacturerAssetsResult> {
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured — check env vars.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   let query = supabase
     .from('manufacturer_assets')

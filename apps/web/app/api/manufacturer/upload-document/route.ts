@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { manufacturerMembershipError } from '@/lib/studio-auth/route-guards'
 import { createStudioServerClient } from '@/lib/supabase/server'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { uploadObjectToR2 } from '@/lib/r2'
 import { randomUUID } from 'crypto'
 
 export const runtime = 'nodejs'
@@ -16,26 +17,6 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   'application/vnd.ms-excel': 'xls',
   'image/png': 'png',
   'image/jpeg': 'jpg',
-}
-
-function makeR2Client(): S3Client {
-  const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID
-  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID
-  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY
-  console.log('[r2] accountId:', accountId ?? 'MISSING')
-  console.log('[r2] accessKeyId:', accessKeyId ? accessKeyId.slice(0, 6) + '...' : 'MISSING')
-  console.log('[r2] secretKey:', secretAccessKey ? secretAccessKey.slice(0, 4) + '...' : 'MISSING')
-  console.log('[r2] bucket:', process.env.CLOUDFLARE_R2_BUCKET_NAME ?? 'MISSING')
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error('Cloudflare R2 credentials not configured')
-  }
-  return new S3Client({
-    region: 'auto',
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-    requestChecksumCalculation: 'WHEN_REQUIRED',
-    responseChecksumValidation: 'WHEN_REQUIRED',
-  })
 }
 
 export async function POST(req: NextRequest) {
@@ -55,17 +36,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Verify membership
-  if (session.globalRole !== 'buildquote_admin') {
-    if (session.globalRole !== 'manufacturer_user') {
-      return NextResponse.json({ error: 'Access denied.' }, { status: 403 })
-    }
-    const hasMembership = session.memberships.some(
-      (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-    )
-    if (!hasMembership) {
-      return NextResponse.json({ error: 'Not a member of this workspace.' }, { status: 403 })
-    }
-  }
+  const membershipError = manufacturerMembershipError(session, manufacturerId)
+  if (membershipError) return membershipError
 
   // ── Validate file type ────────────────────────────────────────────────────
   // content-type header may include charset/boundary — strip parameters
@@ -96,17 +68,13 @@ export async function POST(req: NextRequest) {
 
   const storageKey = `manufacturer-uploads/${manufacturerId}/${randomUUID()}.${ext}`
 
-  try {
-    const client = makeR2Client()
-    await client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: storageKey,
-      Body: fileBuffer,
-      ContentType: mimeType,
-    }))
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `Storage upload failed: ${msg}` }, { status: 500 })
+  const upload = await uploadObjectToR2({
+    storageKey,
+    body: fileBuffer,
+    contentType: mimeType,
+  })
+  if (!upload.ok) {
+    return NextResponse.json({ error: `Storage upload failed: ${upload.error}` }, { status: 500 })
   }
 
   // ── Record in Supabase ────────────────────────────────────────────────────

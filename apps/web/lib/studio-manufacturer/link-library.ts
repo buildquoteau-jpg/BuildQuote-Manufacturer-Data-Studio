@@ -5,7 +5,10 @@
 // system cards' custom_document_links without retyping the same URL —
 // e.g. a decking calculator link shared across several product lines.
 
-import { createStudioServerClient } from '@/lib/supabase/server'
+import {
+  isMissingSchemaError,
+  makeStudioClient,
+} from '@/lib/supabase/helpers'
 
 export type LinkLibraryEntry = {
   id: string
@@ -25,22 +28,12 @@ type LinkLibraryRow = {
   created_at: string
 }
 
-// Postgres "relation does not exist" (42P01) — migration 056 not applied yet.
-function isMissingSchemaError(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false
-  if (err.code === '42P01' || err.code === '42703') return true
-  return /does not exist/i.test(err.message ?? '')
-}
-
 export async function getManufacturerLinkLibrary(
   manufacturerId: string,
 ): Promise<LinkLibraryResult> {
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured — check env vars.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const { data, error } = await supabase
     .from('manufacturer_link_library')

@@ -46,32 +46,11 @@ import type {
   PlannedParserFieldEvidence,
 } from '../lib/parser/map-to-staged'
 import type { DryRunReport } from '../lib/parser/dry-run-report'
+import { parseArgs } from './lib/cli.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
-
-// ----------------------------------------------------------
-// Arg parser
-// ----------------------------------------------------------
-
-function parseArgs(argv: string[]): Record<string, string | boolean> {
-  const args: Record<string, string | boolean> = {}
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2)
-      const next = argv[i + 1]
-      if (next !== undefined && !next.startsWith('--')) {
-        args[key] = next
-        i++
-      } else {
-        args[key] = true
-      }
-    }
-  }
-  return args
-}
 
 // ----------------------------------------------------------
 // Path helpers

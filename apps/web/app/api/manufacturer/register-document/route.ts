@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { manufacturerMembershipError } from '@/lib/studio-auth/route-guards'
 import { createStudioServerClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
@@ -25,15 +26,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (session.globalRole !== 'buildquote_admin') {
-    if (session.globalRole !== 'manufacturer_user') {
-      return NextResponse.json({ error: 'Access denied.' }, { status: 403 })
-    }
-    const hasMembership = session.memberships.some(
-      (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-    )
-    if (!hasMembership) {
-      return NextResponse.json({ error: 'Not a member of this workspace.' }, { status: 403 })
-    }
+    const membershipError = manufacturerMembershipError(session, manufacturerId)
+    if (membershipError) return membershipError
     // Ensure the storageKey belongs to this manufacturer to prevent cross-tenant registration
     if (!storageKey.startsWith(`manufacturer-uploads/${manufacturerId}/`)) {
       return NextResponse.json({ error: 'Invalid storage key.' }, { status: 403 })
