@@ -1,15 +1,13 @@
 'use client'
 
-// Hybrid publishing (Library V7): CMS-style card editor.
+// Hybrid publishing (Library V7): "Asset picker" — CMS-style card editor for
+// everything except the actual publish step, which lives on its own
+// /manufacturer/publish tab.
 //
 // Left column: editable sections. Every change autosaves to the Draft
 // (debounced, via the same server actions as the Verify-systems grid so the
 // field_verifications audit trail is preserved). Right column: live preview
 // through the master System Card renderer — exactly what publishes.
-//
-// Publish is deliberate: the live card only changes when the Publish button
-// calls publishCardLive, which snapshots the draft into the production
-// published_cards table and refreshes the buildquote.com.au pages.
 //
 // Structured sub-records (profiles, components, colours) are edited in the
 // existing Verify-systems grid for now — this editor links across. The two
@@ -25,7 +23,6 @@ import {
   updateSystemHeroAsset,
   updateSystemImageCrop,
 } from '@/lib/studio-manufacturer/verification-actions'
-import { publishCardLive } from '@/lib/studio-manufacturer/publish-live-actions'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
 import { SystemCardRenderer } from '@/components/system-card-renderer/SystemCardRenderer'
 import type { VerificationSystem, ManufacturerInfo } from '@/lib/studio-manufacturer/workspace'
@@ -68,12 +65,6 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
   const [linkLibrary, setLinkLibrary] = useState(initialLinkLibrary)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [publishing, setPublishing] = useState(false)
-  const [publishResult, setPublishResult] = useState<
-    | { ok: true; liveUrl: string; version: string; warnings: string[] }
-    | { ok: false; error: string }
-    | null
-  >(null)
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
   useEffect(() => {
@@ -174,18 +165,6 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
     : null
   const cropPreviewUrl = linkedHeroAsset ? `/api/assets/${linkedHeroAsset.id}` : system.hero_image_url
 
-  // ── Publish ────────────────────────────────────────────────────────────────
-  async function handlePublish() {
-    setPublishing(true)
-    setPublishResult(null)
-    try {
-      const res = await publishCardLive(system.id)
-      setPublishResult(res)
-    } finally {
-      setPublishing(false)
-    }
-  }
-
   // ── Preview data ───────────────────────────────────────────────────────────
   // Gallery URLs stored on older drafts can be expired presigned links; the
   // preview renders via the permanent asset route (same rewrite publish does).
@@ -198,8 +177,6 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
     }
     return adapted
   }, [system, manufacturer])
-
-  const publishStatus = system.publish_status ?? 'draft'
 
   return (
     <div>
@@ -216,41 +193,16 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
             : saveState === 'saved' ? 'Saved · just now'
             : saveState === 'error' ? 'Save failed' : ''}
         </span>
-        <button
-          type="button"
-          onClick={handlePublish}
-          disabled={publishing}
-          style={{
-            padding: '9px 22px', borderRadius: 8, border: 'none',
-            background: '#16a34a', color: '#fff', fontSize: '0.86rem', fontWeight: 800,
-            cursor: publishing ? 'default' : 'pointer', opacity: publishing ? 0.6 : 1,
-          }}
-        >
-          {publishing ? 'Publishing…'
-            : publishStatus === 'draft' ? 'Publish to library'
-            : 'Publish update'}
-        </button>
+        <Link href="/manufacturer/publish" style={{
+          padding: '9px 22px', borderRadius: 8, border: 'none',
+          background: '#16a34a', color: '#fff', fontSize: '0.86rem', fontWeight: 800,
+          textDecoration: 'none', display: 'inline-block',
+        }}>
+          Go to Publish →
+        </Link>
       </div>
 
       {saveError && <div className="studio-warn" style={{ marginBottom: '1rem' }}>Autosave failed: {saveError}</div>}
-
-      {publishResult && (
-        publishResult.ok ? (
-          <div className="studio-info" style={{ marginBottom: '1rem' }}>
-            Published v{publishResult.version} —{' '}
-            <a href={publishResult.liveUrl} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700 }}>
-              view the live card ↗
-            </a>
-            {publishResult.warnings.length > 0 && (
-              <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>
-                {publishResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
-              </ul>
-            )}
-          </div>
-        ) : (
-          <div className="studio-warn" style={{ marginBottom: '1rem' }}>Publish failed: {publishResult.error}</div>
-        )
-      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) minmax(340px, 480px)', gap: '1.5rem', alignItems: 'start' }}>
 

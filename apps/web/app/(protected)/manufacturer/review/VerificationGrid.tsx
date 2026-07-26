@@ -2336,8 +2336,10 @@ function ExpandedCardView({
 
     function onMouseMove(ev: MouseEvent) {
       if (!dragging.current) return
+      // Preview panel is visually on the right (row-reverse layout below), so
+      // dragging right shrinks it rather than growing it.
       const delta = ev.clientX - dragStart.current.x
-      const next = Math.min(680, Math.max(280, dragStart.current.width + delta))
+      const next = Math.min(680, Math.max(280, dragStart.current.width - delta))
       setLeftWidth(next)
     }
     function onMouseUp() {
@@ -2482,7 +2484,7 @@ function ExpandedCardView({
     })
   }
 
-  // Hero image is edited in Assets & Publish (CmsEditor) now — this view is
+  // Hero image is edited in Asset picker (CmsEditor) now — this view is
   // read-only preview only. Prefer the linked asset's live URL over
   // hero_image_url, since that field can hold an expired presigned R2 link.
   const linkedHeroAsset: SlotAsset | null = system.hero_image_asset_id
@@ -2554,7 +2556,7 @@ function ExpandedCardView({
           full-screen. !important beats the inline resize styles. */}
       <style>{`
         @media (max-width: 899px) {
-          .vsplit { flex-direction: column; }
+          .vsplit { flex-direction: column !important; }
           .vsplit-left {
             flex: 0 0 auto !important;
             width: auto !important;
@@ -2604,9 +2606,12 @@ function ExpandedCardView({
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#9ca3af', padding: '4px', lineHeight: 1 }}>×</button>
         </div>
 
-        {/* Body — two columns (resizable), stacks vertically below 900px */}
-        <div className="vsplit" style={{ flex: 1, display: 'flex', gap: 0, overflow: 'hidden' }}>
-          {/* Left: system card preview */}
+        {/* Body — two columns (resizable), stacks vertically below 900px.
+            row-reverse puts the preview on the right and the editor on the
+            left (matching the Asset picker tab's layout) while keeping the
+            preview first in DOM so it still stacks on top on mobile. */}
+        <div className="vsplit" style={{ flex: 1, display: 'flex', flexDirection: 'row-reverse', gap: 0, overflow: 'hidden' }}>
+          {/* Preview — visually on the right at desktop widths */}
           <div className="vsplit-left" style={{ flex: `0 0 ${leftWidth}px`, minWidth: '280px', maxWidth: '680px', overflowY: 'auto', padding: '20px', background: '#f0f4f8' }}>
             <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
               Final card preview
@@ -2642,7 +2647,7 @@ function ExpandedCardView({
             </div>
           </div>
 
-          {/* Right: field editor */}
+          {/* Editor — visually on the left at desktop widths */}
           <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '20px' }}>
 
             {/* Verified banner — prominent CTA at top */}
@@ -2696,51 +2701,11 @@ function ExpandedCardView({
               <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 10px', lineHeight: 1.6 }}>
                 Hero image (upload, import, crop position) is edited in{' '}
                 <Link href={`/manufacturer/cms/${system.id}`} style={{ fontWeight: 700, color: '#185D7A' }}>
-                  Assets &amp; Publish
+                  Asset picker
                 </Link>{' '}
                 — changes made there flow straight back here.
               </p>
               {system.source_url && <FieldRow {...fieldRowProps('Product page URL', 'source_url', { isUrl: true })} />}
-            </FieldSection>
-
-            {/* Technical attributes */}
-            <FieldSection label="Technical attributes">
-              <BoolToggleFieldRow
-                label="Australian made" fieldName="australian_made"
-                currentValue={system.australian_made}
-                fieldState={fieldStates['australian_made'] ?? null}
-                systemId={system.id} manufacturerId={manufacturerId}
-                onStateChange={handleFieldChange}
-              />
-              <BoolToggleFieldRow
-                label="Moisture resistant" fieldName="moisture_resistant"
-                currentValue={system.moisture_resistant}
-                fieldState={fieldStates['moisture_resistant'] ?? null}
-                systemId={system.id} manufacturerId={manufacturerId}
-                onStateChange={handleFieldChange}
-              />
-              <BoolToggleFieldRow
-                label="Acoustic rated" fieldName="acoustic_rating"
-                currentValue={system.acoustic_rating ? true : null}
-                fieldState={fieldStates['acoustic_rating'] ?? null}
-                systemId={system.id} manufacturerId={manufacturerId}
-                onStateChange={handleFieldChange}
-              />
-              <BALFieldRow
-                fieldName="bal_rating"
-                currentValue={system.bal_rating}
-                fieldState={fieldStates['bal_rating'] ?? null}
-                systemId={system.id} manufacturerId={manufacturerId}
-                onStateChange={handleFieldChange}
-              />
-              {system.fire_rating     && <FieldRow {...fieldRowProps('Fire rating (FRL)', 'fire_rating')} />}
-              {system.structural_grade && <FieldRow {...fieldRowProps('Structural grade', 'structural_grade')} />}
-              <CustomAttributesEditor
-                attributes={Array.isArray(system.custom_technical_attributes) ? system.custom_technical_attributes : []}
-                systemId={system.id}
-                manufacturerId={manufacturerId}
-                onUpdated={(attrs) => setSystem(prev => ({ ...prev, custom_technical_attributes: attrs.length > 0 ? attrs : null }))}
-              />
             </FieldSection>
 
             {/* Profiles */}
@@ -2831,6 +2796,47 @@ function ExpandedCardView({
                   onAdded={addComponentLocal} onCancel={() => setShowAddComponent(false)}
                 />
               )}
+            </FieldSection>
+
+            {/* Technical attributes — placed after profiles/colours/components,
+                matching the order these appear on the public card. */}
+            <FieldSection label="Technical attributes">
+              <BoolToggleFieldRow
+                label="Australian made" fieldName="australian_made"
+                currentValue={system.australian_made}
+                fieldState={fieldStates['australian_made'] ?? null}
+                systemId={system.id} manufacturerId={manufacturerId}
+                onStateChange={handleFieldChange}
+              />
+              <BoolToggleFieldRow
+                label="Moisture resistant" fieldName="moisture_resistant"
+                currentValue={system.moisture_resistant}
+                fieldState={fieldStates['moisture_resistant'] ?? null}
+                systemId={system.id} manufacturerId={manufacturerId}
+                onStateChange={handleFieldChange}
+              />
+              <BoolToggleFieldRow
+                label="Acoustic rated" fieldName="acoustic_rating"
+                currentValue={system.acoustic_rating ? true : null}
+                fieldState={fieldStates['acoustic_rating'] ?? null}
+                systemId={system.id} manufacturerId={manufacturerId}
+                onStateChange={handleFieldChange}
+              />
+              <BALFieldRow
+                fieldName="bal_rating"
+                currentValue={system.bal_rating}
+                fieldState={fieldStates['bal_rating'] ?? null}
+                systemId={system.id} manufacturerId={manufacturerId}
+                onStateChange={handleFieldChange}
+              />
+              {system.fire_rating     && <FieldRow {...fieldRowProps('Fire rating (FRL)', 'fire_rating')} />}
+              {system.structural_grade && <FieldRow {...fieldRowProps('Structural grade', 'structural_grade')} />}
+              <CustomAttributesEditor
+                attributes={Array.isArray(system.custom_technical_attributes) ? system.custom_technical_attributes : []}
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                onUpdated={(attrs) => setSystem(prev => ({ ...prev, custom_technical_attributes: attrs.length > 0 ? attrs : null }))}
+              />
             </FieldSection>
 
             {/* Notes */}

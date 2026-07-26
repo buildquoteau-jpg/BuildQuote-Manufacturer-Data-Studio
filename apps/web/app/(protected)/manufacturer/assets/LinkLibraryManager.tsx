@@ -65,7 +65,7 @@ export function LinkLibraryManager({
         Reusable named link buttons — a calculator, a warranty page, a sustainability report — that
         you can attach to any System Card from the "Additional documents" section on{' '}
         <a href="/manufacturer/review" style={{ color: 'var(--ds-teal)' }}>Verify systems</a> or{' '}
-        <a href="/manufacturer/cms" style={{ color: 'var(--ds-teal)' }}>Assets &amp; Publish</a>{' '}
+        <a href="/manufacturer/cms" style={{ color: 'var(--ds-teal)' }}>Asset picker</a>{' '}
         without retyping the URL each time.
       </p>
 

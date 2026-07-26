@@ -6,11 +6,12 @@ import { CmsCreateCardButton } from './CmsCreateCardButton'
 
 export const dynamic = 'force-dynamic'
 
-// Hybrid publishing (Library V7): CMS-style card manager. Runs alongside the
-// existing "Verify systems" grid (manufacturer/review) so the two editing
-// experiences can be compared — this one is draft/publish-centric: every edit
-// autosaves to the Draft, and pressing Publish pushes the card live to
-// buildquote.com.au/library instantly.
+// Hybrid publishing (Library V7): "Asset picker" — CMS-style card manager for
+// everything except the actual publish step, which lives on its own
+// /manufacturer/publish tab. Runs alongside the existing "Verify systems"
+// grid (manufacturer/review) so the two editing experiences can be compared.
+// Every edit here autosaves to the Draft; the live card never changes until
+// a card is published from the Publish tab.
 
 const V6_ORIGIN = process.env.BUILDQUOTE_PUBLIC_ORIGIN || 'https://buildquote.com.au'
 
@@ -34,8 +35,8 @@ export default async function CmsListPage() {
 
   if (!ctx.found) {
     return (
-      <StudioShell role="manufacturer" subtitle="Assets & Publish">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Assets &amp; Publish</h1>
+      <StudioShell role="manufacturer" subtitle="Asset picker">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Asset picker</h1>
         <div className="studio-info">
           {ctx.reason === 'admin_no_context'
             ? 'Admin support access — select a manufacturer workspace from the admin panel first.'
@@ -48,8 +49,8 @@ export default async function CmsListPage() {
   const result = await getManufacturerVerificationData(ctx.manufacturerId)
   if (!result.ok) {
     return (
-      <StudioShell role="manufacturer" subtitle="Assets & Publish">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Assets &amp; Publish</h1>
+      <StudioShell role="manufacturer" subtitle="Asset picker">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Asset picker</h1>
         <div className="studio-warn">Could not load cards: {result.error}</div>
       </StudioShell>
     )
@@ -58,13 +59,14 @@ export default async function CmsListPage() {
   const { manufacturer, systems } = result
 
   return (
-    <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Assets & Publish`}>
+    <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Asset picker`}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Assets &amp; Publish</h1>
+          <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Asset picker</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0.5rem 0 0', lineHeight: 1.65, maxWidth: 640 }}>
-            Edit a card and it autosaves as a <strong>Draft</strong> — the live card never changes until
-            you press <strong>Publish</strong>, which updates buildquote.com.au immediately.
+            Edit a card here and it autosaves as a <strong>Draft</strong> — the live card never
+            changes until you publish it from the{' '}
+            <Link href="/manufacturer/publish" style={{ fontWeight: 700 }}>Publish</Link> tab.
           </p>
         </div>
         <CmsCreateCardButton manufacturerId={ctx.manufacturerId} />
