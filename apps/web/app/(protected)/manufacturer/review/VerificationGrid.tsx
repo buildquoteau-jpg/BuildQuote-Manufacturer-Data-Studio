@@ -27,6 +27,7 @@ import {
   unlinkComponent,
   getManufacturerComponents,
   linkExistingComponent,
+  getManufacturerColours,
   setInstallGuideUrls,
   setCustomDocumentLinks,
   setCustomAttributes,
@@ -391,6 +392,66 @@ function FieldRow({
           </button>
         </div>
       )}
+      {errorMsg && <div style={{ marginTop: '4px', fontSize: '11px', color: '#dc2626' }}>{errorMsg}</div>}
+    </div>
+  )
+}
+
+// ─── Description editor ────────────────────────────────────────────────────────
+// A plain always-editable, autosaving textarea — unlike FieldRow's
+// approve/edit/flag ceremony (built for verifying short parser-extracted
+// facts), free-text description just needs to be typed and it saves. The old
+// FieldRow version required clicking a small "Edit" action to reveal the
+// textarea and a separate "Save" button below it; closing the card without
+// spotting that button discarded the edit with no warning, which is exactly
+// what "still shows old data after saving" turned out to be.
+
+function DescriptionEditor({
+  systemId, manufacturerId, value, onSaved,
+}: {
+  systemId: string
+  manufacturerId: string
+  value: string
+  onSaved: (value: string) => void
+}) {
+  const [text, setText] = useState(value)
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+
+  function handleChange(next: string) {
+    setText(next)
+    setStatus('saving')
+    setErrorMsg(null)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(async () => {
+      const trimmed = next.trim()
+      const res = await upsertFieldVerification(systemId, manufacturerId, 'description', null, trimmed || null, 'edited', null)
+      if (!res.ok) { setStatus('error'); setErrorMsg(res.error); return }
+      setStatus('saved')
+      onSaved(trimmed)
+    }, 800)
+  }
+
+  return (
+    <div style={{ borderRadius: '8px', border: '1px solid #d1d5db', padding: '10px 12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Description
+        </span>
+        <span style={{ fontSize: '11px', color: status === 'error' ? '#dc2626' : '#9ca3af' }}>
+          {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : status === 'error' ? 'Save failed' : ''}
+        </span>
+      </div>
+      <textarea
+        value={text}
+        onChange={e => handleChange(e.target.value)}
+        placeholder="Enter a description…"
+        rows={5}
+        style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4, resize: 'vertical' }}
+      />
       {errorMsg && <div style={{ marginTop: '4px', fontSize: '11px', color: '#dc2626' }}>{errorMsg}</div>}
     </div>
   )
@@ -1541,20 +1602,56 @@ function ColourItem({
 
 // ─── Add colour form ──────────────────────────────────────────────────────────
 
+type ExistingColour = { id: string; colour_name: string; sku_suffix: string | null; image_url: string | null }
+
 function AddColourForm({
-  systemId, manufacturerId, onAdded, onCancel,
+  systemId, manufacturerId, alreadyLinkedNames, onAdded, onCancel,
 }: {
   systemId: string
   manufacturerId: string
+  alreadyLinkedNames: Set<string>
   onAdded: (colour: VerificationSystemColour) => void
   onCancel: () => void
 }) {
-  const [name,    setName]   = useState('')
-  const [suffix,  setSuffix] = useState('')
-  const [pending, startTransition] = useTransition()
-  const [err,     setErr]    = useState<string | null>(null)
+  const [mode,     setMode]     = useState<'search' | 'create'>('search')
+  const [query,    setQuery]    = useState('')
+  const [existing, setExisting] = useState<ExistingColour[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [selected, setSelected] = useState<ExistingColour | null>(null)
+  const [pending,  startTransition] = useTransition()
+  const [err,      setErr]      = useState<string | null>(null)
 
-  function handleAdd() {
+  // New-colour fields
+  const [name,   setName]   = useState('')
+  const [suffix, setSuffix] = useState('')
+
+  // Load this manufacturer's previously-saved colours on mount
+  useState(() => {
+    getManufacturerColours(manufacturerId).then(res => {
+      if (res.ok) setExisting(res.colours)
+      setLoading(false)
+    })
+  })
+
+  const filtered = existing.filter(c => {
+    if (alreadyLinkedNames.has(c.colour_name.trim().toLowerCase())) return false
+    if (!query.trim()) return true
+    return c.colour_name.toLowerCase().includes(query.toLowerCase())
+  })
+
+  function handleLink() {
+    if (!selected) return
+    setErr(null)
+    startTransition(async () => {
+      const res = await addMissingColour(systemId, manufacturerId, {
+        colour_name: selected.colour_name, sku_suffix: selected.sku_suffix ?? undefined, image_url: selected.image_url,
+      })
+      if (!res.ok) { setErr(res.error); return }
+      onAdded({ id: res.id, colour_name: selected.colour_name, sku_suffix: selected.sku_suffix, image_url: selected.image_url, is_stocked: true })
+    })
+  }
+
+  function handleCreate() {
     if (!name.trim()) return
     setErr(null)
     startTransition(async () => {
@@ -1565,21 +1662,93 @@ function AddColourForm({
   }
 
   return (
-    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#fffbeb', border: '1.5px solid #d97706', borderRadius: '8px', padding: '6px 10px' }}>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Colour / finish name *"
-        style={{ flex: 1, padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
-        autoFocus />
-      <input value={suffix} onChange={e => setSuffix(e.target.value)} placeholder="SKU suffix"
-        style={{ width: '90px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace' }} />
-      {err && <span style={{ fontSize: '11px', color: '#dc2626' }}>{err}</span>}
-      <button type="button" onClick={handleAdd} disabled={pending || !name.trim()}
-        style={{ padding: '4px 12px', borderRadius: '5px', background: '#d97706', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !name.trim() ? 0.5 : 1 }}>
-        {pending ? '…' : 'Add'}
-      </button>
-      <button type="button" onClick={onCancel}
-        style={{ padding: '4px 8px', borderRadius: '5px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
-        ×
-      </button>
+    <div style={{ padding: '10px', background: '#fffbeb', border: '1.5px solid #d97706', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Add colour / finish
+        </div>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button type="button" onClick={() => setMode('search')}
+            style={{ padding: '3px 10px', borderRadius: '5px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: mode === 'search' ? '#d97706' : '#fff', color: mode === 'search' ? '#fff' : '#6b7280', border: mode === 'search' ? 'none' : '1px solid #d1d5db' }}>
+            Choose existing
+          </button>
+          <button type="button" onClick={() => setMode('create')}
+            style={{ padding: '3px 10px', borderRadius: '5px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: mode === 'create' ? '#d97706' : '#fff', color: mode === 'create' ? '#fff' : '#6b7280', border: mode === 'create' ? 'none' : '1px solid #d1d5db' }}>
+            Create new
+          </button>
+        </div>
+      </div>
+
+      {mode === 'search' ? (
+        <>
+          <input
+            value={query} onChange={e => { setQuery(e.target.value); setSelected(null) }}
+            placeholder="Search colours you've saved before…"
+            autoFocus
+            style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', border: '1.5px solid #d97706', borderRadius: '6px', fontSize: '13px', fontFamily: 'inherit', marginBottom: '8px', outline: 'none' }}
+          />
+          {loading ? (
+            <div style={{ fontSize: '12px', color: '#9ca3af', padding: '6px 0' }}>Loading colours…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#9ca3af', padding: '6px 0' }}>
+              {query ? 'No match — ' : existing.length === 0 ? "You haven't saved any colours yet — " : 'All matching colours already added — '}
+              <button type="button" onClick={() => setMode('create')}
+                style={{ background: 'none', border: 'none', color: '#d97706', fontWeight: 700, cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+                create a new one instead
+              </button>
+            </div>
+          ) : (
+            <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+              {filtered.map(c => (
+                <button key={c.id} type="button" onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    textAlign: 'left', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer',
+                    border: `1.5px solid ${selected?.id === c.id ? '#d97706' : '#e5e7eb'}`,
+                    background: selected?.id === c.id ? '#fef3c7' : '#fff',
+                    transition: 'all 0.1s',
+                  }}>
+                  {c.image_url && (
+                    <span style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, background: `url(${c.image_url}) center/cover`, border: '1px solid rgba(0,0,0,0.15)' }} />
+                  )}
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{c.colour_name}</div>
+                    {c.sku_suffix && <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '1px', fontFamily: 'monospace' }}>{c.sku_suffix}</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {err && <div style={{ fontSize: '11px', color: '#dc2626', marginBottom: '6px' }}>{err}</div>}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button type="button" onClick={handleLink} disabled={pending || !selected}
+              style={{ padding: '5px 14px', borderRadius: '6px', background: '#d97706', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !selected ? 0.5 : 1 }}>
+              {pending ? 'Adding…' : 'Add to this system'}
+            </button>
+            <button type="button" onClick={onCancel}
+              style={{ padding: '5px 12px', borderRadius: '6px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Colour / finish name *"
+            style={{ flex: 1, minWidth: '160px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
+            autoFocus />
+          <input value={suffix} onChange={e => setSuffix(e.target.value)} placeholder="SKU suffix"
+            style={{ width: '90px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace' }} />
+          {err && <span style={{ fontSize: '11px', color: '#dc2626' }}>{err}</span>}
+          <button type="button" onClick={handleCreate} disabled={pending || !name.trim()}
+            style={{ padding: '4px 12px', borderRadius: '5px', background: '#d97706', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: pending || !name.trim() ? 0.5 : 1 }}>
+            {pending ? '…' : 'Add'}
+          </button>
+          <button type="button" onClick={onCancel}
+            style={{ padding: '4px 8px', borderRadius: '5px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -2511,7 +2680,15 @@ function ExpandedCardView({
               <FieldRow {...fieldRowProps('Category', 'category')} />
               {system.subcategory && <FieldRow {...fieldRowProps('Subcategory', 'subcategory')} />}
               {system.product_code && <FieldRow {...fieldRowProps('Product code', 'product_code')} />}
-              <FieldRow {...fieldRowProps('Description', 'description')} multiline />
+              <DescriptionEditor
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                value={system.description ?? ''}
+                onSaved={value => {
+                  setSystem(prev => ({ ...prev, description: value }))
+                  onSystemFieldUpdate(system.id, 'description', value)
+                }}
+              />
             </FieldSection>
 
             {/* Images & resources */}
@@ -2611,7 +2788,11 @@ function ExpandedCardView({
                 <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>No colours recorded.</div>
               )}
               {showAddColour && (
-                <AddColourForm systemId={system.id} manufacturerId={manufacturerId} onAdded={addColourLocal} onCancel={() => setShowAddColour(false)} />
+                <AddColourForm
+                  systemId={system.id} manufacturerId={manufacturerId}
+                  alreadyLinkedNames={new Set(system.colours.map(c => c.colour_name.trim().toLowerCase()))}
+                  onAdded={addColourLocal} onCancel={() => setShowAddColour(false)}
+                />
               )}
             </FieldSection>
 

@@ -510,7 +510,7 @@ export async function updateProfile(
 export async function addMissingColour(
   systemId: string,
   manufacturerId: string,
-  data: { colour_name: string; sku_suffix?: string },
+  data: { colour_name: string; sku_suffix?: string; image_url?: string | null },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
@@ -522,6 +522,7 @@ export async function addMissingColour(
       staged_system_id: systemId,
       colour_name: data.colour_name.trim(),
       sku_suffix: data.sku_suffix?.trim() || null,
+      image_url: data.image_url?.trim() || null,
       is_stocked: true,
       verification_status: 'pending_review',
     })
@@ -572,6 +573,45 @@ export async function getManufacturerComponents(
 
   if (error) return { ok: false, error: error.message }
   return { ok: true, components: (data ?? []) as { id: string; name: string; sku: string | null; description: string | null }[] }
+}
+
+// ─── getManufacturerColours ───────────────────────────────────────────────────
+// Distinct colours/finishes already saved on any of this manufacturer's other
+// systems, for the "choose from existing" picker on Verify systems. Unlike
+// components, colours have no shared manufacturer-level table to link a
+// foreign key to (staged_system_colours only has staged_system_id) — so
+// "linking" here means copying the matched row's name/sku/swatch onto a new
+// row for the current system via addMissingColour, not a real FK reuse.
+
+export async function getManufacturerColours(
+  manufacturerId: string,
+): Promise<
+  | { ok: true; colours: { id: string; colour_name: string; sku_suffix: string | null; image_url: string | null }[] }
+  | { ok: false; error: string }
+> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data, error } = await supabase
+    .from('staged_system_colours')
+    .select('id, colour_name, sku_suffix, image_url, staged_systems!inner(manufacturer_id)')
+    .eq('staged_systems.manufacturer_id', manufacturerId)
+    .order('colour_name')
+
+  if (error) return { ok: false, error: error.message }
+
+  // Dedupe by name — the same colour is typically saved on many systems, and
+  // the picker should show each once (preferring an entry that has a swatch).
+  const byName = new Map<string, { id: string; colour_name: string; sku_suffix: string | null; image_url: string | null }>()
+  for (const row of (data ?? []) as any[]) {
+    const key = row.colour_name.trim().toLowerCase()
+    const existing = byName.get(key)
+    if (!existing || (!existing.image_url && row.image_url)) {
+      byName.set(key, { id: row.id, colour_name: row.colour_name, sku_suffix: row.sku_suffix, image_url: row.image_url })
+    }
+  }
+  return { ok: true, colours: Array.from(byName.values()) }
 }
 
 // ─── linkExistingComponent ────────────────────────────────────────────────────
