@@ -534,7 +534,7 @@ export async function updateColour(
   colourId: string,
   systemId: string,
   manufacturerId: string,
-  data: { colour_name?: string; sku_suffix?: string | null },
+  data: { colour_name?: string; sku_suffix?: string | null; image_url?: string | null },
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }

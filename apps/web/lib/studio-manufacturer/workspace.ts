@@ -594,6 +594,7 @@ export type VerificationSystemColour = {
   id: string
   colour_name: string
   sku_suffix: string | null
+  image_url: string | null
   is_stocked: boolean | null
 }
 
@@ -747,7 +748,7 @@ export async function getManufacturerVerificationData(
       .order('sort_order'),
     c.supabase
       .from('staged_system_colours')
-      .select('id, staged_system_id, colour_name, sku_suffix, is_stocked')
+      .select('id, staged_system_id, colour_name, sku_suffix, image_url, is_stocked')
       .in('staged_system_id', systemIds)
       .order('sort_order'),
     c.supabase

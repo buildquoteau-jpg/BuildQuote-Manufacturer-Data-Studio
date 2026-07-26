@@ -1502,22 +1502,26 @@ function AddProfileForm({
 // ─── Colour item ──────────────────────────────────────────────────────────────
 
 function ColourItem({
-  colour, systemId, manufacturerId, onUpdated, onRemoved,
+  colour, systemId, manufacturerId, assets, onUpdated, onRemoved,
 }: {
   colour: VerificationSystemColour
   systemId: string
   manufacturerId: string
+  assets: ManufacturerAsset[]
   onUpdated: (id: string, data: Partial<VerificationSystemColour>) => void
   onRemoved: (id: string) => void
 }) {
   const [editing, setEditing]   = useState(false)
   const [name,    setName]      = useState(colour.colour_name)
   const [suffix,  setSuffix]    = useState(colour.sku_suffix ?? '')
+  const [imageUrl, setImageUrl] = useState(colour.image_url ?? '')
   const [pending, startTransition] = useTransition()
   const [err,     setErr]       = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [delPending, startDelTransition] = useTransition()
   const [delErr, setDelErr] = useState<string | null>(null)
+
+  const swatchAssets = assets.filter(a => (a.assetType === 'product' || a.assetType === 'card_hero') && a.publicUrl)
 
   function handleSave() {
     setErr(null)
@@ -1525,9 +1529,10 @@ function ColourItem({
       const res = await updateColour(colour.id, systemId, manufacturerId, {
         colour_name: name.trim() || undefined,
         sku_suffix: suffix.trim() || null,
+        image_url: imageUrl.trim() || null,
       })
       if (!res.ok) { setErr(res.error); return }
-      onUpdated(colour.id, { colour_name: name.trim(), sku_suffix: suffix.trim() || null })
+      onUpdated(colour.id, { colour_name: name.trim(), sku_suffix: suffix.trim() || null, image_url: imageUrl.trim() || null })
       setEditing(false)
     })
   }
@@ -1560,7 +1565,10 @@ function ColourItem({
 
   if (!editing) {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '99px', fontSize: '11px', color: '#374151' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: colour.image_url ? '3px 8px 3px 3px' : '3px 8px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '99px', fontSize: '11px', color: '#374151' }}>
+        {colour.image_url && (
+          <span style={{ display: 'inline-block', width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0, background: `url(${colour.image_url}) center/cover`, border: '1px solid rgba(0,0,0,0.15)' }} />
+        )}
         {colour.colour_name}
         {colour.sku_suffix && <span style={{ color: '#9ca3af', fontFamily: 'monospace' }}>{colour.sku_suffix}</span>}
         <button type="button" title="Edit colour" onClick={() => setEditing(true)}
@@ -1580,20 +1588,43 @@ function ColourItem({
   }
 
   return (
-    <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '8px', padding: '6px 10px' }}>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Colour name"
-        style={{ width: '120px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
-      <input value={suffix} onChange={e => setSuffix(e.target.value)} placeholder="SKU suffix"
-        style={{ width: '80px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace' }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '8px', padding: '8px 10px', width: '260px' }}>
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Colour name"
+          style={{ flex: 1, padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+        <input value={suffix} onChange={e => setSuffix(e.target.value)} placeholder="SKU suffix"
+          style={{ width: '80px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace' }} />
+      </div>
+      <div>
+        <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>
+          Swatch photo
+        </div>
+        {swatchAssets.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
+            {swatchAssets.map(a => (
+              <button key={a.id} type="button" title={a.title ?? 'Untitled asset'} onClick={() => setImageUrl(a.publicUrl ?? '')}
+                style={{
+                  width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0, padding: 0, cursor: 'pointer',
+                  background: `url(${a.publicUrl}) center/cover`,
+                  border: imageUrl === a.publicUrl ? '2px solid #185D7A' : '1px solid rgba(0,0,0,0.15)',
+                }} />
+            ))}
+          </div>
+        )}
+        <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="Or paste an image URL"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
+      </div>
       {err && <span style={{ fontSize: '11px', color: '#dc2626' }}>{err}</span>}
-      <button type="button" onClick={handleSave} disabled={pending || !name.trim()}
-        style={{ padding: '4px 10px', borderRadius: '5px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', cursor: 'pointer', opacity: pending ? 0.5 : 1 }}>
-        {pending ? '…' : 'Save'}
-      </button>
-      <button type="button" onClick={() => setEditing(false)}
-        style={{ padding: '4px 8px', borderRadius: '5px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
-        ×
-      </button>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button type="button" onClick={handleSave} disabled={pending || !name.trim()}
+          style={{ padding: '4px 10px', borderRadius: '5px', background: '#185D7A', color: '#fff', border: 'none', fontSize: '12px', cursor: 'pointer', opacity: pending ? 0.5 : 1 }}>
+          {pending ? '…' : 'Save'}
+        </button>
+        <button type="button" onClick={() => setEditing(false)}
+          style={{ padding: '4px 8px', borderRadius: '5px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', fontSize: '12px', cursor: 'pointer' }}>
+          Cancel
+        </button>
+      </div>
     </div>
   )
 }
@@ -1619,7 +1650,7 @@ function AddColourForm({
     startTransition(async () => {
       const res = await addMissingColour(systemId, manufacturerId, { colour_name: name.trim(), sku_suffix: suffix.trim() || undefined })
       if (!res.ok) { setErr(res.error); return }
-      onAdded({ id: res.id, colour_name: name.trim(), sku_suffix: suffix.trim() || null, is_stocked: true })
+      onAdded({ id: res.id, colour_name: name.trim(), sku_suffix: suffix.trim() || null, image_url: null, is_stocked: true })
     })
   }
 
@@ -2372,6 +2403,7 @@ function ExpandedCardView({
     })
   }
 
+  const [heroSaveErr, setHeroSaveErr] = useState<string | null>(null)
   const [cropX, setCropX] = useState(system.hero_image_position_x ?? 50)
   const [cropY, setCropY] = useState(system.hero_image_position_y ?? 50)
   const [cropZoom, setCropZoom] = useState(system.hero_image_zoom ?? 1)
@@ -2450,7 +2482,7 @@ function ExpandedCardView({
     onStateChange: handleFieldChange,
   })
 
-  function handleHeroAssetPick(pick: SlotPick) {
+  async function handleHeroAssetPick(pick: SlotPick) {
     // Only persist a durable public URL into hero_image_url — pick.displayUrl
     // can be a presigned R2 link that expires in an hour, and saving that would
     // leave a dead link once it lapses. The crop preview below reads the
@@ -2458,15 +2490,31 @@ function ExpandedCardView({
     // Always sync (not just when truthy) so a stale value from before this
     // asset was linked can't survive underneath it.
     const url = pick.publicUrl ?? null
+    const previous = { hero_image_asset_id: system.hero_image_asset_id, hero_image_url: system.hero_image_url }
     setSystem(prev => ({ ...prev, hero_image_asset_id: pick.assetId, hero_image_url: url }))
-    updateSystemHeroAsset(system.id, manufacturerId, pick.assetId, url)
+    setHeroSaveErr(null)
+    const res = await updateSystemHeroAsset(system.id, manufacturerId, pick.assetId, url)
+    if (!res.ok) {
+      // Roll back the optimistic update — otherwise the picker keeps showing
+      // "Linked: X" even though the write never reached staged_systems, and
+      // that false confidence is exactly what silently lost the pick before.
+      setSystem(prev => ({ ...prev, ...previous }))
+      setHeroSaveErr(res.error)
+    }
   }
 
   function handleHeroAssetClear() {
     // Unlinks the asset only — leaves hero_image_url as a manual fallback
     // rather than clearing it, in case the raw URL is still wanted.
+    const previous = { hero_image_asset_id: system.hero_image_asset_id }
     setSystem(prev => ({ ...prev, hero_image_asset_id: null }))
-    updateSystemHeroAsset(system.id, manufacturerId, null, null)
+    setHeroSaveErr(null)
+    updateSystemHeroAsset(system.id, manufacturerId, null, null).then(res => {
+      if (!res.ok) {
+        setSystem(prev => ({ ...prev, ...previous }))
+        setHeroSaveErr(res.error)
+      }
+    })
   }
 
   return (
@@ -2621,6 +2669,11 @@ function ExpandedCardView({
                   onClear={handleHeroAssetClear}
                   quickImportUrl={system.hero_image_url}
                 />
+                {heroSaveErr && (
+                  <p style={{ fontSize: '11px', color: '#dc2626', margin: '6px 0 0' }}>
+                    Couldn't save this hero image: {heroSaveErr}. Try picking it again.
+                  </p>
+                )}
                 {!system.hero_image_asset_id && system.hero_image_url && (
                   <p style={{ fontSize: '11px', color: '#b45309', margin: '6px 0 0' }}>
                     This hero image is only a URL — the static package will attempt a
@@ -2725,7 +2778,7 @@ function ExpandedCardView({
             >
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {system.colours.map(c => (
-                  <ColourItem key={c.id} colour={c} systemId={system.id} manufacturerId={manufacturerId} onUpdated={updateColourLocal} onRemoved={removeColourLocal} />
+                  <ColourItem key={c.id} colour={c} systemId={system.id} manufacturerId={manufacturerId} assets={assets} onUpdated={updateColourLocal} onRemoved={removeColourLocal} />
                 ))}
               </div>
               {system.colours.length === 0 && !showAddColour && (

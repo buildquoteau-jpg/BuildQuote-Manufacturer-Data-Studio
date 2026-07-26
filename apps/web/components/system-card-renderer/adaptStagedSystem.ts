@@ -82,9 +82,7 @@ export function adaptStagedSystem(
     system_colours: [...system.colours]
       .map((c, i) => ({
         colour_name: c.colour_name,
-        // Staged colours have no swatch image yet — chip renders text-only.
-        // TODO(images): populate when staged_system_colours grows an image_url.
-        image_url: null,
+        image_url: c.image_url,
         sort_order: i,
         is_stocked: c.is_stocked ?? true,
       })),

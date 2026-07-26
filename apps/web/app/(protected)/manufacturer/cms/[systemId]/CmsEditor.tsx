@@ -321,25 +321,39 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
           <Section title="Links & guides">
             {LINK_FIELDS.map(f => (
               <Field key={f.name} label={f.label}>
-                <input
-                  value={(system[f.name] as string | null) ?? ''}
-                  placeholder="https://…"
-                  onChange={e => { patch({ [f.name]: e.target.value } as Partial<VerificationSystem>); saveField(f.name, e.target.value) }}
-                  style={inputStyle}
-                />
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <input
+                    value={(system[f.name] as string | null) ?? ''}
+                    placeholder="https://…"
+                    onChange={e => { patch({ [f.name]: e.target.value } as Partial<VerificationSystem>); saveField(f.name, e.target.value) }}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  {(system[f.name] as string | null) && (
+                    <IconButton label={`Clear ${f.label}`} onClick={() => { patch({ [f.name]: null } as Partial<VerificationSystem>); saveField(f.name, null) }}>✕</IconButton>
+                  )}
+                </div>
               </Field>
             ))}
             <Field label="Design guide URL">
-              <input
-                value={system.design_guide_url ?? ''}
-                placeholder="https://…"
-                onChange={e => {
-                  patch({ design_guide_url: e.target.value })
-                  runSave('design_guide_url', () =>
-                    upsertFieldVerification(system.id, manufacturerId, 'design_guide_url', null, e.target.value, 'edited', null))
-                }}
-                style={inputStyle}
-              />
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <input
+                  value={system.design_guide_url ?? ''}
+                  placeholder="https://…"
+                  onChange={e => {
+                    patch({ design_guide_url: e.target.value })
+                    runSave('design_guide_url', () =>
+                      upsertFieldVerification(system.id, manufacturerId, 'design_guide_url', null, e.target.value, 'edited', null))
+                  }}
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                {system.design_guide_url && (
+                  <IconButton label="Clear design guide URL" onClick={() => {
+                    patch({ design_guide_url: null })
+                    runSave('design_guide_url', () =>
+                      upsertFieldVerification(system.id, manufacturerId, 'design_guide_url', null, null, 'edited', null))
+                  }}>✕</IconButton>
+                )}
+              </div>
             </Field>
             <InstallGuidesField
               guides={system.install_guide_urls ?? []}
