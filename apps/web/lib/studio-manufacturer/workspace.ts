@@ -595,6 +595,7 @@ export type VerificationSystemColour = {
   colour_name: string
   sku_suffix: string | null
   image_url: string | null
+  image_asset_id: string | null
   is_stocked: boolean | null
 }
 
@@ -748,7 +749,7 @@ export async function getManufacturerVerificationData(
       .order('sort_order'),
     c.supabase
       .from('staged_system_colours')
-      .select('id, staged_system_id, colour_name, sku_suffix, image_url, is_stocked')
+      .select('id, staged_system_id, colour_name, sku_suffix, image_url, image_asset_id, is_stocked')
       .in('staged_system_id', systemIds)
       .order('sort_order'),
     c.supabase
@@ -758,6 +759,19 @@ export async function getManufacturerVerificationData(
       )
       .in('staged_system_id', systemIds),
   ])
+
+  // Pre-migration-063 environments lack image_asset_id — retry without it.
+  if (coloursResult.error && /image_asset_id|does not exist/i.test(coloursResult.error.message ?? '')) {
+    const retry = await c.supabase
+      .from('staged_system_colours')
+      .select('id, staged_system_id, colour_name, sku_suffix, image_url, is_stocked')
+      .in('staged_system_id', systemIds)
+      .order('sort_order')
+    if (!retry.error) {
+      coloursResult.data = (retry.data ?? []).map((r: any) => ({ ...r, image_asset_id: null })) as any
+      ;(coloursResult as any).error = null
+    }
+  }
 
   type ProfileRow = VerificationSystemProfile & { staged_system_id: string }
   type ColourRow  = VerificationSystemColour  & { staged_system_id: string }
@@ -790,27 +804,38 @@ export async function getManufacturerVerificationData(
     componentsMap.set(r.staged_system_id, list)
   }
 
-  // When a system's hero image is linked to an Asset Library upload,
-  // hero_image_url can be null or stale (e.g. a presigned link saved before
-  // the URL-sync fix, or simply out of date) — resolve the asset's live URL
-  // here so every consumer of this function (review grid, studio preview,
-  // etc.) gets the correct image without each having to know about assets.
-  const heroAssetIds = Array.from(new Set(
-    systemRows.map((s) => s.hero_image_asset_id).filter((id): id is string => !!id),
-  ))
-  const heroImageUrlByAssetId = new Map<string, string>()
-  if (heroAssetIds.length > 0) {
-    const { data: heroAssets } = await c.supabase
+  // When a system's hero image (or a colour swatch) is linked to an Asset
+  // Library upload, the *_url column can be null or stale (e.g. a presigned
+  // link saved before the URL-sync fix, or simply out of date) — resolve the
+  // asset's live URL here so every consumer of this function (review grid,
+  // studio preview, etc.) gets the correct image without each having to know
+  // about assets.
+  const colourRows = (coloursResult.data ?? []) as unknown as ColourRow[]
+  const linkedAssetIds = Array.from(new Set([
+    ...systemRows.map((s) => s.hero_image_asset_id),
+    ...colourRows.map((c) => c.image_asset_id),
+  ].filter((id): id is string => !!id)))
+  const imageUrlByAssetId = new Map<string, string>()
+  if (linkedAssetIds.length > 0) {
+    const { data: linkedAssets } = await c.supabase
       .from('manufacturer_assets')
       .select('id, storage_key, public_url')
-      .in('id', heroAssetIds)
-    const rows = (heroAssets ?? []) as { id: string; storage_key: string | null; public_url: string | null }[]
+      .in('id', linkedAssetIds)
+    const rows = (linkedAssets ?? []) as { id: string; storage_key: string | null; public_url: string | null }[]
     await Promise.all(rows.map(async (a) => {
-      if (a.public_url) { heroImageUrlByAssetId.set(a.id, a.public_url); return }
+      if (a.public_url) { imageUrlByAssetId.set(a.id, a.public_url); return }
       if (!a.storage_key) return
       const presigned = await createPresignedDownloadUrl({ storageKey: a.storage_key, expiresInSeconds: 3600 })
-      if (presigned.ok) heroImageUrlByAssetId.set(a.id, presigned.downloadUrl)
+      if (presigned.ok) imageUrlByAssetId.set(a.id, presigned.downloadUrl)
     }))
+  }
+
+  for (const list of Array.from(coloursMap.values())) {
+    for (const colour of list) {
+      if (colour.image_asset_id && imageUrlByAssetId.get(colour.image_asset_id)) {
+        colour.image_url = imageUrlByAssetId.get(colour.image_asset_id)!
+      }
+    }
   }
 
   const systems: VerificationSystem[] = systemRows.map((s) => ({
@@ -819,7 +844,7 @@ export async function getManufacturerVerificationData(
     publish_status: s.publish_status ?? null,
     published_version: s.published_version ?? null,
     hero_image_zoom: s.hero_image_zoom != null ? Number(s.hero_image_zoom) : null,
-    hero_image_url: (s.hero_image_asset_id && heroImageUrlByAssetId.get(s.hero_image_asset_id)) || s.hero_image_url,
+    hero_image_url: (s.hero_image_asset_id && imageUrlByAssetId.get(s.hero_image_asset_id)) || s.hero_image_url,
     profiles:   profilesMap.get(s.id)   ?? [],
     colours:    coloursMap.get(s.id)    ?? [],
     components: componentsMap.get(s.id) ?? [],

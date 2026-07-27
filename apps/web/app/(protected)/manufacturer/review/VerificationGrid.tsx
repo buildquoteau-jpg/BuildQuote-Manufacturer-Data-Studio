@@ -21,6 +21,7 @@ import {
   removeProfile,
   addMissingColour,
   updateColour,
+  updateColourSwatchAsset,
   removeColour,
   addMissingComponent,
   updateComponent,
@@ -1485,25 +1486,36 @@ function ColourItem({
   const [editing, setEditing]   = useState(false)
   const [name,    setName]      = useState(colour.colour_name)
   const [suffix,  setSuffix]    = useState(colour.sku_suffix ?? '')
-  const [imageUrl, setImageUrl] = useState(colour.image_url ?? '')
+  const [assetId, setAssetId]   = useState(colour.image_asset_id ?? null)
   const [pending, startTransition] = useTransition()
   const [err,     setErr]       = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [delPending, startDelTransition] = useTransition()
   const [delErr, setDelErr] = useState<string | null>(null)
 
-  const swatchAssets = assets.filter(a => (a.assetType === 'product' || a.assetType === 'card_hero' || a.assetType === 'icon') && a.publicUrl)
+  // Swatch photos must come from an uploaded Asset Library image, never a
+  // pasted URL — pasted URLs are frequently presigned R2 links that expire
+  // ~1 hour after saving. Any uploaded image type is eligible.
+  const swatchAssets = assets.filter(a => !!a.displayUrl)
 
   function handleSave() {
     setErr(null)
+    const pickedUrl = assetId ? assets.find(a => a.id === assetId)?.publicUrl ?? null : null
     startTransition(async () => {
-      const res = await updateColour(colour.id, systemId, manufacturerId, {
-        colour_name: name.trim() || undefined,
-        sku_suffix: suffix.trim() || null,
-        image_url: imageUrl.trim() || null,
+      const [nameRes, assetRes] = await Promise.all([
+        updateColour(colour.id, systemId, manufacturerId, {
+          colour_name: name.trim() || undefined,
+          sku_suffix: suffix.trim() || null,
+        }),
+        updateColourSwatchAsset(colour.id, systemId, manufacturerId, assetId, pickedUrl),
+      ])
+      if (!nameRes.ok) { setErr(nameRes.error); return }
+      if (!assetRes.ok) { setErr(assetRes.error); return }
+      onUpdated(colour.id, {
+        colour_name: name.trim(), sku_suffix: suffix.trim() || null,
+        image_asset_id: assetId,
+        image_url: assetId ? `/api/assets/${assetId}` : null,
       })
-      if (!res.ok) { setErr(res.error); return }
-      onUpdated(colour.id, { colour_name: name.trim(), sku_suffix: suffix.trim() || null, image_url: imageUrl.trim() || null })
       setEditing(false)
     })
   }
@@ -1570,20 +1582,23 @@ function ColourItem({
         <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>
           Swatch photo
         </div>
-        {swatchAssets.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
+        {swatchAssets.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
             {swatchAssets.map(a => (
-              <button key={a.id} type="button" title={a.title ?? 'Untitled asset'} onClick={() => setImageUrl(a.publicUrl ?? '')}
+              <button key={a.id} type="button" title={a.title ?? 'Untitled asset'}
+                onClick={() => setAssetId(assetId === a.id ? null : a.id)}
                 style={{
                   width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0, padding: 0, cursor: 'pointer',
-                  background: `url(${a.publicUrl}) center/cover`,
-                  border: imageUrl === a.publicUrl ? '2px solid #185D7A' : '1px solid rgba(0,0,0,0.15)',
+                  background: `url(${a.displayUrl}) center/cover`,
+                  border: assetId === a.id ? '2px solid #185D7A' : '1px solid rgba(0,0,0,0.15)',
                 }} />
             ))}
           </div>
+        ) : (
+          <div style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>
+            No images uploaded yet — add one in Assets first.
+          </div>
         )}
-        <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="Or paste an image URL"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} />
       </div>
       {err && <span style={{ fontSize: '11px', color: '#dc2626' }}>{err}</span>}
       <div style={{ display: 'flex', gap: '6px' }}>
@@ -1602,7 +1617,7 @@ function ColourItem({
 
 // ─── Add colour form ──────────────────────────────────────────────────────────
 
-type ExistingColour = { id: string; colour_name: string; sku_suffix: string | null; image_url: string | null }
+type ExistingColour = { id: string; colour_name: string; sku_suffix: string | null; image_asset_id: string | null }
 
 function AddColourForm({
   systemId, manufacturerId, alreadyLinkedNames, onAdded, onCancel,
@@ -1644,10 +1659,15 @@ function AddColourForm({
     setErr(null)
     startTransition(async () => {
       const res = await addMissingColour(systemId, manufacturerId, {
-        colour_name: selected.colour_name, sku_suffix: selected.sku_suffix ?? undefined, image_url: selected.image_url,
+        colour_name: selected.colour_name, sku_suffix: selected.sku_suffix ?? undefined, image_asset_id: selected.image_asset_id,
       })
       if (!res.ok) { setErr(res.error); return }
-      onAdded({ id: res.id, colour_name: selected.colour_name, sku_suffix: selected.sku_suffix, image_url: selected.image_url, is_stocked: true })
+      onAdded({
+        id: res.id, colour_name: selected.colour_name, sku_suffix: selected.sku_suffix,
+        image_asset_id: selected.image_asset_id,
+        image_url: selected.image_asset_id ? `/api/assets/${selected.image_asset_id}` : null,
+        is_stocked: true,
+      })
     })
   }
 
@@ -1657,7 +1677,7 @@ function AddColourForm({
     startTransition(async () => {
       const res = await addMissingColour(systemId, manufacturerId, { colour_name: name.trim(), sku_suffix: suffix.trim() || undefined })
       if (!res.ok) { setErr(res.error); return }
-      onAdded({ id: res.id, colour_name: name.trim(), sku_suffix: suffix.trim() || null, image_url: null, is_stocked: true })
+      onAdded({ id: res.id, colour_name: name.trim(), sku_suffix: suffix.trim() || null, image_asset_id: null, image_url: null, is_stocked: true })
     })
   }
 
@@ -1708,8 +1728,8 @@ function AddColourForm({
                     background: selected?.id === c.id ? '#fef3c7' : '#fff',
                     transition: 'all 0.1s',
                   }}>
-                  {c.image_url && (
-                    <span style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, background: `url(${c.image_url}) center/cover`, border: '1px solid rgba(0,0,0,0.15)' }} />
+                  {c.image_asset_id && (
+                    <span style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, background: `url(/api/assets/${c.image_asset_id}) center/cover`, border: '1px solid rgba(0,0,0,0.15)' }} />
                   )}
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{c.colour_name}</div>

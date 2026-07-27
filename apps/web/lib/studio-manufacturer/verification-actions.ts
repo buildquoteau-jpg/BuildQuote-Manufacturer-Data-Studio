@@ -510,27 +510,81 @@ export async function updateProfile(
 export async function addMissingColour(
   systemId: string,
   manufacturerId: string,
-  data: { colour_name: string; sku_suffix?: string; image_url?: string | null },
+  data: { colour_name: string; sku_suffix?: string; image_asset_id?: string | null },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
-  const { data: row, error } = await supabase
+  let { data: row, error } = await supabase
     .from('staged_system_colours')
     .insert({
       staged_system_id: systemId,
       colour_name: data.colour_name.trim(),
       sku_suffix: data.sku_suffix?.trim() || null,
-      image_url: data.image_url?.trim() || null,
+      // Colour swatches always link an Asset Library upload by id — never a
+      // raw/pasted URL, since that path was how expiring presigned R2 links
+      // used to end up permanently stored (see updateColourSwatchAsset).
+      image_asset_id: data.image_asset_id ?? null,
       is_stocked: true,
       verification_status: 'pending_review',
     })
     .select('id')
     .single()
 
+  // Pre-migration-063 environments lack image_asset_id — retry without it.
+  if (error && /image_asset_id|does not exist/i.test(error.message ?? '')) {
+    ({ data: row, error } = await supabase
+      .from('staged_system_colours')
+      .insert({
+        staged_system_id: systemId,
+        colour_name: data.colour_name.trim(),
+        sku_suffix: data.sku_suffix?.trim() || null,
+        is_stocked: true,
+        verification_status: 'pending_review',
+      })
+      .select('id')
+      .single())
+  }
+
   if (error) return { ok: false, error: error.message }
   return { ok: true, id: (row as any).id }
+}
+
+// ─── updateColourSwatchAsset ───────────────────────────────────────────────────
+// Links (or unlinks) a colour swatch to an Asset Library image — same pattern
+// as updateSystemHeroAsset. image_url is synced from the asset's own durable
+// public_url (or cleared to null) so it can never be a presigned R2 link that
+// expires ~1 hour after saving; the review UI renders the swatch via
+// /api/assets/{id} regardless, so image_url here is only a legacy fallback.
+
+export async function updateColourSwatchAsset(
+  colourId: string,
+  systemId: string,
+  manufacturerId: string,
+  assetId: string | null,
+  assetUrl: string | null,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_system_colours')
+    .update({
+      image_asset_id: assetId,
+      ...(assetId !== null ? { image_url: assetUrl } : {}),
+    })
+    .eq('id', colourId)
+    .eq('staged_system_id', systemId)
+
+  // Pre-migration-063 environments lack image_asset_id — nothing to link to,
+  // so treat it as a no-op rather than surfacing a confusing DB error.
+  if (error && /image_asset_id|does not exist/i.test(error.message ?? '')) {
+    return { ok: false, error: 'Colour swatch linking needs migration 063 applied to this project yet.' }
+  }
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
 }
 
 // ─── updateColour ─────────────────────────────────────────────────────────────
@@ -586,29 +640,41 @@ export async function getManufacturerComponents(
 export async function getManufacturerColours(
   manufacturerId: string,
 ): Promise<
-  | { ok: true; colours: { id: string; colour_name: string; sku_suffix: string | null; image_url: string | null }[] }
+  | { ok: true; colours: { id: string; colour_name: string; sku_suffix: string | null; image_asset_id: string | null }[] }
   | { ok: false; error: string }
 > {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('staged_system_colours')
-    .select('id, colour_name, sku_suffix, image_url, staged_systems!inner(manufacturer_id)')
+    .select('id, colour_name, sku_suffix, image_asset_id, staged_systems!inner(manufacturer_id)')
     .eq('staged_systems.manufacturer_id', manufacturerId)
     .order('colour_name')
+
+  // Pre-migration-063 environments lack image_asset_id — retry without it.
+  if (error && /image_asset_id|does not exist/i.test(error.message ?? '')) {
+    const retry = await supabase
+      .from('staged_system_colours')
+      .select('id, colour_name, sku_suffix, staged_systems!inner(manufacturer_id)')
+      .eq('staged_systems.manufacturer_id', manufacturerId)
+      .order('colour_name')
+    data = (retry.data ?? []).map((r: any) => ({ ...r, image_asset_id: null })) as any
+    error = retry.error
+  }
 
   if (error) return { ok: false, error: error.message }
 
   // Dedupe by name — the same colour is typically saved on many systems, and
   // the picker should show each once (preferring an entry that has a swatch).
-  const byName = new Map<string, { id: string; colour_name: string; sku_suffix: string | null; image_url: string | null }>()
+  const byName = new Map<string, { id: string; colour_name: string; sku_suffix: string | null; image_asset_id: string | null }>()
   for (const row of (data ?? []) as any[]) {
     const key = row.colour_name.trim().toLowerCase()
     const existing = byName.get(key)
-    if (!existing || (!existing.image_url && row.image_url)) {
-      byName.set(key, { id: row.id, colour_name: row.colour_name, sku_suffix: row.sku_suffix, image_url: row.image_url })
+    const imageAssetId = row.image_asset_id ?? null
+    if (!existing || (!existing.image_asset_id && imageAssetId)) {
+      byName.set(key, { id: row.id, colour_name: row.colour_name, sku_suffix: row.sku_suffix, image_asset_id: imageAssetId })
     }
   }
   return { ok: true, colours: Array.from(byName.values()) }

@@ -531,10 +531,19 @@ async function publishProfiles(
 async function publishColours(
   ds: SupabaseClient, prod: SupabaseClient, stagedSystemId: string, productionSystemId: string, dryRun: boolean,
 ): Promise<{ id: string; action: EntityAction }[]> {
-  const { data: rows, error } = await ds
+  let { data: rows, error } = await ds
     .from('staged_system_colours')
-    .select('id, production_colour_id, colour_name, sku, sku_suffix, image_url, is_stocked, sort_order')
+    .select('id, production_colour_id, colour_name, sku, sku_suffix, image_url, image_asset_id, is_stocked, sort_order')
     .eq('staged_system_id', stagedSystemId)
+  // Pre-migration-063 environments lack image_asset_id — retry without it.
+  if (error && /image_asset_id|does not exist/i.test(error.message ?? '')) {
+    const retry = await ds
+      .from('staged_system_colours')
+      .select('id, production_colour_id, colour_name, sku, sku_suffix, image_url, is_stocked, sort_order')
+      .eq('staged_system_id', stagedSystemId)
+    rows = (retry.data ?? []).map((r: any) => ({ ...r, image_asset_id: null })) as any
+    error = retry.error
+  }
   if (error) throw new Error(`Could not load colours: ${error.message}`)
 
   const results: { id: string; action: EntityAction }[] = []
@@ -543,7 +552,7 @@ async function publishColours(
       system_id: productionSystemId,
       colour_name: c.colour_name,
       sku: c.sku_suffix ?? c.sku,
-      image_url: c.image_url,
+      image_url: resolveDurableHeroImageUrl(c.image_url, (c as any).image_asset_id ?? null),
       is_stocked: c.is_stocked,
       sort_order: c.sort_order,
     }
