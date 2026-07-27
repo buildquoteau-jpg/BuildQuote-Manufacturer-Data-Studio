@@ -649,6 +649,29 @@ export type ManufacturerVerificationResult =
   | { ok: true; manufacturer: ManufacturerInfo; systems: VerificationSystem[] }
   | { ok: false; error: string }
 
+// Resolves a manufacturer's own hero image the same way system/colour hero
+// images are resolved elsewhere in this file: prefer the Asset-linked live
+// URL (public_url, else a fresh presigned link) over the raw column, since
+// that column can be null or a stale/expired presigned link.
+async function resolveMfrHeroImageUrl(
+  supabase: ReturnType<typeof createStudioServerClient>,
+  assetId: string | null,
+  rawUrl: string | null,
+): Promise<string | null> {
+  if (!assetId) return rawUrl
+  const { data } = await supabase
+    .from('manufacturer_assets')
+    .select('storage_key, public_url')
+    .eq('id', assetId)
+    .maybeSingle()
+  const asset = data as { storage_key: string | null; public_url: string | null } | null
+  if (!asset) return rawUrl
+  if (asset.public_url) return asset.public_url
+  if (!asset.storage_key) return rawUrl
+  const presigned = await createPresignedDownloadUrl({ storageKey: asset.storage_key, expiresInSeconds: 3600 })
+  return presigned.ok ? presigned.downloadUrl : rawUrl
+}
+
 export async function getManufacturerVerificationData(
   manufacturerId: string,
 ): Promise<ManufacturerVerificationResult> {
@@ -675,7 +698,7 @@ export async function getManufacturerVerificationData(
   const [mfrResult, firstSystemsResult] = await Promise.all([
     c.supabase
       .from('data_studio_manufacturers')
-      .select('id, name, slug, status, description, website_url')
+      .select('id, name, slug, status, description, website_url, hero_image_url, hero_image_asset_id')
       .eq('id', manufacturerId)
       .single(),
     stagedSelect(true),
@@ -697,6 +720,7 @@ export async function getManufacturerVerificationData(
   const m = mfrResult.data as {
     id: string; name: string; slug: string; status: string
     description: string | null; website_url: string | null
+    hero_image_url: string | null; hero_image_asset_id: string | null
   }
 
   type SysRow = {
@@ -731,7 +755,8 @@ export async function getManufacturerVerificationData(
       ok: true,
       manufacturer: {
         id: m.id, name: m.name, slug: m.slug, status: m.status,
-        description: m.description, websiteUrl: m.website_url, heroImageUrl: null,
+        description: m.description, websiteUrl: m.website_url,
+        heroImageUrl: await resolveMfrHeroImageUrl(c.supabase, m.hero_image_asset_id, m.hero_image_url),
       },
       systems: [],
     }
@@ -812,6 +837,7 @@ export async function getManufacturerVerificationData(
   // about assets.
   const colourRows = (coloursResult.data ?? []) as unknown as ColourRow[]
   const linkedAssetIds = Array.from(new Set([
+    m.hero_image_asset_id,
     ...systemRows.map((s) => s.hero_image_asset_id),
     ...colourRows.map((c) => c.image_asset_id),
   ].filter((id): id is string => !!id)))
@@ -854,7 +880,8 @@ export async function getManufacturerVerificationData(
     ok: true,
     manufacturer: {
       id: m.id, name: m.name, slug: m.slug, status: m.status,
-      description: m.description, websiteUrl: m.website_url, heroImageUrl: null,
+      description: m.description, websiteUrl: m.website_url,
+      heroImageUrl: (m.hero_image_asset_id && imageUrlByAssetId.get(m.hero_image_asset_id)) || m.hero_image_url,
     },
     systems,
   }

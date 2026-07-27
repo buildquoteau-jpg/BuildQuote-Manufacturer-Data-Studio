@@ -485,6 +485,22 @@ function ComponentRow({ c, i, selected, onToggle }: {
   )
 }
 
+// Groups a route's components by category (Fixings, Trims, Clips, …) so a
+// long flat list reads as sections instead of one undifferentiated block —
+// same grouping the manufacturer review UI already uses. Categories with
+// "service"/"delivery" in the name sort last, matching that same UI.
+function groupItemsByCategory<T extends { c: SystemComponent }>(items: T[]): [string, T[]][] {
+  const byCat = new Map<string, T[]>()
+  for (const item of items) {
+    const cat = item.c.category?.trim() || 'Other'
+    if (!byCat.has(cat)) byCat.set(cat, [])
+    byCat.get(cat)!.push(item)
+  }
+  return Array.from(byCat.entries()).sort(
+    (a, b) => (/service|delivery/i.test(a[0]) ? 1 : 0) - (/service|delivery/i.test(b[0]) ? 1 : 0)
+  )
+}
+
 function ComponentsSection({
   components, selected, onToggle,
 }: {
@@ -567,9 +583,24 @@ function ComponentsSection({
                   {label}
                 </div>
               )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: isSplit ? '10px' : 0 }}>
-                {items.map(({ c, i }) => (
-                  <ComponentRow key={i} c={c} i={i} selected={selected} onToggle={onToggle} />
+              <div style={{ marginBottom: isSplit ? '10px' : 0 }}>
+                {groupItemsByCategory(items).map(([cat, catItems]) => (
+                  <div key={cat}>
+                    {cat !== 'Other' && (
+                      <div style={{
+                        fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em',
+                        textTransform: 'uppercase', color: '#94a3b8',
+                        margin: '10px 0 6px',
+                      }}>
+                        {cat}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {catItems.map(({ c, i }) => (
+                        <ComponentRow key={i} c={c} i={i} selected={selected} onToggle={onToggle} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

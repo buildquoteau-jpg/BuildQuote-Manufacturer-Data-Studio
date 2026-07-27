@@ -461,6 +461,21 @@ function AttributePills({ system }: { system: WidgetSystem }) {
 
 // ── Components accordion ───────────────────────────────────────────────────
 
+// Groups components by category (Fixings, Trims, Clips, …) so a long flat
+// list reads as sections instead of one undifferentiated block — same
+// grouping the manufacturer review UI and live card use.
+function groupWidgetComponentsByCategory(items: WidgetComponent[]): [string, WidgetComponent[]][] {
+  const byCat = new Map<string, WidgetComponent[]>()
+  for (const item of items) {
+    const cat = item.components?.category?.trim() || 'Other'
+    if (!byCat.has(cat)) byCat.set(cat, [])
+    byCat.get(cat)!.push(item)
+  }
+  return Array.from(byCat.entries()).sort(
+    (a, b) => (/service|delivery/i.test(a[0]) ? 1 : 0) - (/service|delivery/i.test(b[0]) ? 1 : 0)
+  )
+}
+
 function ComponentsAccordion({
   components, selectable, selectedIds, onToggle,
 }: {
@@ -497,50 +512,65 @@ function ComponentsAccordion({
         </span>
       </button>
       {open && (
-        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {visible.map((item) => {
-            const comp = item.components!
-            const uom  = fmtUom(comp.uom)
-            const isSelected = selectedIds?.has(item.id)
-
-            const inner = (
-              <>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', lineHeight: 1.35 }}>{comp.name}</div>
-                    {item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{item.notes}</div>}
-                    {comp.description && !item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#6b7280', lineHeight: 1.4 }}>{comp.description}</div>}
-                    <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                      {comp.sku && <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{comp.sku}</span>}
-                      {uom && <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#9ca3af' }}>{uom}</span>}
-                    </div>
-                  </div>
-                  {selectable && <Checkbox checked={!!isSelected} />}
+        <div style={{ marginTop: '10px' }}>
+          {groupWidgetComponentsByCategory(visible).map(([cat, items]) => (
+            <div key={cat}>
+              {cat !== 'Other' && (
+                <div style={{
+                  fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', color: '#94a3b8',
+                  margin: '10px 0 6px',
+                }}>
+                  {cat}
                 </div>
-              </>
-            )
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {items.map((item) => {
+                  const comp = item.components!
+                  const uom  = fmtUom(comp.uom)
+                  const isSelected = selectedIds?.has(item.id)
 
-            return selectable ? (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onToggle?.(item.id)}
-                style={{
-                  padding: '11px 12px', textAlign: 'left', width: '100%',
-                  background: isSelected ? '#eef6fa' : '#f9fafb',
-                  border: `${isSelected ? '1.5px' : '1px'} solid ${isSelected ? '#b6dcea' : '#e5e7eb'}`,
-                  borderRadius: '10px', cursor: 'pointer',
-                  transition: 'background 0.1s, border-color 0.1s',
-                }}
-              >
-                {inner}
-              </button>
-            ) : (
-              <div key={item.id} style={{ padding: '11px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px' }}>
-                {inner}
+                  const inner = (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', lineHeight: 1.35 }}>{comp.name}</div>
+                          {item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>{item.notes}</div>}
+                          {comp.description && !item.notes && <div style={{ marginTop: '3px', fontSize: '12px', color: '#6b7280', lineHeight: 1.4 }}>{comp.description}</div>}
+                          <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                            {comp.sku && <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{comp.sku}</span>}
+                            {uom && <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#9ca3af' }}>{uom}</span>}
+                          </div>
+                        </div>
+                        {selectable && <Checkbox checked={!!isSelected} />}
+                      </div>
+                    </>
+                  )
+
+                  return selectable ? (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onToggle?.(item.id)}
+                      style={{
+                        padding: '11px 12px', textAlign: 'left', width: '100%',
+                        background: isSelected ? '#eef6fa' : '#f9fafb',
+                        border: `${isSelected ? '1.5px' : '1px'} solid ${isSelected ? '#b6dcea' : '#e5e7eb'}`,
+                        borderRadius: '10px', cursor: 'pointer',
+                        transition: 'background 0.1s, border-color 0.1s',
+                      }}
+                    >
+                      {inner}
+                    </button>
+                  ) : (
+                    <div key={item.id} style={{ padding: '11px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px' }}>
+                      {inner}
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>
