@@ -124,9 +124,12 @@ export async function upsertFieldVerification(
         .eq('id', systemId)
       if (error) return { ok: false, error: error.message }
     } else if ((STAGED_BOOL_FIELDS as readonly string[]).includes(fieldName)) {
+      // "Not set" must clear the column to null, not write false — false
+      // means an affirmative "No" while null means "not verified", and the
+      // toggle UI only ever offers Yes / Not set, never a real No.
       const { error } = await supabase
         .from('staged_systems')
-        .update({ [fieldName]: verifiedValue === 'true', updated_at: now })
+        .update({ [fieldName]: verifiedValue === null ? null : verifiedValue === 'true', updated_at: now })
         .eq('id', systemId)
       if (error) return { ok: false, error: error.message }
     }

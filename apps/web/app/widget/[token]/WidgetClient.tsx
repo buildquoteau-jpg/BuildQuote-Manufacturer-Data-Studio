@@ -431,8 +431,10 @@ function AttributePills({ system }: { system: WidgetSystem }) {
     pills.push({ label: `BAL-${system.bal_rating}`, bg: '#fffbeb', text: '#b45309', border: '#fde68a' })
   if (system.fire_rating)
     pills.push({ label: `FRL ${system.fire_rating}`, bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' })
+  // acoustic_rating is a simple Yes/Not set flag in the review UI (not a
+  // real rating string) — show a fixed label, never the raw stored value.
   if (system.acoustic_rating)
-    pills.push({ label: system.acoustic_rating, bg: '#faf5ff', text: '#7e22ce', border: '#e9d5ff' })
+    pills.push({ label: 'Acoustically Rated', bg: '#faf5ff', text: '#7e22ce', border: '#e9d5ff' })
   if (system.structural_grade)
     pills.push({ label: system.structural_grade, bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' })
   if (system.australian_made)

@@ -582,6 +582,16 @@ function ComponentsSection({
 
 // ─── Attribute pills ──────────────────────────────────────────────────────────
 
+// Cycled across custom attributes so several pills next to each other read
+// as distinct chips rather than one undifferentiated block.
+const CUSTOM_ATTRIBUTE_PALETTE = [
+  { bg: '#eef6fa', color: '#185D7A' }, // teal
+  { bg: '#fffbeb', color: '#b45309' }, // amber
+  { bg: '#fdf2f8', color: '#be185d' }, // rose
+  { bg: '#eef2ff', color: '#4338ca' }, // indigo
+  { bg: '#f7fee7', color: '#4d7c0f' }, // lime
+]
+
 function AttributePills({ systemName, balRating, fireRating, moistureResistant, acousticRating, structuralGrade, australianMade, notes, customAttributes }: {
   systemName: string
   balRating: string | null
@@ -598,13 +608,18 @@ function AttributePills({ systemName, balRating, fireRating, moistureResistant, 
   if (balRating)         badges.push({ label: `BAL-${balRating}`,           bg: '#fff7ed', color: '#c2410c' })
   if (fireRating)        badges.push({ label: `FRL ${fireRating}`,          bg: '#fef2f2', color: '#b91c1c' })
   if (moistureResistant) badges.push({ label: 'Moisture resistant',         bg: '#f0f9ff', color: '#0369a1' })
-  if (acousticRating)    badges.push({ label: acousticRating,               bg: '#faf5ff', color: '#7e22ce' })
+  // acoustic_rating is a simple Yes/Not set flag in the review UI (not a
+  // real rating string) — show a fixed label, never the raw stored value,
+  // since "Yes" persists there as the literal text "true".
+  if (acousticRating)    badges.push({ label: 'Acoustically rated',         bg: '#faf5ff', color: '#7e22ce' })
   if (structuralGrade)   badges.push({ label: structuralGrade,              bg: '#f0fdf4', color: '#15803d' })
   if (australianMade)    badges.push({ label: 'Australian made',            bg: '#f0fdf4', color: '#166534' })
   if (notes?.toLowerCase().includes('primed') || notes?.toLowerCase().includes('site paint'))
     badges.push({ label: 'Pre-primed / site painted',                       bg: '#f8fafc', color: '#475569' })
-  for (const attr of customAttributes ?? [])
-    badges.push({ label: attr.label, value: attr.value,                     bg: '#eef6fa', color: '#185D7A' })
+  customAttributes?.forEach((attr, i) => {
+    const palette = CUSTOM_ATTRIBUTE_PALETTE[i % CUSTOM_ATTRIBUTE_PALETTE.length]
+    badges.push({ label: attr.label, value: attr.value, ...palette })
+  })
 
   if (badges.length === 0) return null
   return (
