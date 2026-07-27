@@ -322,13 +322,13 @@ function ProfilesSection({ profiles, systemName, selected, onToggle }: {
       <div style={sectionLabel}>
         Profiles · {profiles.length} variant{profiles.length !== 1 ? 's' : ''}
       </div>
-      {!multiGroup && (
+      {!multiGroup && !useHeaders && (
         <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827', paddingLeft: '10px', borderLeft: '3px solid #185D7A', marginBottom: '8px' }}>
           {(() => {
             const key = groups[0]?.key ?? ''
             const fmtKey = formatGroupKey(key)
             const alreadyIn = key && systemName.toLowerCase().includes(fmtKey.toLowerCase())
-            return (!useHeaders && key && !alreadyIn) ? `${systemName} ${fmtKey}` : systemName
+            return (key && !alreadyIn) ? `${systemName} ${fmtKey}` : systemName
           })()}
         </div>
       )}
@@ -343,7 +343,7 @@ function ProfilesSection({ profiles, systemName, selected, onToggle }: {
               key={key || '__all__'}
               groupKey={key}
               systemName={systemName}
-              showSystemName={multiGroup}
+              showSystemName={true}
               items={items}
               defaultOpen={defaultOpen}
               selected={selected}
