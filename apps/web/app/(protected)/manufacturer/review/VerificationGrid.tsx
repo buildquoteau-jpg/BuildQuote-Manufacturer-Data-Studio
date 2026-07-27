@@ -1492,7 +1492,7 @@ function ColourItem({
   const [delPending, startDelTransition] = useTransition()
   const [delErr, setDelErr] = useState<string | null>(null)
 
-  const swatchAssets = assets.filter(a => (a.assetType === 'product' || a.assetType === 'card_hero') && a.publicUrl)
+  const swatchAssets = assets.filter(a => (a.assetType === 'product' || a.assetType === 'card_hero' || a.assetType === 'icon') && a.publicUrl)
 
   function handleSave() {
     setErr(null)
