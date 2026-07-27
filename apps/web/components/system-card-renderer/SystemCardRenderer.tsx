@@ -501,9 +501,9 @@ function ComponentsSection({ components, selected, onToggle }: {
 // ── Attribute pills ───────────────────────────────────────────────────────────
 
 function AttributePills({ system }: { system: SystemCardSystem }) {
-  const badges: { label: string; bg: string; color: string }[] = []
+  const badges: { label: string; value?: string; bg: string; color: string }[] = []
 
-  if (system.bal_rating)         badges.push({ label: system.bal_rating,            bg: '#fff7ed', color: '#c2410c' })
+  if (system.bal_rating)         badges.push({ label: `BAL-${system.bal_rating}`,    bg: '#fff7ed', color: '#c2410c' })
   if (system.fire_rating)        badges.push({ label: `FRL ${system.fire_rating}`,  bg: '#fef2f2', color: '#b91c1c' })
   if (system.moisture_resistant) badges.push({ label: 'Moisture resistant',          bg: '#f0f9ff', color: '#0369a1' })
   if (system.acoustic_rating)    badges.push({ label: system.acoustic_rating,        bg: '#faf5ff', color: '#7e22ce' })
@@ -512,7 +512,7 @@ function AttributePills({ system }: { system: SystemCardSystem }) {
   if (system.notes?.toLowerCase().includes('primed') || system.notes?.toLowerCase().includes('site paint'))
     badges.push({ label: 'Pre-primed / site painted', bg: '#f8fafc', color: '#475569' })
   for (const attr of system.custom_technical_attributes ?? [])
-    badges.push({ label: `${attr.label}: ${attr.value}`, bg: '#f8fafc', color: '#334155' })
+    badges.push({ label: attr.label, value: attr.value, bg: '#eef6fa', color: '#185D7A' })
 
   if (badges.length === 0) return null
 
@@ -525,7 +525,13 @@ function AttributePills({ system }: { system: SystemCardSystem }) {
             fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.02em',
             background: b.bg, color: b.color, border: `1px solid ${b.color}33`,
           }}>
-            {b.label}
+            {b.value != null ? (
+              <>
+                <span style={{ fontWeight: 500, opacity: 0.75 }}>{b.label}</span>
+                {' · '}
+                {b.value}
+              </>
+            ) : b.label}
           </span>
         ))}
       </div>

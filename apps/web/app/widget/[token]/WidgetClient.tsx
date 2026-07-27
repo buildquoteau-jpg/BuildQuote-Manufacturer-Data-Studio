@@ -428,7 +428,7 @@ function AttributePills({ system }: { system: WidgetSystem }) {
   if (system.moisture_resistant)
     pills.push({ label: 'Moisture Resistant', bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' })
   if (system.bal_rating)
-    pills.push({ label: system.bal_rating, bg: '#fffbeb', text: '#b45309', border: '#fde68a' })
+    pills.push({ label: `BAL-${system.bal_rating}`, bg: '#fffbeb', text: '#b45309', border: '#fde68a' })
   if (system.fire_rating)
     pills.push({ label: `FRL ${system.fire_rating}`, bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' })
   if (system.acoustic_rating)

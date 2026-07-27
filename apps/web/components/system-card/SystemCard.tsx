@@ -593,9 +593,9 @@ function AttributePills({ systemName, balRating, fireRating, moistureResistant, 
   notes: string | null
   customAttributes?: { label: string; value: string }[] | null
 }) {
-  const badges: { label: string; bg: string; color: string }[] = []
+  const badges: { label: string; value?: string; bg: string; color: string }[] = []
 
-  if (balRating)         badges.push({ label: balRating,                    bg: '#fff7ed', color: '#c2410c' })
+  if (balRating)         badges.push({ label: `BAL-${balRating}`,           bg: '#fff7ed', color: '#c2410c' })
   if (fireRating)        badges.push({ label: `FRL ${fireRating}`,          bg: '#fef2f2', color: '#b91c1c' })
   if (moistureResistant) badges.push({ label: 'Moisture resistant',         bg: '#f0f9ff', color: '#0369a1' })
   if (acousticRating)    badges.push({ label: acousticRating,               bg: '#faf5ff', color: '#7e22ce' })
@@ -604,7 +604,7 @@ function AttributePills({ systemName, balRating, fireRating, moistureResistant, 
   if (notes?.toLowerCase().includes('primed') || notes?.toLowerCase().includes('site paint'))
     badges.push({ label: 'Pre-primed / site painted',                       bg: '#f8fafc', color: '#475569' })
   for (const attr of customAttributes ?? [])
-    badges.push({ label: `${attr.label}: ${attr.value}`,                    bg: '#f8fafc', color: '#334155' })
+    badges.push({ label: attr.label, value: attr.value,                     bg: '#eef6fa', color: '#185D7A' })
 
   if (badges.length === 0) return null
   return (
@@ -622,7 +622,13 @@ function AttributePills({ systemName, balRating, fireRating, moistureResistant, 
             color: b.color,
             border: `1px solid ${b.color}33`,
           }}>
-            {b.label}
+            {b.value != null ? (
+              <>
+                <span style={{ fontWeight: 500, opacity: 0.75 }}>{b.label}</span>
+                {' · '}
+                {b.value}
+              </>
+            ) : b.label}
           </span>
         ))}
       </div>
