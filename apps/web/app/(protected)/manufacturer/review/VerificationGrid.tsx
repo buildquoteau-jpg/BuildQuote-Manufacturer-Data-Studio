@@ -2332,6 +2332,7 @@ function ExpandedCardView({
   onRemoved: (systemId: string) => void
 }) {
   const [system, setSystem] = useState(initialSystem)
+  const [dragComponent, setDragComponent] = useState<{ cat: string; index: number } | null>(null)
   const [fieldStates, setFieldStates]   = useState<FieldStateMap>({})
   const [initials,    setInitials]      = useState('')
   const [notes,       setNotes]         = useState(initialSystem.notes ?? '')
@@ -2481,27 +2482,27 @@ function ExpandedCardView({
   function removeComponentLocal(id: string) {
     setSystem(prev => ({ ...prev, components: prev.components.filter(c => c.id !== id) }))
   }
-  // Swaps sort_order between two adjacent (within-category) components and
-  // persists both — groupComponentsByCategory re-sorts by sort_order on render.
-  function moveComponent(categoryItems: VerificationSystemComponent[], index: number, direction: -1 | 1) {
-    const target = index + direction
-    if (target < 0 || target >= categoryItems.length) return
-    // Most components in a category have never been reordered, so their
-    // sort_order is still null. Swapping only the two touched rows' values
-    // isn't enough — null sorts after any real number in groupComponentsByCategory,
-    // so the pair would jump to the front of the list instead of trading places.
-    // Re-derive sort_order for the whole category from its current display
-    // order first, then splice the move in, so every row ends up with a real,
-    // consistent index and later moves behave the same way.
+  // Re-derives sort_order for a whole category from its current display order,
+  // then splices the move in, so every row ends up with a real, consistent
+  // index and later moves (arrow-click or drag) behave the same way. Most
+  // components in a category have never been reordered, so their sort_order
+  // is still null — swapping only the two touched rows' values isn't enough,
+  // since null sorts after any real number in groupComponentsByCategory and
+  // the pair would jump to the front of the list instead of trading places.
+  function reorderComponent(categoryItems: VerificationSystemComponent[], fromIndex: number, toIndex: number) {
+    if (toIndex < 0 || toIndex >= categoryItems.length || fromIndex === toIndex) return
     const reordered = [...categoryItems]
-    const [moved] = reordered.splice(index, 1)
-    reordered.splice(target, 0, moved)
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
     reordered.forEach((c, i) => {
       if (c.sort_order !== i) {
         updateComponentLocal(c.id, { sort_order: i })
         updateComponent(c.id, manufacturerId, { sort_order: i })
       }
     })
+  }
+  function moveComponent(categoryItems: VerificationSystemComponent[], index: number, direction: -1 | 1) {
+    reorderComponent(categoryItems, index, index + direction)
   }
 
   // Hero image is edited in Asset picker (CmsEditor) now — this view is
@@ -2797,12 +2798,40 @@ function ExpandedCardView({
                     </div>
                   )}
                   {items.map((c, i) => (
-                    <ComponentItem
-                      key={c.id} component={c} systemId={system.id} manufacturerId={manufacturerId}
-                      onUpdated={updateComponentLocal} onRemoved={removeComponentLocal}
-                      onMoveUp={() => moveComponent(items, i, -1)} onMoveDown={() => moveComponent(items, i, 1)}
-                      canMoveUp={i > 0} canMoveDown={i < items.length - 1}
-                    />
+                    <div
+                      key={c.id}
+                      onDragOver={e => { if (dragComponent?.cat === cat) e.preventDefault() }}
+                      onDrop={e => {
+                        e.preventDefault()
+                        if (dragComponent && dragComponent.cat === cat) reorderComponent(items, dragComponent.index, i)
+                        setDragComponent(null)
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: '4px',
+                        opacity: dragComponent?.cat === cat && dragComponent.index === i ? 0.4 : 1,
+                      }}
+                    >
+                      <span
+                        draggable
+                        onDragStart={() => setDragComponent({ cat, index: i })}
+                        onDragEnd={() => setDragComponent(null)}
+                        title="Drag to reorder"
+                        style={{
+                          flexShrink: 0, marginTop: '10px', width: '16px', height: '20px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'grab', color: '#cbd5e1', fontSize: '13px', letterSpacing: '-2px', userSelect: 'none',
+                        }}>
+                        ⠿
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <ComponentItem
+                          component={c} systemId={system.id} manufacturerId={manufacturerId}
+                          onUpdated={updateComponentLocal} onRemoved={removeComponentLocal}
+                          onMoveUp={() => moveComponent(items, i, -1)} onMoveDown={() => moveComponent(items, i, 1)}
+                          canMoveUp={i > 0} canMoveDown={i < items.length - 1}
+                        />
+                      </div>
+                    </div>
                   ))}
                 </div>
               ))}
