@@ -1,5 +1,5 @@
 -- schema_complete.sql — GENERATED FILE, do not hand-edit.
--- Last refreshed: 2026-07-22 from live project ovndokzwkxpfjfobewaq (PostgREST OpenAPI).
+-- Last refreshed: 2026-07-27 from live project ovndokzwkxpfjfobewaq (PostgREST OpenAPI).
 -- Regenerate after every applied migration:
 --     node scripts/refresh_schema_reference.mjs
 --
@@ -546,7 +546,8 @@ CREATE TABLE public.staged_system_colours (
     parser_notes                 jsonb,
     sku_suffix                   text,
     extracted_at                 timestamp with time zone,
-    production_colour_id         uuid
+    production_colour_id         uuid,
+    image_asset_id               uuid
 );
 
 -- ============================================================
