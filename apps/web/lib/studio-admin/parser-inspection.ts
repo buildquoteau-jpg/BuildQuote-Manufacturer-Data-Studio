@@ -13,9 +13,9 @@
 // Redaction: storage_bucket, storage_key, public_url, storage_provider are
 // intentionally excluded from source_documents queries.
 
-import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import type { AdminWorkspaceManufacturer } from './manufacturer-workspace'
+import { makeStudioClient } from '@/lib/supabase/helpers'
 
 // ============================================================
 // Types
@@ -203,14 +203,6 @@ export type ParserInspectionResult =
 // Internal helpers
 // ============================================================
 
-function makeClient() {
-  try {
-    return { ok: true as const, supabase: createStudioServerClient() }
-  } catch {
-    return { ok: false as const, error: 'Supabase client not configured — check env vars.' }
-  }
-}
-
 async function assertAdminOrReviewer(): Promise<
   { allowed: true } | { allowed: false; error: string }
 > {
@@ -242,7 +234,7 @@ export async function getAdminParserInspection(
   const authCheck = await assertAdminOrReviewer()
   if (!authCheck.allowed) return { ok: false, error: authCheck.error, forbidden: true }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   // ── Manufacturer ──────────────────────────────────────────────────────────

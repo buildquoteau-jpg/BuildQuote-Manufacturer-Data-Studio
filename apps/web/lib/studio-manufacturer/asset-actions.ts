@@ -7,8 +7,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
-import { createStudioServerClient } from '@/lib/supabase/server'
-import { getStudioSession } from '@/lib/studio-auth/session'
 import {
   createPresignedUploadUrl,
   createPresignedDownloadUrl,
@@ -18,22 +16,11 @@ import {
 } from '@/lib/r2'
 import { ASSET_TYPES } from './asset-types'
 import { processAssetImage, extensionForMime } from './image-processing'
-
-// ─── Auth gate ────────────────────────────────────────────────────────────────
-
-async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-  if (session.globalRole === 'buildquote_admin') return { allowed: true, userId: session.user!.id }
-  if (session.globalRole !== 'manufacturer_user') return { allowed: false, error: 'Access denied.' }
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) return { allowed: false, error: 'Not a member of this workspace.' }
-  return { allowed: true, userId: session.user!.id }
-}
+import { assertManufacturerAccess } from './access'
+import {
+  makeStudioClient,
+  friendlyDbError as sharedFriendlyDbError,
+} from '@/lib/supabase/helpers'
 
 // ─── Shared bits ──────────────────────────────────────────────────────────────
 
@@ -51,25 +38,15 @@ const MAX_ASSET_BYTES = 25 * 1024 * 1024
 
 export type AssetActionResult = { ok: true } | { ok: false; error: string }
 
-function makeClient() {
-  try {
-    return { ok: true as const, supabase: createStudioServerClient() }
-  } catch {
-    return { ok: false as const, error: 'Supabase client not configured.' }
-  }
-}
-
 function clampFocal(value: number | null | undefined): number {
   if (value == null || !Number.isFinite(value)) return 50
   return Math.min(100, Math.max(0, Math.round(value)))
 }
 
-function friendlyDbError(message: string): string {
-  if (/does not exist/i.test(message)) {
-    return 'The asset library tables are not set up yet (migration 046 has not been applied).'
-  }
-  return message
-}
+const MISSING_SCHEMA_MESSAGE =
+  'The asset library tables are not set up yet (migration 046 has not been applied).'
+
+const friendlyDbError = (message: string) => sharedFriendlyDbError(message, MISSING_SCHEMA_MESSAGE)
 
 // ─── requestAssetUploadUrl ────────────────────────────────────────────────────
 // Presigned PUT so the browser uploads straight to R2 — same flow as documents.
@@ -146,7 +123,7 @@ export async function recordAssetUpload(
     return { ok: false, error: `Unknown asset type: ${input.assetType}` }
   }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL
@@ -229,7 +206,7 @@ export async function processAndRecordAssetUpload(
     deleteObjectFromR2(input.storageKey).catch(() => {})
   }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL
@@ -344,7 +321,7 @@ export async function importAssetFromUrl(
   const upload = await uploadObjectToR2({ storageKey, body: processed.bytes, contentType: processed.mimeType })
   if (!upload.ok) return { ok: false, error: `Storage upload failed: ${upload.error}` }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL
@@ -408,7 +385,7 @@ export async function updateAssetMeta(
     return { ok: false, error: `Unknown asset type: ${input.assetType}` }
   }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const { error } = await c.supabase
@@ -444,7 +421,7 @@ export async function setAssetArchived(
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const { error } = await c.supabase

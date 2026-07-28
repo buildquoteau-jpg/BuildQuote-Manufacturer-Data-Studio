@@ -8,6 +8,7 @@ import { cookies } from 'next/headers'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { createPresignedDownloadUrl } from '@/lib/r2'
 import type { StudioSession, StudioManufacturerMembership } from '@/lib/studio-auth/session'
+import { makeStudioClient } from '@/lib/supabase/helpers'
 
 const GATE_COOKIE = 'admin_workspace_gate'
 
@@ -214,14 +215,6 @@ export type ManufacturerPreviewResult =
 // Internal helpers
 // ============================================================
 
-function makeClient() {
-  try {
-    return { ok: true as const, supabase: createStudioServerClient() }
-  } catch {
-    return { ok: false as const, error: 'Supabase client not configured — check env vars.' }
-  }
-}
-
 async function resolveUploaderNames(
   supabase: ReturnType<typeof createStudioServerClient>,
   authUserIds: string[],
@@ -263,7 +256,7 @@ function groupByStatus(
 export async function getManufacturerInfo(
   manufacturerId: string,
 ): Promise<ManufacturerInfoResult> {
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const { data, error } = await c.supabase
@@ -303,7 +296,7 @@ export async function getManufacturerInfo(
 export async function getWorkspaceCounts(
   manufacturerId: string,
 ): Promise<WorkspaceCountsResult> {
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [docsResult, systemsResult, componentsResult] = await Promise.all([
@@ -341,7 +334,7 @@ export async function getWorkspaceCounts(
 export async function getManufacturerDocuments(
   manufacturerId: string,
 ): Promise<ManufacturerDocumentsResult> {
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const { data, error } = await c.supabase
@@ -389,7 +382,7 @@ export async function getManufacturerDocuments(
 export async function getManufacturerReviewData(
   manufacturerId: string,
 ): Promise<ManufacturerReviewResult> {
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   // Fetch systems list + component statuses + counts in parallel
@@ -477,7 +470,7 @@ export async function getManufacturerReviewData(
 export async function getManufacturerPreviewData(
   manufacturerId: string,
 ): Promise<ManufacturerPreviewResult> {
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [mfrResult, systemsResult] = await Promise.all([
@@ -675,7 +668,7 @@ async function resolveMfrHeroImageUrl(
 export async function getManufacturerVerificationData(
   manufacturerId: string,
 ): Promise<ManufacturerVerificationResult> {
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const stagedSelect = (withGallery: boolean) =>
@@ -897,7 +890,7 @@ export async function getManufacturerVerificationData(
 export async function getPortalData(
   manufacturerId: string,
 ): Promise<PortalDataResult> {
-  const c = makeClient()
+  const c = makeStudioClient()
   if (!c.ok) return { ok: false, error: c.error }
 
   const [mfrResult, docsResult, systemsResult] = await Promise.all([

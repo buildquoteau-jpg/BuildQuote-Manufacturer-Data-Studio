@@ -2,7 +2,7 @@
 
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
-import { assertManufacturerAccess } from './verification-actions'
+import { assertManufacturerAccess } from './access'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

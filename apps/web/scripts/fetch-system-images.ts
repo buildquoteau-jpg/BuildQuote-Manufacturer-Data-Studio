@@ -24,30 +24,16 @@
  *   --overwrite            Also update rows that already have hero_image_url set
  */
 
-import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
+import { loadEnvFile } from './lib/cli.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '..')
 
 // ── Env loading ──────────────────────────────────────────────
-
-function loadEnvFile(filepath: string): void {
-  if (!existsSync(filepath)) return
-  const lines = readFileSync(filepath, 'utf8').split('\n')
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const eqIdx = trimmed.indexOf('=')
-    if (eqIdx < 0) continue
-    const key = trimmed.slice(0, eqIdx).trim()
-    const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
-    if (!(key in process.env)) process.env[key] = val
-  }
-}
 
 loadEnvFile(path.join(REPO_ROOT, '.env.local'))
 

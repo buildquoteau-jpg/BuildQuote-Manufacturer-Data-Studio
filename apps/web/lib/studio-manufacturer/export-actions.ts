@@ -8,30 +8,11 @@
 //
 // Both are read-only; per card or across the workspace with a date range.
 
-import { createStudioServerClient } from '@/lib/supabase/server'
-import { getStudioSession } from '@/lib/studio-auth/session'
-
-// ─── Auth gate (house pattern) ────────────────────────────────────────────────
-
-async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-  if (session.globalRole === 'buildquote_admin') return { allowed: true, userId: session.user!.id }
-  if (session.globalRole !== 'manufacturer_user') return { allowed: false, error: 'Access denied.' }
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) return { allowed: false, error: 'Not a member of this workspace.' }
-  return { allowed: true, userId: session.user!.id }
-}
-
-function isMissingSchemaError(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false
-  if (err.code === '42P01' || err.code === '42703') return true
-  return /does not exist/i.test(err.message ?? '')
-}
+import { assertManufacturerAccess } from './access'
+import {
+  isMissingSchemaError,
+  makeStudioClient,
+} from '@/lib/supabase/helpers'
 
 function csvEscape(v: string | null | undefined): string {
   const s = v ?? ''
@@ -51,12 +32,9 @@ export async function getAuditTrailCsv(
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   // Cards in scope
   let cardsQuery = supabase
@@ -198,12 +176,9 @@ export async function getCertificateData(
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const { data: mfr } = await supabase
     .from('data_studio_manufacturers')

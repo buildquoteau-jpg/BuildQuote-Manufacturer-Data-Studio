@@ -6,7 +6,6 @@
 // here degrades gracefully (migrationMissing flags / empty asset info) so the
 // page renders instead of crashing.
 
-import { createStudioServerClient } from '@/lib/supabase/server'
 import {
   getManufacturerVerificationData,
   type ManufacturerInfo,
@@ -19,6 +18,10 @@ import {
   type CardAssetInfo,
   type PackageReadiness,
 } from '@/lib/packages/readiness'
+import {
+  isMissingSchemaError,
+  makeStudioClient,
+} from '@/lib/supabase/helpers'
 
 export type CardPackageRecord = {
   id: string
@@ -51,24 +54,15 @@ export type PackagesPageResult =
   | { ok: true; data: PackagesPageData }
   | { ok: false; error: string }
 
-function isMissingSchemaError(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false
-  if (err.code === '42P01' || err.code === '42703') return true
-  return /does not exist/i.test(err.message ?? '')
-}
-
 export async function getPackagesPageData(
   manufacturerId: string,
 ): Promise<PackagesPageResult> {
   const verification = await getManufacturerVerificationData(manufacturerId)
   if (!verification.ok) return { ok: false, error: verification.error }
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured — check env vars.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const systemIds = verification.systems.map((s) => s.id)
 

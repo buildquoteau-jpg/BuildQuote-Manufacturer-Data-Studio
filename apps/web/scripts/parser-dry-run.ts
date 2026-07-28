@@ -31,28 +31,11 @@ import { planParserOutputInsertion } from '../lib/parser/map-to-staged'
 import { buildDryRunReport } from '../lib/parser/dry-run-report'
 import type { ParserOutput, ParserRunContext } from '../lib/parser/types'
 import type { DryRunReport, DryRunCheck } from '../lib/parser/dry-run-report'
+import { parseArgs } from './lib/cli.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
-
-function parseArgs(argv: string[]): Record<string, string | boolean> {
-  const args: Record<string, string | boolean> = {}
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2)
-      const next = argv[i + 1]
-      if (next !== undefined && !next.startsWith('--')) {
-        args[key] = next
-        i++
-      } else {
-        args[key] = true
-      }
-    }
-  }
-  return args
-}
 
 function resolveDotLocal(p: string): string {
   return p.startsWith('.local/')

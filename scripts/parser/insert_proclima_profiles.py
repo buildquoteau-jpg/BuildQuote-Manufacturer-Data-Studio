@@ -19,6 +19,10 @@ import os
 import sys
 from pathlib import Path
 
+# scripts/lib is importable regardless of cwd
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.env import load_env_local  # noqa: E402
+
 # ── staged_system UUIDs ────────────────────────────────────────────────────────
 SYS = {
     "8mm 3D Separation Mesh":           "7ca083a8-8892-4700-b33b-56d2e1f70a3c",
@@ -239,17 +243,7 @@ PROFILES = {
 
 
 def load_env():
-    try:
-        from dotenv import dotenv_values
-        repo_root = Path(__file__).parent.parent.parent
-        env_file = repo_root / ".env.local"
-        if not env_file.exists():
-            env_file = Path(".env.local")
-        for k, v in dotenv_values(str(env_file)).items():
-            if v is not None:
-                os.environ[k] = v
-    except ImportError:
-        pass
+    load_env_local()
     return (
         os.environ.get("NEXT_PUBLIC_SUPABASE_URL"),
         os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),

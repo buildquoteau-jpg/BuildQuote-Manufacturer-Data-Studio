@@ -9,8 +9,6 @@
 // in their route/page files because they run without a session.
 
 import { revalidatePath } from 'next/cache'
-import { createStudioServerClient } from '@/lib/supabase/server'
-import { getStudioSession } from '@/lib/studio-auth/session'
 import {
   AU_STATES,
   type StockistActionResult,
@@ -19,45 +17,19 @@ import {
   type StockistListResult,
   type StockistRecord,
 } from './stockist-types'
+import { assertManufacturerAccess } from './access'
+import {
+  makeStudioClient,
+  isMissingSchemaError,
+  friendlyDbError as sharedFriendlyDbError,
+} from '@/lib/supabase/helpers'
 
 const MAX_IMPORT_ROWS = 1000
 
-// ─── Auth gate ────────────────────────────────────────────────────────────────
+const MISSING_SCHEMA_MESSAGE =
+  'The stockist tables are not set up yet (migration 048 has not been applied).'
 
-async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-  if (session.globalRole === 'buildquote_admin') return { allowed: true, userId: session.user!.id }
-  if (session.globalRole !== 'manufacturer_user') return { allowed: false, error: 'Access denied.' }
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) return { allowed: false, error: 'Not a member of this workspace.' }
-  return { allowed: true, userId: session.user!.id }
-}
-
-function makeClient() {
-  try {
-    return { ok: true as const, supabase: createStudioServerClient() }
-  } catch {
-    return { ok: false as const, error: 'Supabase client not configured.' }
-  }
-}
-
-function isMissingSchemaError(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false
-  if (err.code === '42P01' || err.code === '42703') return true
-  return /does not exist/i.test(err.message ?? '')
-}
-
-function friendlyDbError(message: string): string {
-  if (/does not exist/i.test(message)) {
-    return 'The stockist tables are not set up yet (migration 048 has not been applied).'
-  }
-  return message
-}
+const friendlyDbError = (message: string) => sharedFriendlyDbError(message, MISSING_SCHEMA_MESSAGE)
 
 // ─── Input sanitising ─────────────────────────────────────────────────────────
 
@@ -93,7 +65,7 @@ function sanitise(input: StockistInput):
 export async function listStockists(manufacturerId: string): Promise<StockistListResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return { ok: false, error: client.error }
 
   const { data, error } = await client.supabase
@@ -146,7 +118,7 @@ export async function createStockist(
 ): Promise<StockistActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return { ok: false, error: client.error }
 
   const clean = sanitise(input)
@@ -172,7 +144,7 @@ export async function importStockists(
 ): Promise<StockistImportResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return { ok: false, error: client.error }
 
   if (!Array.isArray(inputs) || inputs.length === 0) {
@@ -211,7 +183,7 @@ export async function updateStockist(
 ): Promise<StockistActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return { ok: false, error: client.error }
 
   const clean = sanitise(input)
@@ -236,7 +208,7 @@ export async function deleteStockist(
 ): Promise<StockistActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return { ok: false, error: client.error }
 
   const { error } = await client.supabase
@@ -261,7 +233,7 @@ export async function setStockistCards(
 ): Promise<StockistActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
-  const client = makeClient()
+  const client = makeStudioClient()
   if (!client.ok) return { ok: false, error: client.error }
 
   const { error: updateError } = await client.supabase

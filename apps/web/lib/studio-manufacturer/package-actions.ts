@@ -12,8 +12,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
-import { createStudioServerClient } from '@/lib/supabase/server'
-import { getStudioSession } from '@/lib/studio-auth/session'
 import { getObjectFromR2, uploadObjectToR2, createPresignedDownloadUrl } from '@/lib/r2'
 import { getManufacturerVerificationData } from './workspace'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
@@ -25,28 +23,11 @@ import {
 import { buildPackageZip, type PackageCardInput, type PackageFile } from '@/lib/packages/generator'
 import { getManufacturerStockists, stockistsForCard } from '@/lib/data/getCardStockists'
 import { SYSTEM_CARD_BUNDLE_JS } from '@/lib/packages/generated/system-card-bundle'
-
-// ─── Auth gate ────────────────────────────────────────────────────────────────
-
-async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-  if (session.globalRole === 'buildquote_admin') return { allowed: true, userId: session.user!.id }
-  if (session.globalRole !== 'manufacturer_user') return { allowed: false, error: 'Access denied.' }
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) return { allowed: false, error: 'Not a member of this workspace.' }
-  return { allowed: true, userId: session.user!.id }
-}
-
-function isMissingSchemaError(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false
-  if (err.code === '42P01' || err.code === '42703') return true
-  return /does not exist/i.test(err.message ?? '')
-}
+import { assertManufacturerAccess } from './access'
+import {
+  isMissingSchemaError,
+  makeStudioClient,
+} from '@/lib/supabase/helpers'
 
 // ─── Image resolution helpers ─────────────────────────────────────────────────
 
@@ -130,12 +111,9 @@ export async function generateCardPackage(
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   // ── Load card + brand data ──
   const verification = await getManufacturerVerificationData(manufacturerId)
@@ -555,12 +533,9 @@ export async function downloadPackageZip(
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   const { data, error } = await supabase
     .from('card_packages')

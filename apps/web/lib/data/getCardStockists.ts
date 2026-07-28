@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { SystemCardStockist } from '@/components/system-card-renderer/types'
+import { isMissingSchemaError } from '@/lib/supabase/helpers'
 
 type StockistRow = {
   id: string
@@ -40,12 +41,6 @@ export function stockistRowToCardStockist(row: StockistRow): SystemCardStockist 
     trade_desk_email: row.trade_desk_email,
     confirmed_at: row.confirm_status === 'confirmed' ? row.confirmed_at : null,
   }
-}
-
-function isMissingSchemaError(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false
-  if (err.code === '42P01' || err.code === '42703') return true
-  return /does not exist/i.test(err.message ?? '')
 }
 
 /**

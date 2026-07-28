@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { manufacturerMembershipError } from '@/lib/studio-auth/route-guards'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 
 export const runtime = 'nodejs'
@@ -95,17 +96,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Authz: admin passes; manufacturer_user needs an active membership here.
-  if (session.globalRole !== 'buildquote_admin') {
-    if (session.globalRole !== 'manufacturer_user') {
-      return NextResponse.json({ error: 'Access denied.' }, { status: 403 })
-    }
-    const hasMembership = session.memberships.some(
-      (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-    )
-    if (!hasMembership) {
-      return NextResponse.json({ error: 'Not a member of this workspace.' }, { status: 403 })
-    }
-  }
+  const membershipError = manufacturerMembershipError(session, manufacturerId)
+  if (membershipError) return membershipError
 
   let supabase: ReturnType<typeof createStudioServiceClient>
   try {

@@ -20,31 +20,16 @@
 // separate share/view analytics table from migration 050.
 
 import { revalidatePath } from 'next/cache'
-import { createStudioServerClient } from '@/lib/supabase/server'
 import { createProductionServiceClient } from '@/lib/supabase/production'
-import { getStudioSession } from '@/lib/studio-auth/session'
 import { buildCardSnapshot } from '@/lib/publishing/buildCardSnapshot'
+import { assertManufacturerAccess } from './access'
+import { makeStudioClient } from '@/lib/supabase/helpers'
 
 const V6_ORIGIN = process.env.BUILDQUOTE_PUBLIC_ORIGIN || 'https://buildquote.com.au'
 
 export type PublishCardLiveResult =
   | { ok: true; liveUrl: string; version: string; warnings: string[] }
   | { ok: false; error: string }
-
-async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string; label: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-  const label = session.profile.fullName || session.profile.email || 'unknown'
-  if (session.globalRole === 'buildquote_admin') return { allowed: true, userId: session.user!.id, label }
-  if (session.globalRole !== 'manufacturer_user') return { allowed: false, error: 'Access denied.' }
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) return { allowed: false, error: 'Not a member of this workspace.' }
-  return { allowed: true, userId: session.user!.id, label }
-}
 
 // '1.0' → '1.1'; anything unparseable restarts at '1.0'.
 function bumpMinor(version: string | null): string {
@@ -58,12 +43,9 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     return { ok: false, error: 'Live publishing is not enabled — submit for publication instead.' }
   }
 
-  let supabase: ReturnType<typeof createStudioServerClient>
-  try {
-    supabase = createStudioServerClient()
-  } catch {
-    return { ok: false, error: 'Supabase client not configured.' }
-  }
+  const clientResult = makeStudioClient()
+  if (!clientResult.ok) return { ok: false, error: clientResult.error }
+  const supabase = clientResult.supabase
 
   // ── Build the snapshot ──
   const built = await buildCardSnapshot(supabase, stagedSystemId)

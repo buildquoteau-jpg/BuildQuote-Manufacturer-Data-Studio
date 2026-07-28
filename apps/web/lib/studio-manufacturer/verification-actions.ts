@@ -3,34 +3,7 @@
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { postSubmissionMessage } from './messages-actions'
-
-// ─── Auth gate ────────────────────────────────────────────────────────────────
-// Manufacturers can only write to their own workspace.
-// buildquote_admin can access any workspace.
-
-export async function assertManufacturerAccess(
-  manufacturerId: string,
-): Promise<{ allowed: true; userId: string } | { allowed: false; error: string }> {
-  const session = await getStudioSession()
-  if (!session.profile) return { allowed: false, error: 'Not authenticated.' }
-
-  if (session.globalRole === 'buildquote_admin') {
-    return { allowed: true, userId: session.user!.id }
-  }
-
-  if (session.globalRole !== 'manufacturer_user') {
-    return { allowed: false, error: 'Access denied.' }
-  }
-
-  const hasMembership = session.memberships.some(
-    (m) => m.manufacturerId === manufacturerId && m.status === 'active',
-  )
-  if (!hasMembership) {
-    return { allowed: false, error: 'Not a member of this workspace.' }
-  }
-
-  return { allowed: true, userId: session.user!.id }
-}
+import { assertManufacturerAccess } from './access'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
