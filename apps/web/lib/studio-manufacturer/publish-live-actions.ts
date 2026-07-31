@@ -24,6 +24,7 @@ import { createStudioServerClient } from '@/lib/supabase/server'
 import { createProductionServiceClient } from '@/lib/supabase/production'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { buildCardSnapshot } from '@/lib/publishing/buildCardSnapshot'
+import { publishSystem } from '@/lib/studio-admin/publish'
 
 const V6_ORIGIN = process.env.BUILDQUOTE_PUBLIC_ORIGIN || 'https://buildquote.com.au'
 
@@ -221,6 +222,31 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
   }).then(({ error }) => {
     if (error) warnings.push(`Publish event not logged (${error.message}).`)
   })
+
+  // ── Sync a production `systems` row too (fails soft) ──
+  // The hybrid channel above only ever wrote published_cards, so cards
+  // published this way never showed up anywhere that reads the legacy
+  // `systems` table — the manufacturer-portal's "My Products" stocking
+  // picker, embed widgets, and the /library manufacturer directory all
+  // came up empty for them. publishSystem() is the same systems/profiles/
+  // colours/components sync the admin approval channel uses; running it
+  // here keeps every downstream consumer on one source of truth instead of
+  // teaching each of them to also read published_cards. It requires a
+  // linked source document (Source Traceability Rule) — when missing, skip
+  // it with a warning rather than failing the live publish, matching the
+  // warn-but-allow treatment already given to that same condition above.
+  if (snap.stagedSystem.source_document_id) {
+    try {
+      const sysResult = await publishSystem(stagedSystemId, false)
+      if (!sysResult.ok) {
+        warnings.push(`Product not synced to the supplier-stocking catalogue (${sysResult.error}).`)
+      }
+    } catch (err) {
+      warnings.push(`Product not synced to the supplier-stocking catalogue (${err instanceof Error ? err.message : 'error'}).`)
+    }
+  } else {
+    warnings.push('No source document linked — this card won’t appear in the supplier "My Products" picker until one is attached and re-published.')
+  }
 
   revalidatePath('/manufacturer/review')
   revalidatePath('/manufacturer/cms')
