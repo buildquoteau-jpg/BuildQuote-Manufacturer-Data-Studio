@@ -366,19 +366,27 @@ function ProfileGroupBlock({
 
 // ─── Profiles section ─────────────────────────────────────────────────────────
 
+// Manufacturers whose profile lists should always render flat, with no
+// collapsible group dropdown — e.g. North Eden Timber's decking species
+// systems, whose profile names don't share a clean prefix/suffix and so
+// every profile was landing in its own single-item dropdown.
+const FLAT_PROFILE_MANUFACTURER_NAMES = new Set(['North Eden Timber'])
+
 function ProfilesSection({
-  profiles, systemName, selected, onToggle,
+  profiles, systemName, selected, onToggle, manufacturerName,
 }: {
   profiles: SystemProfile[]
   systemName: string
   selected: Set<number>
   onToggle: (idx: number) => void
+  manufacturerName?: string | null
 }) {
   if (profiles.length === 0) return null
+  const forceFlat   = !!manufacturerName && FLAT_PROFILE_MANUFACTURER_NAMES.has(manufacturerName)
   const groups      = groupProfiles(profiles)
   const defaultOpen = profiles.length <= 3
-  const multiGroup  = groups.length > 1
-  const useHeaders  = multiGroup || !defaultOpen
+  const multiGroup  = !forceFlat && groups.length > 1
+  const useHeaders  = !forceFlat && (multiGroup || !defaultOpen)
 
   return (
     <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid #e2e8f0' }}>
@@ -390,7 +398,7 @@ function ProfilesSection({
         Profiles · {profiles.length} variant{profiles.length !== 1 ? 's' : ''}
       </div>
       {/* Static system name header for single-group cards so name travels to RFQ */}
-      {!multiGroup && (
+      {!forceFlat && !multiGroup && (
         <div style={{
           fontSize: '13px', fontWeight: 700, color: '#111827',
           paddingLeft: '10px', borderLeft: '3px solid #185D7A',
@@ -764,6 +772,7 @@ export function SystemCard({ data }: { data: SystemCardData }) {
           systemName={data.name}
           selected={selectedProfiles}
           onToggle={toggleProfile}
+          manufacturerName={data.manufacturer_name}
         />
 
         <ComponentsSection
