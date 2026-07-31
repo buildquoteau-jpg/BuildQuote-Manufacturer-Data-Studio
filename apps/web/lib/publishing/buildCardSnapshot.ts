@@ -12,6 +12,8 @@
 // FUTURE (manufacturer accounts): ownership/analytics attribution should hang
 // off staged_systems.owner_account_id; this builder stays account-agnostic.
 
+import { createHash } from 'crypto'
+import sharp from 'sharp'
 import type { createStudioServerClient } from '@/lib/supabase/server'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
 import type { SystemCardSystem, SystemCardStockist } from '@/components/system-card-renderer/types'
@@ -19,6 +21,7 @@ import { getManufacturerVerificationData, type VerificationSystem, type Manufact
 import { resolveCardSlug } from '@/lib/packages/readiness'
 import { getManufacturerStockists, stockistsForCard } from '@/lib/data/getCardStockists'
 import type { CardContainer } from '@/lib/packages/card-container'
+import { getObjectFromR2, uploadObjectToR2 } from '@/lib/r2'
 
 type SupabaseClient = ReturnType<typeof createStudioServerClient>
 
@@ -75,6 +78,53 @@ function isEphemeralUrl(url: string | null | undefined): boolean {
   return /r2\.cloudflarestorage\.com|X-Amz-Signature=/i.test(url)
 }
 
+// ── Derived JPEG cover ────────────────────────────────────────────────────────
+// Manufacturer uploads are optimized to WebP at upload time (see
+// image-processing.ts), so the real hero/cover asset is almost never a true
+// JPEG — leaving ogImageUrl null and share previews stuck on the branded
+// fallback. Rather than require manufacturers to source a JPEG separately,
+// generate one here at publish time: pull the source bytes (directly from R2
+// when we know the storage key, otherwise via HTTP for external/manufacturer-
+// site URLs), flatten + re-encode with sharp, and store the derivative as its
+// own object so it gets a durable public URL. Fails soft — a derivation error
+// just leaves the existing "no JPEG cover" warning in place.
+async function deriveJpegCover(source: {
+  assetId: string | null
+  storageKey: string | null
+  url: string | null
+}): Promise<string | null> {
+  if (!source.url) return null
+  try {
+    let bytes: Uint8Array
+    if (source.storageKey) {
+      const got = await getObjectFromR2(source.storageKey)
+      if (!got.ok) throw new Error(got.error)
+      bytes = got.bytes
+    } else {
+      const res = await fetch(source.url)
+      if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
+      bytes = new Uint8Array(await res.arrayBuffer())
+    }
+
+    const jpegBytes = await sharp(bytes, { failOn: 'none' })
+      .flatten({ background: '#ffffff' }) // og:image is opaque — matte out any transparency
+      .jpeg({ quality: 85 })
+      .toBuffer()
+
+    const idPart = source.assetId ?? createHash('sha1').update(source.url).digest('hex')
+    const key = `derived-og/${idPart}.jpg`
+    const uploaded = await uploadObjectToR2({ storageKey: key, body: jpegBytes, contentType: 'image/jpeg' })
+    if (!uploaded.ok) throw new Error(uploaded.error)
+
+    const base = process.env.CLOUDFLARE_R2_PUBLIC_URL
+    if (!base) throw new Error('CLOUDFLARE_R2_PUBLIC_URL not configured.')
+    return `${base.replace(/\/$/, '')}/${key}`
+  } catch (err) {
+    console.error('[buildCardSnapshot] JPEG cover derivation failed:', err)
+    return null
+  }
+}
+
 export async function buildCardSnapshot(
   supabase: SupabaseClient,
   stagedSystemId: string,
@@ -106,18 +156,18 @@ export async function buildCardSnapshot(
     stagedSystem.hero_image_asset_id,
     ...(system.gallery_images ?? []).map((img) => img.asset_id),
   ].filter((id): id is string => !!id)
-  const mimeByAssetId = new Map<string, string | null>()
+  const assetInfoById = new Map<string, { mimeType: string | null; storageKey: string | null }>()
   if (assetIds.length) {
     const { data: assetRows } = await supabase
       .from('manufacturer_assets')
-      .select('id, mime_type')
+      .select('id, mime_type, storage_key')
       .in('id', assetIds)
-    for (const row of (assetRows ?? []) as { id: string; mime_type: string | null }[]) {
-      mimeByAssetId.set(row.id, row.mime_type)
+    for (const row of (assetRows ?? []) as { id: string; mime_type: string | null; storage_key: string | null }[]) {
+      assetInfoById.set(row.id, { mimeType: row.mime_type, storageKey: row.storage_key })
     }
   }
   const heroIsJpeg = stagedSystem.hero_image_asset_id
-    ? isJpegMime(mimeByAssetId.get(stagedSystem.hero_image_asset_id))
+    ? isJpegMime(assetInfoById.get(stagedSystem.hero_image_asset_id)?.mimeType)
     : looksLikeJpeg(system.hero_image_url)
 
   // ── Rewrite every image to a durable URL before freezing the snapshot ──
@@ -172,13 +222,21 @@ export async function buildCardSnapshot(
   const gallery = system.gallery_images ?? []
   const cover = gallery[0] ?? null
   const coverIsJpeg = cover?.asset_id
-    ? isJpegMime(mimeByAssetId.get(cover.asset_id))
+    ? isJpegMime(assetInfoById.get(cover.asset_id)?.mimeType)
     : looksLikeJpeg(cover?.url)
   const coverUrl = system.hero_image_url ?? cover?.url ?? null
-  const ogImageUrl =
+  let ogImageUrl =
     (heroIsJpeg ? system.hero_image_url : null) ??
     cover?.og_jpg_url ??
     (coverIsJpeg ? cover!.url : null)
+
+  if (!ogImageUrl && coverUrl) {
+    const usingHero = system.hero_image_url === coverUrl
+    const sourceAssetId = usingHero ? stagedSystem.hero_image_asset_id : (cover?.asset_id ?? null)
+    const sourceStorageKey = sourceAssetId ? assetInfoById.get(sourceAssetId)?.storageKey ?? null : null
+    ogImageUrl = await deriveJpegCover({ assetId: sourceAssetId, storageKey: sourceStorageKey, url: coverUrl })
+  }
+
   if (coverUrl && !ogImageUrl) {
     warnings.push('No JPEG cover available — share previews will use the branded fallback image.')
   }
