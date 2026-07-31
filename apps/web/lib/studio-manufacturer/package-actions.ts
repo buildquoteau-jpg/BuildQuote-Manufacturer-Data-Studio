@@ -205,8 +205,8 @@ export async function generateCardPackage(
     if (!error && data) {
       for (const row of data as Array<AssetRow & { asset_type: string }>) {
         assetRows.set(row.id, row)
-        // Fallback logo: any approved logo-type asset when no slot is linked.
-        if (!logoTypeAsset && row.asset_type === 'logo' && row.approved_for_publication) {
+        // Fallback logo: any logo-type asset when no slot is linked.
+        if (!logoTypeAsset && row.asset_type === 'logo') {
           logoTypeAsset = row
         }
       }
@@ -219,7 +219,11 @@ export async function generateCardPackage(
     const heroAsset = heroAssetId ? assetRows.get(heroAssetId) ?? null : null
     const info: CardAssetInfo = {
       heroImageAssetId: heroAssetId,
-      heroAssetReady: !!heroAsset && !heroAsset.archived && heroAsset.approved_for_publication,
+      // approved_for_publication is no longer required here — the hybrid
+      // publish flow already auto-approves referenced assets on publish, and
+      // gating packaging on it too was blocking manufacturers who hadn't hit
+      // "Publish update" yet even though the asset itself is fine to bundle.
+      heroAssetReady: !!heroAsset && !heroAsset.archived,
     }
     return { system: s, readiness: evaluateCardReadiness(s, info) }
   })

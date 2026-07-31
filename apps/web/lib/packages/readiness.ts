@@ -75,7 +75,7 @@ export type PackageReadiness = {
 export type CardAssetInfo = {
   /** staged_systems.hero_image_asset_id (null when unset or column missing). */
   heroImageAssetId: string | null
-  /** Whether that asset exists, is not archived, and is approved for publication. */
+  /** Whether that asset exists and is not archived. */
   heroAssetReady: boolean
 }
 
@@ -128,7 +128,7 @@ export function evaluateCardReadiness(
   // it. Requiring an Asset Library link makes the result deterministic.
   if (assetInfo?.heroImageAssetId) {
     if (!assetInfo.heroAssetReady) {
-      blockers.push('The linked hero image asset is archived or not approved for publication.')
+      blockers.push('The linked hero image asset is archived.')
       setStatus('needs_asset_import')
     }
   } else if (card.hero_image_url) {

@@ -47,6 +47,15 @@ function looksLikeJpeg(url: string | null | undefined): boolean {
   return !!url && /\.jpe?g(\?|#|$)/i.test(url)
 }
 
+// Asset-linked hero/gallery images are rewritten to the opaque
+// /api/assets/<id> route (durableAssetUrl below), which has no file
+// extension — looksLikeJpeg() can never match it even when the underlying
+// file genuinely is a JPEG. For asset-linked images, check the real
+// mime_type from manufacturer_assets instead of sniffing the URL string.
+function isJpegMime(mimeType: string | null | undefined): boolean {
+  return mimeType === 'image/jpeg' || mimeType === 'image/jpg'
+}
+
 // ── Durable image URLs ────────────────────────────────────────────────────────
 // Published snapshots live forever, but asset URLs floating around the draft
 // data are often presigned R2 links that EXPIRE AFTER AN HOUR (X-Amz-Expires).
@@ -89,6 +98,27 @@ export async function buildCardSnapshot(
   const warnings: string[] = []
   const system = adaptStagedSystem(stagedSystem, verification.manufacturer)
   const slug = resolveCardSlug(stagedSystem)
+
+  // ── Look up real mime types for every asset-linked image, so the JPEG
+  // cover check below can trust actual file type instead of guessing from
+  // a URL that (after the durable rewrite) never carries a file extension.
+  const assetIds = [
+    stagedSystem.hero_image_asset_id,
+    ...(system.gallery_images ?? []).map((img) => img.asset_id),
+  ].filter((id): id is string => !!id)
+  const mimeByAssetId = new Map<string, string | null>()
+  if (assetIds.length) {
+    const { data: assetRows } = await supabase
+      .from('manufacturer_assets')
+      .select('id, mime_type')
+      .in('id', assetIds)
+    for (const row of (assetRows ?? []) as { id: string; mime_type: string | null }[]) {
+      mimeByAssetId.set(row.id, row.mime_type)
+    }
+  }
+  const heroIsJpeg = stagedSystem.hero_image_asset_id
+    ? isJpegMime(mimeByAssetId.get(stagedSystem.hero_image_asset_id))
+    : looksLikeJpeg(system.hero_image_url)
 
   // ── Rewrite every image to a durable URL before freezing the snapshot ──
   system.gallery_images = (system.gallery_images ?? [])
@@ -141,11 +171,14 @@ export async function buildCardSnapshot(
   // crawler-safe, so prefer the stored jpg sibling. ──
   const gallery = system.gallery_images ?? []
   const cover = gallery[0] ?? null
+  const coverIsJpeg = cover?.asset_id
+    ? isJpegMime(mimeByAssetId.get(cover.asset_id))
+    : looksLikeJpeg(cover?.url)
   const coverUrl = system.hero_image_url ?? cover?.url ?? null
   const ogImageUrl =
-    (looksLikeJpeg(system.hero_image_url) ? system.hero_image_url : null) ??
+    (heroIsJpeg ? system.hero_image_url : null) ??
     cover?.og_jpg_url ??
-    (looksLikeJpeg(cover?.url) ? cover!.url : null)
+    (coverIsJpeg ? cover!.url : null)
   if (coverUrl && !ogImageUrl) {
     warnings.push('No JPEG cover available — share previews will use the branded fallback image.')
   }
