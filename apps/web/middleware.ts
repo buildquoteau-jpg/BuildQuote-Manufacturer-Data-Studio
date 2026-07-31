@@ -55,6 +55,8 @@ export async function middleware(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/stockist-confirm') &&
     // Static seed-data renderer demo — no auth, no DB by design
     !request.nextUrl.pathname.startsWith('/system-card-preview') &&
+    // System Card V2 design experiment — isolated, no auth, no DB by design
+    !request.nextUrl.pathname.startsWith('/system-card-v2') &&
     // Sitemap of canonical card URLs
     request.nextUrl.pathname !== '/sitemap.xml' &&
     // Share links, view beacon, share creation, doc click-through tracking

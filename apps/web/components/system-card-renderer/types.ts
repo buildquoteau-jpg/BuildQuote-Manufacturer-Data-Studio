@@ -43,6 +43,11 @@ export type SystemCardProfile = {
   supplier_pack_qty: number | null
   supplier_pack_uom: string | null
   sort_order: number
+  // Optional — added for System Card V2's Technical Specification reveal,
+  // which surfaces every real attribute the data model holds. adaptStagedSystem.ts
+  // (the production adapter) doesn't populate this yet, so it's always
+  // undefined/absent there; existing renders are unaffected either way.
+  weight_kg?: number | null
 }
 
 // A component entry on the card. Mirrors v6's link-table shape: `role` is the
@@ -85,6 +90,12 @@ export type SystemCardSystem = {
   acoustic_rating: string | null
   structural_grade: string | null
   notes: string | null
+  // Optional — added for System Card V2's Applications block. Real data
+  // (e.g. Apex PLUS: "decking, cladding, edging, screening") lives today in
+  // staged profile parser_notes, which isn't part of this contract; this is
+  // a system-level home for it once an adapter chooses to populate it.
+  // adaptStagedSystem.ts doesn't yet, so existing renders are unaffected.
+  applications?: string[] | null
   website_url: string | null
   install_guide_urls: { label: string; url: string }[] | null
   design_guide_url: string | null
