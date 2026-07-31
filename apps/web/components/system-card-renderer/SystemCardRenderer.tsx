@@ -305,24 +305,32 @@ function ProfileGroupBlock({ groupKey, systemName, showSystemName, items, defaul
 
 // ── Profiles section ──────────────────────────────────────────────────────────
 
-function ProfilesSection({ profiles, systemName, selected, onToggle }: {
+// Manufacturers whose profile lists should always render flat, with no
+// collapsible group dropdown — e.g. North Eden Timber's decking species
+// systems, whose profile names don't share a clean prefix/suffix and so
+// every profile was landing in its own single-item dropdown.
+const FLAT_PROFILE_MANUFACTURER_SLUGS = new Set(['north-eden-timber'])
+
+function ProfilesSection({ profiles, systemName, selected, onToggle, manufacturerSlug }: {
   profiles: SystemCardProfile[]
   systemName: string
   selected: Set<number>
   onToggle: (idx: number) => void
+  manufacturerSlug?: string | null
 }) {
   if (profiles.length === 0) return null
+  const forceFlat   = !!manufacturerSlug && FLAT_PROFILE_MANUFACTURER_SLUGS.has(manufacturerSlug)
   const groups      = groupProfiles(profiles)
   const defaultOpen = profiles.length <= 3
-  const multiGroup  = groups.length > 1
-  const useHeaders  = multiGroup || !defaultOpen
+  const multiGroup  = !forceFlat && groups.length > 1
+  const useHeaders  = !forceFlat && (multiGroup || !defaultOpen)
 
   return (
     <div style={sectionBlock}>
       <div style={sectionLabel}>
         Profiles · {profiles.length} variant{profiles.length !== 1 ? 's' : ''}
       </div>
-      {!multiGroup && !useHeaders && (
+      {!forceFlat && !multiGroup && !useHeaders && (
         <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827', paddingLeft: '10px', borderLeft: '3px solid #185D7A', marginBottom: '8px' }}>
           {(() => {
             const key = groups[0]?.key ?? ''
@@ -842,6 +850,7 @@ export function SystemCardRenderer({ system, stockists = [], onAddToList, onRequ
           systemName={stripSystem(system.name)}
           selected={selectedProfiles}
           onToggle={toggleProfile}
+          manufacturerSlug={system.manufacturer?.slug}
         />
 
         <ComponentsSection
