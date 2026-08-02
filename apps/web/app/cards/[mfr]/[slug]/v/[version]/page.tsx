@@ -10,6 +10,8 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getHostedCard } from '@/lib/data/getHostedCard'
 import { HostedCardPage } from '@/components/system-card-renderer/HostedCardPage'
+import { HostedCardPageV2 } from '@/components/system-card-v2/HostedCardPageV2'
+import { SYSTEM_CARD_V2_ENABLED } from '@/lib/systemCardV2Flag'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,9 +39,10 @@ export default async function HostedCardVersionPage({ params }: { params: { mfr:
   if (!card) notFound()
 
   const superseded = card.version < card.latestVersion
+  const CardComponent = SYSTEM_CARD_V2_ENABLED ? HostedCardPageV2 : HostedCardPage
 
   return (
-    <HostedCardPage
+    <CardComponent
       system={card.system}
       stockists={card.stockists}
       validation={card.validation}
