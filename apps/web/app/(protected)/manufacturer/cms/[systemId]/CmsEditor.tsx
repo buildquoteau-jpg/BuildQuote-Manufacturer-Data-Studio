@@ -193,6 +193,16 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
             : saveState === 'saved' ? 'Saved · just now'
             : saveState === 'error' ? 'Save failed' : ''}
         </span>
+        {system.slug && system.publish_status != null && system.publish_status !== 'draft' && (
+          <a
+            href={`/cards/${manufacturer.slug}/${system.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--ds-text-muted)', textDecoration: 'none', whiteSpace: 'nowrap' }}
+          >
+            View live card ↗
+          </a>
+        )}
         <Link href="/manufacturer/publish" style={{
           padding: '9px 22px', borderRadius: 8, border: 'none',
           background: '#16a34a', color: '#fff', fontSize: '0.86rem', fontWeight: 800,
