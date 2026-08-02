@@ -178,7 +178,7 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [] }:
                   <ChooseReveal colours={system.system_colours} profiles={system.system_profiles} />
                 </div>
               </div>
-              <Bar current={1} onBack={() => go(0)} onNext={() => go(2)} nextLabel="Specifications" />
+              <Bar current={1} onBack={() => go(0)} onNext={() => go(2)} nextLabel="Applications" />
             </Screen>
 
             <Screen active={page === 2} bgImage={system.hero_image_url}>

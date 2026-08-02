@@ -13,10 +13,11 @@
 // other manufacturers' data too. Selection is now an independent
 // toggle per row (a builder may reasonably want both), not a radio group.
 //
-// UOM and weight are real per-profile facts shown as small right-aligned
-// tags — this is the one place they live; Attributes and Information no
-// longer repeats the profile list at all (it was a straight duplicate of
-// this screen, Melia flagged it directly).
+// Real table (Name/Specs/Part no/UOM/Select), matching the Components and
+// Accessories screen structure exactly — Melia asked for the same table
+// after an earlier card-row version read inconsistently next to it. Weight
+// is deliberately not shown here (Melia's call); weight_kg stays on the
+// type for other uses.
 
 import type { SystemCardColour, SystemCardProfile } from '@/components/system-card-renderer/types'
 import { useSelection } from './SelectionContext'
@@ -26,26 +27,6 @@ function CheckIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
-}
-
-function ProfileGlyph({ grooved }: { grooved: boolean }) {
-  return (
-    <svg width="40" height="28" viewBox="0 0 40 28" fill="none">
-      <rect x="1" y="1" width="38" height="26" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      {grooved && (
-        <>
-          <line x1="9" y1="1" x2="9" y2="6.5" stroke="currentColor" strokeWidth="1.5" />
-          <line x1="17" y1="1" x2="17" y2="6.5" stroke="currentColor" strokeWidth="1.5" />
-          <line x1="25" y1="1" x2="25" y2="6.5" stroke="currentColor" strokeWidth="1.5" />
-          <line x1="31" y1="1" x2="31" y2="6.5" stroke="currentColor" strokeWidth="1.5" />
-          <line x1="9" y1="21.5" x2="9" y2="27" stroke="currentColor" strokeWidth="1.5" />
-          <line x1="17" y1="21.5" x2="17" y2="27" stroke="currentColor" strokeWidth="1.5" />
-          <line x1="25" y1="21.5" x2="25" y2="27" stroke="currentColor" strokeWidth="1.5" />
-          <line x1="31" y1="21.5" x2="31" y2="27" stroke="currentColor" strokeWidth="1.5" />
-        </>
-      )}
     </svg>
   )
 }
@@ -101,40 +82,51 @@ export function ChooseReveal({ colours, profiles }: {
       {profiles.length > 0 && (
         <>
           <p className={styles.groupLabel}>Profile</p>
-          <div className={styles.profileList}>
-            {profiles.map((p, i) => {
-              const pressed = profileNames.includes(p.profile_name ?? '')
-              const grooved = (p.profile_name ?? '').toLowerCase().includes('groov')
-              // p.dimensions is a legacy short string (e.g. "190 x 24 mm")
-              // that drops length entirely — Melia caught this directly.
-              // The real length_mm/width_mm/thickness_mm fields are complete;
-              // prefer them, matching the order used on every other screen.
-              const dims = [p.length_mm && `${p.length_mm}mm`, p.width_mm && `${p.width_mm}mm`, p.thickness_mm && `${p.thickness_mm}mm`]
-                .filter(Boolean).join(' × ') || p.dimensions
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={styles.profileRow}
-                  aria-pressed={pressed}
-                  onClick={() => toggleProfileName(p.profile_name ?? '')}
-                >
-                  <span className={styles.profileGlyph}><ProfileGlyph grooved={grooved} /></span>
-                  <span className={styles.profileText}>
-                    <p className={styles.profileRole}>{roleLabel(p, i)}</p>
-                    <p className={styles.profileName}>{p.profile_name}</p>
-                    {dims && <p className={styles.profileDims}>{dims}</p>}
-                  </span>
-                  {(p.uom || p.weight_kg != null) && (
-                    <span className={styles.profileTags}>
-                      {p.uom && <span className={styles.profileUom}>{p.uom}</span>}
-                      {p.weight_kg != null && <span className={styles.profileWeight}>{p.weight_kg} kg</span>}
-                    </span>
-                  )}
-                  <span className={styles.profileCheck}><CheckIcon /></span>
-                </button>
-              )
-            })}
+          <div className={styles.specTableScroll}>
+            <table className={styles.specTable}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Specs</th>
+                  <th>Part no</th>
+                  <th>UOM</th>
+                  <th>Select</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profiles.map((p, i) => {
+                  const pressed = profileNames.includes(p.profile_name ?? '')
+                  // p.dimensions is a legacy short string (e.g. "190 x 24 mm")
+                  // that drops length entirely — Melia caught this directly.
+                  // The real length_mm/width_mm/thickness_mm fields are complete;
+                  // prefer them, matching the order used on every other screen.
+                  const dims = [p.length_mm && `${p.length_mm}mm`, p.width_mm && `${p.width_mm}mm`, p.thickness_mm && `${p.thickness_mm}mm`]
+                    .filter(Boolean).join(' × ') || p.dimensions
+                  return (
+                    <tr key={p.id}>
+                      <td className={styles.specTableName}>
+                        <span className={styles.profileRole}>{roleLabel(p, i)}</span>
+                        {p.profile_name}
+                      </td>
+                      <td>{dims || '—'}</td>
+                      <td>{p.product_code ?? '—'}</td>
+                      <td>{p.uom ?? '—'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className={styles.tableCheck}
+                          aria-pressed={pressed}
+                          aria-label={`Select ${p.profile_name ?? 'profile'}`}
+                          onClick={() => toggleProfileName(p.profile_name ?? '')}
+                        >
+                          <CheckIcon />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </>
       )}

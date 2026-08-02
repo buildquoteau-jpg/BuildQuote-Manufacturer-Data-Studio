@@ -102,7 +102,7 @@ export function ComponentsAccessoriesReveal({ system }: { system: SystemCardSyst
                   <th>Specs</th>
                   <th>Part no</th>
                   <th>UOM</th>
-                  <th aria-hidden="true"></th>
+                  <th>Select</th>
                 </tr>
               </thead>
               <tbody>
