@@ -1,26 +1,29 @@
 'use client'
 
-// System Card V2 — a card object, not a page. A fixed-size rounded frame
-// sits on a dark backdrop; exactly one screen is visible at a time (Cover,
-// then five screens); a bottom bar turns the page. The outer browser page
-// never scrolls — each screen scrolls internally only if its own content
-// needs it. No scroll-snap, no scroll-triggered reveals: navigation is
-// explicit state, not a side effect of scroll position.
+// System Card V2 — a compact card object that unfolds. The cover is always
+// visible at the top; beneath it, five independent labelled bars reveal
+// their content directly underneath themselves when tapped, and fold back
+// up when tapped again. Any number can be open at once — this is NOT a
+// paginated wizard/carousel/accordion-with-exclusive-open: there is no
+// "current screen" state, no Back/Next, no left/right transition. The page
+// itself is the scroll container; nothing scrolls in an inner clipped box.
 //
-// Screen order: Cover → Choose → Attributes and Information → Guides and
-// Resources → Components and Accessories → Stockists. Guides and Resources
-// was originally folded into Attributes and Information, then split back
-// out into its own screen after Melia found the combined page needed too
-// much scrolling to reach the resources. Reused only the existing
-// SystemCardSystem / SystemCardManufacturerPage data types — zero overlap
-// with components/system-card-renderer/.
+// Replaces the earlier page-by-page version (Screen/Bar/PageHead, a single
+// `page: number`) per Melia's direct correction: "it should feel like a
+// compact physical card that contains additional layers hidden underneath
+// it," not "a sequence of separate screens." See SystemCardSection.tsx for
+// the actual expand/collapse mechanics (CSS grid 0fr -> 1fr).
+//
+// Reused only the existing SystemCardSystem / SystemCardManufacturerPage
+// data types — zero overlap with components/system-card-renderer/.
 
-import { useRef, useState } from 'react'
-import type { SystemCardSystem, SystemCardManufacturerPage, SystemCardStockist } from '@/components/system-card-renderer/types'
+import { useState } from 'react'
+import type { SystemCardSystem, SystemCardStockist } from '@/components/system-card-renderer/types'
 import { Cover } from './Cover'
 import { SelectionProvider } from './SelectionContext'
+import { SystemCardSection } from './SystemCardSection'
 import { ChooseReveal } from './ChooseReveal'
-import { AttributesInfoReveal } from './AttributesInfoReveal'
+import { AttributesInfoReveal, hasAttributesContent } from './AttributesInfoReveal'
 import { GuidesResourcesReveal } from './GuidesResourcesReveal'
 import { ComponentsAccessoriesReveal } from './ComponentsAccessoriesReveal'
 import { StockistsReveal } from './StockistsReveal'
@@ -31,22 +34,6 @@ const FONT_BODY = "'Barlow', -apple-system, 'Segoe UI', sans-serif"
 const FONTS_HREF =
   'https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap'
 
-function ChevronLeft() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  )
-}
-
-function ChevronRight() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  )
-}
-
 function ShareIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -56,86 +43,33 @@ function ShareIcon() {
   )
 }
 
-const PAGE_COUNT = 6
+const SECTION_IDS = ['choose', 'attributes', 'guides', 'components', 'stockists'] as const
+type SectionId = typeof SECTION_IDS[number]
 
-function Bar({ current, onBack, onNext, nextLabel, onShare, shareLabel }: {
-  current: number
-  onBack: (() => void) | null
-  onNext: (() => void) | null
-  nextLabel?: string
-  onShare?: () => void
-  shareLabel?: string
-}) {
-  return (
-    <div className={styles.bar}>
-      <div className={styles.barSide}>
-        {onBack && (
-          <button type="button" className={styles.barIconBtn} onClick={onBack} aria-label="Back">
-            <ChevronLeft />
-          </button>
-        )}
-      </div>
-      <div className={styles.barDots}>
-        {Array.from({ length: PAGE_COUNT }).map((_, i) => (
-          <span key={i} className={styles.barDot} data-active={i === current} />
-        ))}
-      </div>
-      <div className={styles.barSide} data-align="end">
-        {onNext && (
-          <button type="button" className={styles.barNext} onClick={onNext}>
-            {nextLabel}
-            <ChevronRight />
-          </button>
-        )}
-        {onShare && (
-          <button type="button" className={styles.barNext} onClick={onShare}>
-            <ShareIcon />
-            {shareLabel}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// bgImage is optional and only used by screens that ask for it (Attributes
-// and Information, so far) — a faint product photo behind the content, not
-// a bold background. Sits behind .screenScroll/.bar in normal DOM order, no
-// z-index needed.
-function Screen({ active, children, bgImage }: { active: boolean; children: React.ReactNode; bgImage?: string | null }) {
-  return (
-    <div className={styles.screen} data-active={active} aria-hidden={!active}>
-      {bgImage && <div className={styles.screenBgImage} style={{ backgroundImage: `url(${bgImage})` }} />}
-      {children}
-    </div>
-  )
-}
-
-// Repeats the manufacturer + product name on every screen — Melia asked for
-// this directly, annotating all five pages, so a builder paging through
-// never loses track of which System Card they're in.
-function PageHead({ num, title, question, identity }: { num: string; title: string; question?: string; identity: string }) {
-  return (
-    <div className={styles.pageHead}>
-      <span className={styles.pageNum} aria-hidden="true">{num}</span>
-      <div className={styles.pageHeadMain}>
-        <h2 className={styles.pageTitle}>{title}</h2>
-        {question && <p className={styles.pageQuestion}>{question}</p>}
-      </div>
-      <span className={styles.pageIdentity}>{identity}</span>
-    </div>
-  )
-}
-
-export function SystemCardV2Experience({ manufacturer, system, stockists = [] }: {
-  manufacturer: SystemCardManufacturerPage
+export function SystemCardV2Experience({ manufacturer, system, stockists = [], showExperimentBanner = true }: {
+  // Only manufacturer.name is used anywhere in this tree — narrower than
+  // the full SystemCardManufacturerPage type, which exists for the v6-style
+  // manufacturer landing page this experiment doesn't have.
+  manufacturer: { name: string }
   system: SystemCardSystem
   stockists?: SystemCardStockist[]
+  showExperimentBanner?: boolean
 }) {
-  const [page, setPage] = useState(0)
+  // A Set of open section ids, not one currentStep — several sections must
+  // be able to stay open simultaneously, and closing one must never affect
+  // another. Starts empty: the card's resting/shareable state is fully
+  // closed.
+  const [openSections, setOpenSections] = useState<Set<SectionId>>(new Set())
   const [shareState, setShareState] = useState<'idle' | 'copied'>('idle')
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const identity = `${manufacturer.name} ${system.name}`
+
+  function toggleSection(id: SectionId) {
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function handleShare() {
     const outcome = await shareSystemCard({
@@ -145,11 +79,12 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [] }:
     })
     if (outcome === 'copied') {
       setShareState('copied')
-      resetTimer.current = setTimeout(() => setShareState('idle'), 2000)
+      setTimeout(() => setShareState('idle'), 2000)
     }
   }
 
-  const go = (n: number) => setPage(Math.max(0, Math.min(PAGE_COUNT - 1, n)))
+  const noProfiles = system.system_colours.length === 0 && system.system_profiles.length === 0
+  const noComponents = system.system_components.length === 0
 
   return (
     <SelectionProvider>
@@ -157,76 +92,79 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [] }:
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link rel="stylesheet" href={FONTS_HREF} />
 
-        <div className={styles.protoBar}>
-          <strong>BuildQuote</strong>
-          <span>·</span>
-          <span>System Card — design experiment</span>
-        </div>
+        {showExperimentBanner && (
+          <div className={styles.protoBar}>
+            <strong>BuildQuote</strong>
+            <span>·</span>
+            <span>System Card — design experiment</span>
+          </div>
+        )}
 
         <div className={styles.page}>
           <div className={styles.card}>
+            <Cover manufacturer={manufacturer} system={system} />
 
-            <Screen active={page === 0}>
-              <Cover manufacturer={manufacturer} system={system} />
-              <Bar current={0} onBack={null} onNext={() => go(1)} nextLabel="Open System Card" />
-            </Screen>
+            <div className={styles.sectionsList}>
+              <SystemCardSection
+                id="choose"
+                title="Colours. Profiles. Finishes."
+                open={openSections.has('choose')}
+                onToggle={() => toggleSection('choose')}
+                disabled={noProfiles}
+              >
+                <ChooseReveal colours={system.system_colours} profiles={system.system_profiles} />
+              </SystemCardSection>
 
-            <Screen active={page === 1}>
-              <div className={styles.screenScroll}>
-                <div className={styles.screenContent}>
-                  <PageHead num="01" title="Colours. Profiles. Finishes." identity={identity} />
-                  <ChooseReveal colours={system.system_colours} profiles={system.system_profiles} />
-                </div>
-              </div>
-              <Bar current={1} onBack={() => go(0)} onNext={() => go(2)} nextLabel="Applications" />
-            </Screen>
-
-            <Screen active={page === 2} bgImage={system.hero_image_url}>
-              <div className={styles.screenScroll}>
-                <div className={styles.screenContent}>
-                  <PageHead num="02" title="Attributes and Information" identity={identity} />
+              <SystemCardSection
+                id="attributes"
+                title="Attributes and Information"
+                open={openSections.has('attributes')}
+                onToggle={() => toggleSection('attributes')}
+                disabled={!hasAttributesContent(system)}
+              >
+                <div className={styles.sectionBgWrap}>
+                  {system.hero_image_url && (
+                    <div className={styles.screenBgImage} style={{ backgroundImage: `url(${system.hero_image_url})` }} />
+                  )}
                   <AttributesInfoReveal system={system} />
                 </div>
-              </div>
-              <Bar current={2} onBack={() => go(1)} onNext={() => go(3)} nextLabel="Guides" />
-            </Screen>
+              </SystemCardSection>
 
-            <Screen active={page === 3}>
-              <div className={styles.screenScroll}>
-                <div className={styles.screenContent}>
-                  <PageHead num="03" title="Guides and Resources" identity={identity} />
-                  <GuidesResourcesReveal system={system} />
-                </div>
-              </div>
-              <Bar current={3} onBack={() => go(2)} onNext={() => go(4)} nextLabel="Components" />
-            </Screen>
+              <SystemCardSection
+                id="guides"
+                title="Guides and Resources"
+                open={openSections.has('guides')}
+                onToggle={() => toggleSection('guides')}
+              >
+                <GuidesResourcesReveal system={system} />
+              </SystemCardSection>
 
-            <Screen active={page === 4}>
-              <div className={styles.screenScroll}>
-                <div className={styles.screenContent}>
-                  <PageHead num="04" title="Components and Accessories" identity={identity} />
-                  <ComponentsAccessoriesReveal system={system} />
-                </div>
-              </div>
-              <Bar current={4} onBack={() => go(3)} onNext={() => go(5)} nextLabel="Stockists" />
-            </Screen>
+              <SystemCardSection
+                id="components"
+                title="Components and Accessories"
+                open={openSections.has('components')}
+                onToggle={() => toggleSection('components')}
+                disabled={noComponents}
+              >
+                <ComponentsAccessoriesReveal system={system} />
+              </SystemCardSection>
 
-            <Screen active={page === 5}>
-              <div className={styles.screenScroll}>
-                <div className={styles.screenContent}>
-                  <PageHead num="05" title="Stockists" identity={identity} />
-                  <StockistsReveal system={system} stockists={stockists} />
-                </div>
-              </div>
-              <Bar
-                current={5}
-                onBack={() => go(4)}
-                onNext={null}
-                onShare={handleShare}
-                shareLabel={shareState === 'copied' ? 'Link copied' : 'Share System Card'}
-              />
-            </Screen>
+              <SystemCardSection
+                id="stockists"
+                title="Stockists"
+                open={openSections.has('stockists')}
+                onToggle={() => toggleSection('stockists')}
+              >
+                <StockistsReveal system={system} stockists={stockists} />
+              </SystemCardSection>
 
+              <div className={styles.cardClose}>
+                <button type="button" className={styles.barNext} onClick={handleShare}>
+                  <ShareIcon />
+                  {shareState === 'copied' ? 'Link copied' : 'Share System Card'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

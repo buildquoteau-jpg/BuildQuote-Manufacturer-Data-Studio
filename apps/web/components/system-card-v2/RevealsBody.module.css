@@ -1,8 +1,7 @@
-/* System Card V2 — the card object itself: a fixed-size rounded frame on a
-   dark backdrop, one screen visible at a time, a bottom bar turns the page.
-   Not a scrolling document — the outer page never scrolls; each screen
-   scrolls internally only if its own content needs it. Scoped to this
-   route only. */
+/* System Card V2 — the card object itself: a rounded frame on a dark
+   backdrop that grows as its independent sections are opened. The page
+   itself is the scroll container — there is no inner clipped viewport, no
+   fixed card height. Scoped to this route only. */
 
 .page {
   /* A soft glow the card sits in, not a flat backdrop — the card should
@@ -10,13 +9,12 @@
   background:
     radial-gradient(ellipse 70% 55% at 50% 38%, rgba(58, 51, 40, 0.9) 0%, rgba(28, 26, 23, 0.4) 45%, rgba(13, 12, 10, 0) 75%),
     #0d0c0a;
-  height: 100vh;
-  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 14px;
-  overflow: hidden;
 }
 
 @media (min-width: 640px) {
@@ -52,8 +50,6 @@
   position: relative;
   width: 100%;
   max-width: 440px;
-  height: 100%;
-  max-height: 860px;
   border-radius: 22px;
   overflow: hidden;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3);
@@ -63,42 +59,24 @@
 /* The card is mobile-first, not mobile-only — on real screen real estate it
    should expand and use it, not stay pinned to a phone width forever. */
 @media (min-width: 640px) {
-  .card { max-width: 560px; max-height: 900px; }
+  .card { max-width: 560px; }
 }
 
 @media (min-width: 1024px) {
-  .card { max-width: 720px; max-height: 940px; }
+  .card { max-width: 720px; }
 }
 
 @media (min-width: 1440px) {
   .card { max-width: 860px; }
 }
 
-/* ── Screens — one page at a time, crossfade between them ────────────── */
-
-.screen {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.4s ease;
-  background: var(--paper, #f6f4ef);
-}
-
-.screen[data-active='true'] {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* Faint product photo behind a screen's content — transparency turned
+/* Faint product photo behind a section's content — transparency turned
    right up, a texture, not a background image. */
 /* z-index: -1 is load-bearing — without it this absolutely-positioned layer
-   paints ABOVE the normal-flow content (screenScroll/bar) regardless of DOM
-   order, showing through the opaque white .specBox backgrounds instead of
-   sitting behind them. With it, the boxes' own opaque background correctly
-   occludes the image completely; only the true gaps show it. */
+   paints ABOVE the normal-flow content regardless of DOM order, showing
+   through the opaque white .specBox backgrounds instead of sitting behind
+   them. With it, the boxes' own opaque background correctly occludes the
+   image completely; only the true gaps show it. */
 .screenBgImage {
   position: absolute;
   inset: 0;
@@ -108,18 +86,15 @@
   opacity: 0.16;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .screen { transition: none; }
+.sectionBgWrap {
+  position: relative;
 }
 
-.screenScroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
+/* ── Expandable sections — independent open/closed layers beneath the
+   cover. Each bar toggles its own section only; any number can be open at
+   once. See SystemCardSection.tsx for the component this styles. ───────── */
 
-.screenContent {
+.sectionsList {
   --ink: #1c1a17;
   --ink-soft: #57534c;
   --ink-faint: #8a8478;
@@ -130,101 +105,127 @@
   --accent: #185d7a;
   --accent-soft: rgba(24, 93, 122, 0.08);
 
-  padding: 1.6rem 1.25rem 2rem;
+  background: var(--paper);
 }
 
-.pageHead {
-  display: flex;
-  align-items: baseline;
-  gap: 0.8rem;
-  margin-bottom: 1.5rem;
+.section {
+  border-top: 1px solid var(--line);
 }
 
-.pageNum {
-  font-family: 'Barlow Condensed', 'Barlow', sans-serif;
-  font-weight: 800;
-  font-size: 2rem;
-  line-height: 1;
-  color: var(--ink);
-  opacity: 0.14;
-  flex-shrink: 0;
-}
-
-.pageTitle {
-  font-family: 'Barlow Condensed', 'Barlow', sans-serif;
-  font-weight: 800;
-  font-size: 1.35rem;
-  letter-spacing: -0.005em;
-  color: var(--ink);
-  margin: 0 0 0.15rem;
-}
-
-.pageQuestion {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+.sectionHeading {
   margin: 0;
 }
 
-/* ── Bottom bar — the page-turn control, shared by every screen ──────── */
-
-.bar {
-  flex-shrink: 0;
+.sectionBar {
+  position: relative;
+  width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-  padding: 0.7rem 0.8rem;
-  background: #ffffff;
-  border-top: 1px solid rgba(28, 26, 23, 0.1);
-}
-
-.barSide {
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-
-.barSide[data-align='end'] {
-  justify-content: flex-end;
-}
-
-.barIconBtn {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  padding: 0.4rem 2.2rem;
+  background: var(--ink);
   border: none;
-  background: none;
-  color: #1c1a17;
   cursor: pointer;
+  font-family: inherit;
+  min-height: 36px;
+  transition: background-color 0.15s ease;
 }
 
-.barIconBtn:hover { background: rgba(28, 26, 23, 0.06); }
-.barIconBtn:focus-visible { outline: 2px solid #185d7a; outline-offset: 2px; }
+.sectionBar:hover:not(:disabled) {
+  background: #2a2620;
+}
 
-.barDots {
+.sectionBar:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.sectionBar:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.sectionBarText {
+  min-width: 0;
+  text-align: center;
+}
+
+.sectionBarTitle {
+  display: block;
+  font-family: 'Barlow Condensed', 'Barlow', sans-serif;
+  font-weight: 800;
+  font-size: 0.92rem;
+  letter-spacing: -0.005em;
+  color: var(--paper);
+}
+
+.sectionBarSubtitle {
+  display: block;
+  font-size: 0.7rem;
+  color: rgba(246, 244, 239, 0.6);
+  margin-top: 0.1rem;
+}
+
+.sectionChevron {
+  position: absolute;
+  right: 1.25rem;
+  top: 50%;
   display: flex;
-  align-items: center;
-  gap: 0.32rem;
-  flex-shrink: 0;
+  color: var(--paper);
+  transform: translateY(-50%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.barDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(28, 26, 23, 0.22);
-  transition: background-color 0.15s ease, transform 0.15s ease;
+.sectionBar[aria-expanded='true'] .sectionChevron {
+  transform: translateY(-50%) rotate(180deg);
 }
 
-.barDot[data-active='true'] {
-  background: #1c1a17;
-  transform: scale(1.4);
+/* The animated element: a single-row grid track sized 0fr when closed and
+   1fr when open. Chosen over a fixed max-height specifically because
+   Components and Attributes can hold a large, variable amount of content —
+   a fixed max-height would either clip long content or leave a long empty
+   gap after short content. */
+.sectionGrid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sectionGrid[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+/* min-height: 0 lets this grid item actually shrink to the 0fr track —
+   without it a grid item's default min-height:auto keeps it at its content
+   height regardless of the track size. overflow: hidden clips it there. */
+.sectionInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sectionPanel {
+  padding: 0.25rem 1.25rem 2rem;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sectionGrid[data-open='true'] .sectionPanel {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.08s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sectionGrid, .sectionPanel, .sectionChevron {
+    transition: none;
+  }
+}
+
+.cardClose {
+  padding: 1.5rem 1.25rem 2rem;
+  text-align: center;
+  border-top: 1px solid var(--line);
 }
 
 .barNext {
@@ -593,30 +594,6 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
-}
-
-.systemGroup {
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.5s ease-out, transform 0.5s ease-out;
-}
-
-.screen[data-active='true'] .systemGroup {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.systemGroup:nth-child(2) { transition-delay: 90ms; }
-.systemGroup:nth-child(3) { transition-delay: 180ms; }
-.systemGroup:nth-child(4) { transition-delay: 270ms; }
-.systemGroup:nth-child(5) { transition-delay: 360ms; }
-
-@media (prefers-reduced-motion: reduce) {
-  .systemGroup {
-    transition: none;
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .systemGroupHead {

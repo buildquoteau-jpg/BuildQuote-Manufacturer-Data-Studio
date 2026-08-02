@@ -20,7 +20,7 @@
 // clipping and genuinely covers the viewport, not just the card.
 
 import { useEffect, useRef, useState } from 'react'
-import type { SystemCardSystem, SystemCardManufacturerPage } from '@/components/system-card-renderer/types'
+import type { SystemCardSystem } from '@/components/system-card-renderer/types'
 import { shareSystemCard } from './shareCard'
 import styles from './Cover.module.css'
 
@@ -57,7 +57,8 @@ function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
 }
 
 export function Cover({ manufacturer, system }: {
-  manufacturer: SystemCardManufacturerPage
+  // Only manufacturer.name is used here — see SystemCardV2Experience.tsx.
+  manufacturer: { name: string }
   system: SystemCardSystem
 }) {
   const [shareState, setShareState] = useState<'idle' | 'copied'>('idle')

@@ -88,7 +88,7 @@ export function ComponentsAccessoriesReveal({ system }: { system: SystemCardSyst
   return (
     <div className={styles.systemGroups}>
       {order.map((category, i) => (
-        <div key={category} className={styles.systemGroup}>
+        <div key={category}>
           <div className={styles.systemGroupHead}>
             <span className={styles.systemGroupNum}>{i + 1}</span>
             <span className={styles.systemGroupIcon}>{glyphFor(category)}</span>

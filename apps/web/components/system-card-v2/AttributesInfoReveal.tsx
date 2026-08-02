@@ -19,6 +19,18 @@
 import type { SystemCardSystem } from '@/components/system-card-renderer/types'
 import styles from './RevealsBody.module.css'
 
+// Mirrors the field checks below — used by the parent to decide whether the
+// Attributes and Information section bar should be disabled (no content to
+// reveal) rather than opening onto an empty panel.
+export function hasAttributesContent(system: SystemCardSystem): boolean {
+  if (system.description) return true
+  if (system.moisture_resistant || system.bal_rating || system.fire_rating || system.acoustic_rating || system.structural_grade || system.australian_made != null) return true
+  if (system.applications && system.applications.length > 0) return true
+  if (system.custom_technical_attributes && system.custom_technical_attributes.length > 0) return true
+  if (system.notes) return true
+  return false
+}
+
 export function AttributesInfoReveal({ system }: { system: SystemCardSystem }) {
   const ratings: { label: string; value: string }[] = []
   if (system.moisture_resistant) ratings.push({ label: 'Moisture resistance', value: 'Resistant' })
