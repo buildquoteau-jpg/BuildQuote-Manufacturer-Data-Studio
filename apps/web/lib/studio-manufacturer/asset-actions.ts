@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
+import { isPrivateHost } from '@/lib/net/url-guard'
 import {
   createPresignedUploadUrl,
   createPresignedDownloadUrl,
@@ -299,6 +300,9 @@ export async function importAssetFromUrl(
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     return { ok: false, error: 'Only http(s) URLs can be imported.' }
+  }
+  if (isPrivateHost(url.hostname)) {
+    return { ok: false, error: 'Only public URLs can be imported.' }
   }
 
   let response: Response
