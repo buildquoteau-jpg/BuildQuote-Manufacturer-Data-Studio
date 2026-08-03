@@ -195,6 +195,21 @@ export async function buildCardSnapshot(
     system.hero_image_url = null
   }
 
+  // Colour swatch images were never durable-rewritten here (unlike hero and
+  // gallery above) — a colour with no image_asset_id but a presigned
+  // image_url would freeze that temporary link into the snapshot, and it
+  // would go dead an hour after publish.
+  system.system_colours = system.system_colours.map((c, i) => {
+    const staged = stagedSystem.colours[i]
+    const assetId = staged?.image_asset_id ?? null
+    if (assetId) return { ...c, image_url: durableAssetUrl(assetId) }
+    if (isEphemeralUrl(c.image_url)) {
+      warnings.push(`Colour "${c.colour_name}" image skipped — its URL is temporary and not linked to an Asset.`)
+      return { ...c, image_url: null }
+    }
+    return c
+  })
+
   // ── Stockists (embedded with the version; the live page also refreshes
   // them from the production DB, so this is a fallback copy) ──
   let stockists: SystemCardStockist[] = []

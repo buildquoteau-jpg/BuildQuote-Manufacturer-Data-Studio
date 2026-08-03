@@ -19,9 +19,25 @@
 // is deliberately not shown here (Melia's call); weight_kg stays on the
 // type for other uses.
 
+import { useState } from 'react'
 import type { SystemCardColour, SystemCardProfile } from '@/components/system-card-renderer/types'
 import { useSelection } from './SelectionContext'
 import styles from './RevealsBody.module.css'
+
+// Some published snapshots still carry a presigned URL that's since expired
+// (older publishes, before colours moved to permanent stored assets) rather
+// than a stable one — falls back to the same light placeholder used when
+// there's no image_url at all, instead of a broken-image icon.
+function SwatchImage({ url, alt }: { url: string | null; alt: string }) {
+  const [errored, setErrored] = useState(false)
+  if (!url || errored) {
+    return <span className={styles.swatchImg} style={{ background: '#eeece6' }} />
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img className={styles.swatchImg} src={url} alt={alt} onError={() => setErrored(true)} />
+  )
+}
 
 function CheckIcon() {
   return (
@@ -63,12 +79,7 @@ export function ChooseReveal({ colours, profiles }: {
                   onClick={() => setColourName(pressed ? null : c.colour_name)}
                 >
                   <span className={styles.swatchImgWrap}>
-                    {c.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img className={styles.swatchImg} src={c.image_url} alt="" />
-                    ) : (
-                      <span className={styles.swatchImg} style={{ background: '#e2e0d9' }} />
-                    )}
+                    <SwatchImage url={c.image_url} alt="" />
                     {pressed && <span className={styles.swatchCheck}><CheckIcon /></span>}
                   </span>
                   <span className={styles.swatchLabel}>{c.colour_name}</span>
