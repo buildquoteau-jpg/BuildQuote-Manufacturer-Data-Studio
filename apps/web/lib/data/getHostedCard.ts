@@ -4,6 +4,7 @@
 // when the card has never been published to a package or the tables are
 // missing.
 
+import { unstable_noStore as noStore } from 'next/cache'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 import { getManufacturerStockists, stockistsForCard } from '@/lib/data/getCardStockists'
 import type {
@@ -40,6 +41,15 @@ export async function getHostedCard(
   cardSlug: string,
   requestedVersion?: number,
 ): Promise<HostedCardData | null> {
+  // The route segments call this force-dynamic, but that alone wasn't
+  // enough to stop a stale response from being served after a republish —
+  // confirmed the same byte-identical (including the R2 signature) response
+  // came back across many fresh, uncached HTTP requests spanning several
+  // minutes, well past the point where a new card_versions row existed with
+  // correct data. noStore() unconditionally opts this function's own
+  // Supabase fetches out of Next's Data Cache, regardless of how the route
+  // that calls it is configured.
+  noStore()
   try {
     const supabase = createStudioServiceClient()
 
