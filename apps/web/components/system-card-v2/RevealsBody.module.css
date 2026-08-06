@@ -4,11 +4,10 @@
    fixed card height. Scoped to this route only. */
 
 .page {
-  /* A soft glow the card sits in, not a flat backdrop — the card should
-     read as an object lit and staged, not pasted on a solid colour. */
-  background:
-    radial-gradient(ellipse 70% 55% at 50% 38%, rgba(58, 51, 40, 0.9) 0%, rgba(28, 26, 23, 0.4) 45%, rgba(13, 12, 10, 0) 75%),
-    #0d0c0a;
+  /* Flat light page chrome, matching the rest of the site (e.g. the
+     manufacturer landing page's #f5f7f9) — was a dark photographic-glow
+     backdrop; Melia asked for the two to match. */
+  background: #f5f7f9;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
