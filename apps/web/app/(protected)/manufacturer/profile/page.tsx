@@ -4,6 +4,7 @@ import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { BrandProfileForm } from './BrandProfileForm'
+import { CompanyKnowledgePanel } from './CompanyKnowledgePanel'
 import type { SlotAsset } from './AssetSlotControl'
 
 export const dynamic = 'force-dynamic'
@@ -152,6 +153,8 @@ export default async function ManufacturerProfilePage() {
         assets={slotAssets}
         assetsAvailable={assetsAvailable}
       />
+
+      <CompanyKnowledgePanel manufacturerId={profile.id} />
     </StudioShell>
   )
 }
