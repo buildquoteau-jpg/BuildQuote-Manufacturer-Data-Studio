@@ -4,10 +4,12 @@
 // knowledge_assertions row. Pure types only — no imports with server-only code.
 
 import type { AssertionOrigin, ClaimType, EpistemicStatus } from '@/lib/knowledge/vocabulary'
+import type { WorkspaceUiSection } from '@/lib/knowledge/buildSystemKnowledge'
 
 export type FactViewModel = {
   predicate: string
   claimType: ClaimType
+  uiSection: WorkspaceUiSection
   label: string
   value: string
   rawValue: unknown

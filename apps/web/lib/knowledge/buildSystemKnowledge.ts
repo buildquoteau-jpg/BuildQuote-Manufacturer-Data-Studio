@@ -43,32 +43,42 @@ const STUDIO_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildq
 // become facts, and what kind of fact each one is. Extend this array as new
 // columns come online; never synthesize a fact for a column not listed here.
 
+export type WorkspaceUiSection = 'identity' | 'attributes' | 'documents'
+
 export type FieldDescriptor = {
   fieldName: string
   predicate: string
   claimType: ClaimType
   label: string
   isBoolean?: boolean
+  // Which System Workspace accordion section this fact displays in (design
+  // doc §7.3). Independent of claimType — e.g. "Australian made" is a
+  // claimType:'identity' fact (it's about the product's identity, not a
+  // tested performance value) but belongs in the Attributes section next to
+  // the other single-line product facts, not in Identity & description
+  // (name/category/description). Two different axes, same reasoning as
+  // claimType vs subject_kind in §5a.1.
+  uiSection: WorkspaceUiSection
 }
 
 // Exported so the System Workspace UI (design doc §7.3 "Identity &
 // description" / "Attributes & performance" sections) edits exactly the
 // fields this generator emits — one list, not two that can drift apart.
 export const SYSTEM_FIELD_DESCRIPTORS: FieldDescriptor[] = [
-  { fieldName: 'name', predicate: 'bq:name', claimType: 'identity', label: 'System name' },
-  { fieldName: 'category', predicate: 'bq:category', claimType: 'identity', label: 'Category' },
-  { fieldName: 'subcategory', predicate: 'bq:subcategory', claimType: 'identity', label: 'Subcategory' },
-  { fieldName: 'description', predicate: 'bq:description', claimType: 'identity', label: 'Description' },
-  { fieldName: 'product_code', predicate: 'bq:productCode', claimType: 'identity', label: 'Product code' },
-  { fieldName: 'website_url', predicate: 'bq:websiteUrl', claimType: 'identity', label: 'Manufacturer product page' },
-  { fieldName: 'tech_data_url', predicate: 'bq:techDataUrl', claimType: 'manufacturer_statement', label: 'Technical data sheet' },
-  { fieldName: 'design_guide_url', predicate: 'bq:designGuideUrl', claimType: 'manufacturer_statement', label: 'Design guide' },
-  { fieldName: 'bal_rating', predicate: 'bq:balRating', claimType: 'performance_claim', label: 'Bushfire Attack Level' },
-  { fieldName: 'fire_rating', predicate: 'bq:fireRating', claimType: 'performance_claim', label: 'Fire rating' },
-  { fieldName: 'acoustic_rating', predicate: 'bq:acousticRating', claimType: 'performance_claim', label: 'Acoustic rating' },
-  { fieldName: 'structural_grade', predicate: 'bq:structuralGrade', claimType: 'performance_claim', label: 'Structural grade' },
-  { fieldName: 'moisture_resistant', predicate: 'bq:moistureResistant', claimType: 'performance_claim', label: 'Moisture resistant', isBoolean: true },
-  { fieldName: 'australian_made', predicate: 'bq:countryOfOrigin', claimType: 'identity', label: 'Australian made', isBoolean: true },
+  { fieldName: 'name', predicate: 'bq:name', claimType: 'identity', label: 'System name', uiSection: 'identity' },
+  { fieldName: 'category', predicate: 'bq:category', claimType: 'identity', label: 'Category', uiSection: 'identity' },
+  { fieldName: 'subcategory', predicate: 'bq:subcategory', claimType: 'identity', label: 'Subcategory', uiSection: 'identity' },
+  { fieldName: 'description', predicate: 'bq:description', claimType: 'identity', label: 'Description', uiSection: 'identity' },
+  { fieldName: 'product_code', predicate: 'bq:productCode', claimType: 'identity', label: 'Product code', uiSection: 'identity' },
+  { fieldName: 'website_url', predicate: 'bq:websiteUrl', claimType: 'identity', label: 'Manufacturer product page', uiSection: 'identity' },
+  { fieldName: 'tech_data_url', predicate: 'bq:techDataUrl', claimType: 'manufacturer_statement', label: 'Technical data sheet', uiSection: 'documents' },
+  { fieldName: 'design_guide_url', predicate: 'bq:designGuideUrl', claimType: 'manufacturer_statement', label: 'Design guide', uiSection: 'documents' },
+  { fieldName: 'bal_rating', predicate: 'bq:balRating', claimType: 'performance_claim', label: 'Bushfire Attack Level', uiSection: 'attributes' },
+  { fieldName: 'fire_rating', predicate: 'bq:fireRating', claimType: 'performance_claim', label: 'Fire rating', uiSection: 'attributes' },
+  { fieldName: 'acoustic_rating', predicate: 'bq:acousticRating', claimType: 'performance_claim', label: 'Acoustic rating', uiSection: 'attributes' },
+  { fieldName: 'structural_grade', predicate: 'bq:structuralGrade', claimType: 'performance_claim', label: 'Structural grade', uiSection: 'attributes' },
+  { fieldName: 'moisture_resistant', predicate: 'bq:moistureResistant', claimType: 'performance_claim', label: 'Moisture resistant', isBoolean: true, uiSection: 'attributes' },
+  { fieldName: 'australian_made', predicate: 'bq:countryOfOrigin', claimType: 'identity', label: 'Australian made', isBoolean: true, uiSection: 'attributes' },
 ]
 
 // Categories the customer card / staged schema can express today but this

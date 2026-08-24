@@ -1,22 +1,38 @@
 'use client'
 
 // The System Workspace (design doc §7): one page per product. Left column —
-// accordion sections (Identity is wired in this shell; Images/Variants/
-// Colours/Components/Attributes/Applications/Documents/Relationships/
-// Stockists arrive in task #6). Right column — pinned preview, two tabs:
-// the real customer System Card, and a plain-English read of what the AI
-// knows. Replaces Verify systems + Asset picker + Preview + Publish-card as
+// accordion sections. Right column — pinned preview, two tabs: the real
+// customer System Card, and a plain-English read of what the AI knows.
+// Replaces Verify systems + Asset picker + Preview + Publish-card as
 // separate tabs — everything for one product lives here.
 
 import { useState } from 'react'
 import Link from 'next/link'
 import { SystemCardRenderer } from '@/components/system-card-renderer/SystemCardRenderer'
 import type { SystemCardSystem } from '@/components/system-card-renderer/types'
+import type { SlotAsset } from '@/app/(protected)/manufacturer/profile/AssetSlotControl'
+import type {
+  VerificationSystemProfile,
+  VerificationSystemColour,
+  VerificationSystemComponent,
+} from '@/lib/studio-manufacturer/workspace'
 import { FactRow } from './FactRow'
 import { WorkspaceSection, type SectionStatus } from './WorkspaceSection'
+import { AttributesSection } from './AttributesSection'
+import { VariantsSection } from './VariantsSection'
+import { ColoursSection } from './ColoursSection'
+import { ComponentsSection } from './ComponentsSection'
+import { ImagesSection } from './ImagesSection'
 import type { FactViewModel } from './factViewModel'
 
 type PreviewTab = 'card' | 'ai'
+type GalleryImage = { asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null }
+
+function needsCountFor(facts: FactViewModel[]): number {
+  return facts.filter((f) =>
+    f.epistemicStatus === 'unverified' || f.epistemicStatus === 'stale' || f.epistemicStatus === 'disputed',
+  ).length
+}
 
 export function SystemWorkspaceShell({
   systemId,
@@ -26,7 +42,17 @@ export function SystemWorkspaceShell({
   verificationStatus,
   previewSystem,
   identityFacts,
+  attributeFacts,
+  allFacts,
   coverage,
+  customAttributes,
+  profiles,
+  colours,
+  components,
+  pickerAssets,
+  heroAssetId,
+  heroUrl,
+  galleryImages,
 }: {
   systemId: string
   systemName: string
@@ -35,21 +61,36 @@ export function SystemWorkspaceShell({
   verificationStatus: string
   previewSystem: SystemCardSystem
   identityFacts: FactViewModel[]
+  attributeFacts: FactViewModel[]
+  allFacts: FactViewModel[]
   coverage: Record<string, string>
+  customAttributes: { label: string; value: string }[]
+  profiles: VerificationSystemProfile[]
+  colours: VerificationSystemColour[]
+  components: VerificationSystemComponent[]
+  pickerAssets: SlotAsset[]
+  heroAssetId: string | null
+  heroUrl: string | null
+  galleryImages: GalleryImage[]
 }) {
   const [tab, setTab] = useState<PreviewTab>('card')
+  const [customAttrs, setCustomAttrs] = useState(customAttributes)
 
-  const needsCount = identityFacts.filter((f) =>
-    f.epistemicStatus === 'unverified' || f.epistemicStatus === 'stale' || f.epistemicStatus === 'disputed',
-  ).length
+  const identityNeeds = needsCountFor(identityFacts)
+  const attributeNeeds = needsCountFor(attributeFacts)
 
-  const identityStatus: SectionStatus = needsCount > 0 ? 'warn' : identityFacts.length > 0 ? 'ok' : 'empty'
+  const identityStatus: SectionStatus = identityNeeds > 0 ? 'warn' : identityFacts.length > 0 ? 'ok' : 'empty'
+  const attributeStatus: SectionStatus = attributeNeeds > 0 ? 'warn' : attributeFacts.length > 0 ? 'ok' : 'empty'
+  const variantsStatus: SectionStatus = profiles.length > 0 ? 'ok' : 'empty'
+  const coloursStatus: SectionStatus = colours.length > 0 ? 'ok' : 'empty'
+  const componentsStatus: SectionStatus = components.length > 0 ? 'ok' : 'empty'
+  const imagesStatus: SectionStatus = heroAssetId || heroUrl ? 'ok' : 'empty'
 
   const stages = ['Documents', 'Extracted', 'Review', 'Verified', 'Live']
   const stageIndex =
     verificationStatus === 'manufacturer_verified' ? 3 :
     verificationStatus === 'in_review' ? 2 :
-    identityFacts.length > 0 ? 1 : 0
+    allFacts.length > 0 ? 1 : 0
 
   return (
     <div>
@@ -91,20 +132,13 @@ export function SystemWorkspaceShell({
         {/* Left — accordion sections */}
         <div>
           <WorkspaceSection title="Identity & description" status={identityStatus}
-            statusLabel={needsCount > 0 ? `${needsCount} need${needsCount === 1 ? 's' : ''} you` : 'confirmed'} defaultOpen>
+            statusLabel={identityNeeds > 0 ? `${identityNeeds} need${identityNeeds === 1 ? 's' : ''} you` : 'confirmed'} defaultOpen>
             {identityFacts.map((f) => (
               <FactRow
                 key={f.predicate}
-                label={f.label}
-                predicate={f.predicate}
-                claimType={f.claimType}
-                value={f.value}
-                rawValue={f.rawValue}
-                origin={f.origin}
-                epistemicStatus={f.epistemicStatus}
-                sourceLine={f.sourceLine}
-                systemId={systemId}
-                manufacturerId={manufacturerId}
+                label={f.label} predicate={f.predicate} claimType={f.claimType}
+                value={f.value} rawValue={f.rawValue} origin={f.origin} epistemicStatus={f.epistemicStatus}
+                sourceLine={f.sourceLine} systemId={systemId} manufacturerId={manufacturerId}
               />
             ))}
             {identityFacts.length === 0 && (
@@ -114,18 +148,33 @@ export function SystemWorkspaceShell({
             )}
           </WorkspaceSection>
 
-          <WorkspaceSection title="Images" statusLabel="edit in Asset picker for now">
-            <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted, #6b7280)', margin: '0.4rem 0' }}>
-              Hero image, gallery and colour swatches move into this section next —{' '}
-              <Link href={`/manufacturer/cms/${systemId}`} style={{ color: '#185D7A', fontWeight: 600 }}>edit them in Asset picker</Link> for now.
-            </p>
+          <WorkspaceSection title="Images" status={imagesStatus} statusLabel={imagesStatus === 'ok' ? 'hero set' : 'no hero image'}>
+            <ImagesSection
+              systemId={systemId} manufacturerId={manufacturerId}
+              heroAssetId={heroAssetId} heroUrl={heroUrl}
+              initialGallery={galleryImages} pickerAssets={pickerAssets}
+            />
           </WorkspaceSection>
 
-          <WorkspaceSection title="Variants, colours & components" statusLabel="edit in Verify systems for now">
-            <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted, #6b7280)', margin: '0.4rem 0' }}>
-              Profiles, colours and components move into this workspace next —{' '}
-              <Link href="/manufacturer/review" style={{ color: '#185D7A', fontWeight: 600 }}>edit them in Verify systems</Link> for now.
-            </p>
+          <WorkspaceSection title="Variants & sizes" status={variantsStatus} statusLabel={`${profiles.length} variant${profiles.length === 1 ? '' : 's'}`}>
+            <VariantsSection systemId={systemId} manufacturerId={manufacturerId} initialProfiles={profiles} />
+          </WorkspaceSection>
+
+          <WorkspaceSection title="Colours & finishes" status={coloursStatus} statusLabel={`${colours.length} colour${colours.length === 1 ? '' : 's'}`}>
+            <ColoursSection systemId={systemId} manufacturerId={manufacturerId} initialColours={colours} pickerAssets={pickerAssets} />
+          </WorkspaceSection>
+
+          <WorkspaceSection title="Components & accessories" status={componentsStatus} statusLabel={`${components.length} item${components.length === 1 ? '' : 's'}`}>
+            <ComponentsSection systemId={systemId} manufacturerId={manufacturerId} initialComponents={components} />
+          </WorkspaceSection>
+
+          <WorkspaceSection title="Attributes & performance" status={attributeStatus}
+            statusLabel={attributeNeeds > 0 ? `${attributeNeeds} need${attributeNeeds === 1 ? 's' : ''} you` : 'confirmed'}>
+            <AttributesSection
+              systemId={systemId} manufacturerId={manufacturerId}
+              attributeFacts={attributeFacts} customAttributes={customAttrs}
+              onCustomAttributesChanged={setCustomAttrs}
+            />
           </WorkspaceSection>
 
           <WorkspaceSection title="Applications & installation" statusLabel="not yet extracted">
@@ -152,20 +201,12 @@ export function SystemWorkspaceShell({
                 A plain-English read of the machine-readable object at{' '}
                 <code style={{ fontSize: '0.74rem' }}>/api/cards/{previewSystem.slug}/knowledge.jsonld?m={manufacturerSlug}</code>.
               </p>
-              {identityFacts.map((f) => (
+              {allFacts.map((f) => (
                 <FactRow
                   key={f.predicate}
-                  label={f.label}
-                  predicate={f.predicate}
-                  claimType={f.claimType}
-                  value={f.value}
-                  rawValue={f.rawValue}
-                  origin={f.origin}
-                  epistemicStatus={f.epistemicStatus}
-                  sourceLine={f.sourceLine}
-                  systemId={systemId}
-                  manufacturerId={manufacturerId}
-                  readOnly
+                  label={f.label} predicate={f.predicate} claimType={f.claimType}
+                  value={f.value} rawValue={f.rawValue} origin={f.origin} epistemicStatus={f.epistemicStatus}
+                  sourceLine={f.sourceLine} systemId={systemId} manufacturerId={manufacturerId} readOnly
                 />
               ))}
               <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid var(--ds-border, #e5e7eb)' }}>

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
+import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { SystemWorkspaceShell } from '@/components/workspace/SystemWorkspaceShell'
@@ -12,6 +13,7 @@ import {
   NOT_YET_EXTRACTED_COVERAGE,
 } from '@/lib/knowledge/buildSystemKnowledge'
 import type { FactViewModel } from '@/components/workspace/factViewModel'
+import type { SlotAsset } from '@/app/(protected)/manufacturer/profile/AssetSlotControl'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,18 +52,26 @@ export default async function SystemWorkspacePage({
 
   const previewSystem = adaptStagedSystem(system, result.manufacturer)
 
+  const assetsResult = await getManufacturerAssets(ctx.manufacturerId)
+  const pickerAssets: SlotAsset[] = assetsResult.ok
+    ? assetsResult.assets.map((a) => ({
+        id: a.id, assetType: a.assetType, title: a.title,
+        displayUrl: a.displayUrl, publicUrl: a.publicUrl, approvedForPublication: a.approvedForPublication,
+      }))
+    : []
+
   // AI-facing facts — same generator as the public knowledge.jsonld route
   // (lib/knowledge/buildSystemKnowledge.ts), so this view and what an agent
   // actually receives can never disagree. Fails soft: a system with no slug
   // yet, or an environment where the canonical bundle can't be assembled,
   // just shows an empty facts list rather than breaking the page.
-  let identityFacts: FactViewModel[] = []
+  let allFacts: FactViewModel[] = []
   if (system.slug) {
     const bundle = await fetchCanonicalSystemBundle(result.manufacturer.slug, system.slug)
     if (bundle) {
       const { compactAssertions } = buildFactsForCanonicalSystem(bundle)
       const byPredicate = new Map(compactAssertions.map((a) => [a['bq:predicate'], a]))
-      identityFacts = SYSTEM_FIELD_DESCRIPTORS
+      allFacts = SYSTEM_FIELD_DESCRIPTORS
         .map((d) => {
           const assertion = byPredicate.get(d.predicate)
           if (!assertion) return null
@@ -73,6 +83,7 @@ export default async function SystemWorkspacePage({
           return {
             predicate: d.predicate,
             claimType: d.claimType,
+            uiSection: d.uiSection,
             label: d.label,
             value: String(assertion['bq:objectValue'] ?? ''),
             rawValue: assertion['bq:objectValue'],
@@ -85,6 +96,9 @@ export default async function SystemWorkspacePage({
     }
   }
 
+  const identityFacts = allFacts.filter((f) => f.uiSection === 'identity')
+  const attributeFacts = allFacts.filter((f) => f.uiSection === 'attributes')
+
   return (
     <StudioShell role="manufacturer" subtitle={`${result.manufacturer.name} · Product workspace`}>
       <SystemWorkspaceShell
@@ -95,7 +109,17 @@ export default async function SystemWorkspacePage({
         verificationStatus={system.verification_status}
         previewSystem={previewSystem}
         identityFacts={identityFacts}
+        attributeFacts={attributeFacts}
+        allFacts={allFacts}
         coverage={NOT_YET_EXTRACTED_COVERAGE}
+        customAttributes={system.custom_technical_attributes ?? []}
+        profiles={system.profiles}
+        colours={system.colours}
+        components={system.components}
+        pickerAssets={pickerAssets}
+        heroAssetId={system.hero_image_asset_id}
+        heroUrl={system.hero_image_url}
+        galleryImages={system.gallery_images ?? []}
       />
     </StudioShell>
   )
