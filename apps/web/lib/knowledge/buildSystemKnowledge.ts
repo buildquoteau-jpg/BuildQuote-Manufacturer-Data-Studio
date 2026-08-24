@@ -43,7 +43,7 @@ const STUDIO_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildq
 // become facts, and what kind of fact each one is. Extend this array as new
 // columns come online; never synthesize a fact for a column not listed here.
 
-type FieldDescriptor = {
+export type FieldDescriptor = {
   fieldName: string
   predicate: string
   claimType: ClaimType
@@ -51,7 +51,10 @@ type FieldDescriptor = {
   isBoolean?: boolean
 }
 
-const SYSTEM_FIELD_DESCRIPTORS: FieldDescriptor[] = [
+// Exported so the System Workspace UI (design doc §7.3 "Identity &
+// description" / "Attributes & performance" sections) edits exactly the
+// fields this generator emits — one list, not two that can drift apart.
+export const SYSTEM_FIELD_DESCRIPTORS: FieldDescriptor[] = [
   { fieldName: 'name', predicate: 'bq:name', claimType: 'identity', label: 'System name' },
   { fieldName: 'category', predicate: 'bq:category', claimType: 'identity', label: 'Category' },
   { fieldName: 'subcategory', predicate: 'bq:subcategory', claimType: 'identity', label: 'Subcategory' },
@@ -71,7 +74,7 @@ const SYSTEM_FIELD_DESCRIPTORS: FieldDescriptor[] = [
 // Categories the customer card / staged schema can express today but this
 // generator does not yet turn into assertions — surfaced honestly as
 // coverage, not silence and not a fabricated per-product gap.
-const NOT_YET_EXTRACTED_COVERAGE: Record<string, string> = {
+export const NOT_YET_EXTRACTED_COVERAGE: Record<string, string> = {
   installationMethods: 'not_yet_extracted — pending the knowledge parser (design doc §7)',
   fixingRequirements: 'not_yet_extracted — pending the knowledge parser',
   applications: 'not_yet_extracted — pending the knowledge parser',

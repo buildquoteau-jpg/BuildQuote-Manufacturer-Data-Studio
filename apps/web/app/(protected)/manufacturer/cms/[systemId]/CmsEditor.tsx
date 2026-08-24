@@ -203,6 +203,11 @@ export function CmsEditor({ manufacturerId, manufacturer, initialSystem, assets,
             View live card ↗
           </a>
         )}
+        <Link href={`/manufacturer/workspace/${system.id}`} style={{
+          fontSize: '0.82rem', fontWeight: 600, color: '#185D7A', textDecoration: 'none', whiteSpace: 'nowrap',
+        }}>
+          Try the new workspace (preview) →
+        </Link>
         <Link href="/manufacturer/publish" style={{
           padding: '9px 22px', borderRadius: 8, border: 'none',
           background: '#16a34a', color: '#fff', fontSize: '0.86rem', fontWeight: 800,
