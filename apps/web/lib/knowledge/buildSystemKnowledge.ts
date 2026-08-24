@@ -297,7 +297,24 @@ function buildRetrievalDocuments(
 
 // ─── Entry point: live, from canonical staged_* data ───────────────────────
 
-export function buildFromCanonical(bundle: CanonicalSystemBundle): KnowledgeObject {
+// ─── Shared fact assembly ───────────────────────────────────────────────────
+// Extracted so exactly one implementation produces knowledge_assertions rows
+// — reused by the live route (buildFromCanonical) AND the one-off backfill
+// (/api/admin/backfill-knowledge-assertions, task #3). A second, drifted copy
+// of this resolution logic in raw SQL is exactly the kind of duplication the
+// whole redesign exists to eliminate — see design doc §6.1.
+
+export type SystemFacts = {
+  systemUrl: string
+  manufacturerUrl: string
+  compactAssertions: Assertion[]
+  atomicAssertions: AtomicAssertion[]
+  retrievalDocuments: RetrievalDocument[]
+  queryTerms: { concept: string; synonyms: string[] }[]
+  knowledgeGaps: KnowledgeGap[]
+}
+
+export function buildFactsForCanonicalSystem(bundle: CanonicalSystemBundle): SystemFacts {
   const systemUrl = `${STUDIO_ORIGIN}/cards/${bundle.manufacturer.slug}/${bundle.system.slug}`
   const manufacturerUrl = `${STUDIO_ORIGIN}/manufacturers/${bundle.manufacturer.slug}`
   const factCounter = { n: 0 }
@@ -363,6 +380,15 @@ export function buildFromCanonical(bundle: CanonicalSystemBundle): KnowledgeObje
       'bq:status': 'disputed',
       'bq:reason': 'Flagged incorrect by the manufacturer; no correction supplied yet. Not stated pending resolution.',
     }))
+
+  return { systemUrl, manufacturerUrl, compactAssertions, atomicAssertions, retrievalDocuments, queryTerms, knowledgeGaps }
+}
+
+export function buildFromCanonical(bundle: CanonicalSystemBundle): KnowledgeObject {
+  const {
+    systemUrl, manufacturerUrl, compactAssertions, atomicAssertions,
+    retrievalDocuments, queryTerms, knowledgeGaps,
+  } = buildFactsForCanonicalSystem(bundle)
 
   return {
     '@context': KNOWLEDGE_CONTEXT,
