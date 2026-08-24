@@ -120,6 +120,7 @@ export default async function SystemWorkspacePage({
         heroAssetId={system.hero_image_asset_id}
         heroUrl={system.hero_image_url}
         galleryImages={system.gallery_images ?? []}
+        ownSystems={result.systems.filter((s) => s.id !== system.id).map((s) => ({ id: s.id, name: s.name }))}
       />
     </StudioShell>
   )

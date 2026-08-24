@@ -23,6 +23,7 @@ import { VariantsSection } from './VariantsSection'
 import { ColoursSection } from './ColoursSection'
 import { ComponentsSection } from './ComponentsSection'
 import { ImagesSection } from './ImagesSection'
+import { RelationshipsSection } from './RelationshipsSection'
 import type { FactViewModel } from './factViewModel'
 
 type PreviewTab = 'card' | 'ai'
@@ -53,6 +54,7 @@ export function SystemWorkspaceShell({
   heroAssetId,
   heroUrl,
   galleryImages,
+  ownSystems,
 }: {
   systemId: string
   systemName: string
@@ -72,6 +74,7 @@ export function SystemWorkspaceShell({
   heroAssetId: string | null
   heroUrl: string | null
   galleryImages: GalleryImage[]
+  ownSystems: { id: string; name: string }[]
 }) {
   const [tab, setTab] = useState<PreviewTab>('card')
   const [customAttrs, setCustomAttrs] = useState(customAttributes)
@@ -175,6 +178,10 @@ export function SystemWorkspaceShell({
               attributeFacts={attributeFacts} customAttributes={customAttrs}
               onCustomAttributesChanged={setCustomAttrs}
             />
+          </WorkspaceSection>
+
+          <WorkspaceSection title="Relationships" statusLabel="works with / do not use with / replaces">
+            <RelationshipsSection systemId={systemId} manufacturerId={manufacturerId} ownSystems={ownSystems} />
           </WorkspaceSection>
 
           <WorkspaceSection title="Applications & installation" statusLabel="not yet extracted">
