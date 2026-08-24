@@ -395,6 +395,27 @@ export async function generateCardPackage(
       containers = new Map()
     }
 
+    // AI knowledge object (design doc §14 step 11): freeze bq:knowledge per
+    // card version, same as the content_md container above and for the same
+    // reason — a citation made against this version must resolve forever,
+    // not drift as the live card changes. Uses the exact same generator as
+    // the public /api/cards/[slug]/knowledge.jsonld route (buildFromCanonical),
+    // so a frozen version and a live re-fetch immediately after publish agree
+    // byte-for-byte. Fails soft — a knowledge_json failure never blocks
+    // publishing the card itself.
+    const knowledgeByCardId = new Map<string, unknown>()
+    try {
+      const { fetchCanonicalSystemBundle } = await import('@/lib/knowledge/fetchCanonicalKnowledgeData')
+      const { buildFromCanonical } = await import('@/lib/knowledge/buildSystemKnowledge')
+      for (let i = 0; i < cards.length; i++) {
+        const bundle = await fetchCanonicalSystemBundle(verification.manufacturer.slug, cards[i].slug)
+        if (bundle) knowledgeByCardId.set(readyCards[i].system.id, buildFromCanonical(bundle))
+      }
+    } catch {
+      // knowledge_assertions/migration 065 not applied yet, or any other
+      // failure — knowledgeByCardId simply stays empty for this publish.
+    }
+
     // ── Build the ZIP ──
     const generatedAtIso = new Date().toISOString()
     const result = await buildPackageZip({
@@ -491,14 +512,17 @@ export async function generateCardPackage(
         content_md: container?.content_md ?? null,
         content_hash: container?.content_hash ?? null,
         sources_json: container?.sources_json ?? null,
+        knowledge_json: knowledgeByCardId.get(system.id) ?? null,
       }
     })
     const { error: versionsError } = await supabase.from('card_versions').insert(versionRows)
     if (versionsError) {
-      // Pre-051 environments lack the container columns — retry without them so
-      // the version snapshot itself still lands.
+      // Pre-051 environments lack the container columns, and pre-065
+      // environments additionally lack knowledge_json — retry without
+      // either so the version snapshot itself still lands regardless of
+      // which migrations are applied.
       if (isMissingSchemaError(versionsError)) {
-        const legacyRows = versionRows.map(({ content_md, content_hash, sources_json, ...rest }) => rest)
+        const legacyRows = versionRows.map(({ content_md, content_hash, sources_json, knowledge_json, ...rest }) => rest)
         const { error: legacyErr } = await supabase.from('card_versions').insert(legacyRows)
         if (legacyErr) {
           await supabase

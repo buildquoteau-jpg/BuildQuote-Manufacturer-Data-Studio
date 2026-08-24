@@ -51,7 +51,7 @@ export async function GET(
       }
       const { data: row } = await supabase
         .from('card_versions')
-        .select('card_json, validated_by, validated_at')
+        .select('card_json, validated_by, validated_at, knowledge_json')
         .eq('manufacturer_id', manufacturer.id)
         .eq('slug', cardSlug)
         .eq('version', version)
@@ -59,7 +59,11 @@ export async function GET(
       if (!row) {
         return NextResponse.json({ error: 'Unknown card version' }, { status: 404, headers: KNOWLEDGE_CORS_HEADERS })
       }
-      const obj = buildFromCardVersion(row.card_json, {
+      // Prefer the frozen object (design doc §14 step 11) — full provenance,
+      // guaranteed to match what was published. Only reconstruct the lower-
+      // fidelity structural version for a card published before migration
+      // 065 existed, or before this environment applied it.
+      const obj = row.knowledge_json ?? buildFromCardVersion(row.card_json, {
         manufacturerSlug, cardSlug, version,
         validatedBy: row.validated_by, validatedAt: row.validated_at,
       })

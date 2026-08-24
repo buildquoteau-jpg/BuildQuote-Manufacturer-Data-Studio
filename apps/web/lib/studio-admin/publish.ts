@@ -424,6 +424,27 @@ export async function publishSystem(
       await ds.from('staged_systems').update({ production_system_id: created.id }).eq('id', systemId)
     }
 
+    // Best-effort, separate from systemPayload above on purpose: knowledge_url
+    // is a new, purely additive column (design doc §10.5) that may not exist
+    // in every production environment yet. A failure here must never turn
+    // into a failed publish — the customer-facing system record is already
+    // safely written by the throw-on-error block above.
+    if (!dryRun && productionSystemId && productionSystemId !== '(new)') {
+      try {
+        const { data: mfrSlugRow } = await ds
+          .from('data_studio_manufacturers')
+          .select('slug')
+          .eq('id', sys.manufacturer_id)
+          .single()
+        if (mfrSlugRow?.slug) {
+          const knowledgeUrl = `${STUDIO_ORIGIN}/api/cards/${slug}/knowledge.jsonld?m=${mfrSlugRow.slug}`
+          await prod.from('systems').update({ knowledge_url: knowledgeUrl }).eq('id', productionSystemId)
+        }
+      } catch {
+        // knowledge_url column not present yet, or any other issue — skip silently.
+      }
+    }
+
     const profiles = await publishProfiles(ds, prod, systemId, productionSystemId, dryRun)
     const colours = await publishColours(ds, prod, systemId, productionSystemId, dryRun)
     const components = await publishComponents(ds, prod, systemId, productionSystemId, productionManufacturerId, dryRun)
