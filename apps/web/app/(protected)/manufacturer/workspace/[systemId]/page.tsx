@@ -105,6 +105,7 @@ export default async function SystemWorkspacePage({
         systemId={system.id}
         systemName={system.name}
         manufacturerId={ctx.manufacturerId}
+        manufacturerName={result.manufacturer.name}
         manufacturerSlug={result.manufacturer.slug}
         verificationStatus={system.verification_status}
         previewSystem={previewSystem}
@@ -121,6 +122,7 @@ export default async function SystemWorkspacePage({
         heroUrl={system.hero_image_url}
         galleryImages={system.gallery_images ?? []}
         ownSystems={result.systems.filter((s) => s.id !== system.id).map((s) => ({ id: s.id, name: s.name }))}
+        sourceDocumentId={system.source_document_id}
       />
     </StudioShell>
   )

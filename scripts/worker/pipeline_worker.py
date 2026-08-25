@@ -5,10 +5,13 @@ BuildQuote Pipeline Worker
 Polls Supabase for pending pipeline jobs and executes them locally.
 
 Supports job types:
-  docling       — run extract_docling_chunked.py on a PDF from R2
-  parser        — run run_parser.py on docling output
-  rerun_chunk   — re-extract a specific page range
-  qa            — run LLM QA review via Claude API
+  docling          — run extract_docling_chunked.py on a PDF from R2
+  parser           — run run_parser.py on docling output
+  knowledge_parser — run run_knowledge_parser.py over document_chunks
+                     (second pass: installation/fixing/applications/
+                     performance/standards → knowledge_assertions)
+  rerun_chunk      — re-extract a specific page range
+  qa               — run LLM QA review via Claude API
 
 Run from repo root:
     python scripts/worker/pipeline_worker.py
@@ -671,6 +674,75 @@ def handle_parser(job: dict):
     }, log)
 
 
+def handle_knowledge_parser(job: dict):
+    """The AI-knowledge second parser pass (design doc §7/§14 step 7) —
+    shells out to run_knowledge_parser.py exactly as handle_parser() shells
+    out to run_parser.py, but over document_chunks instead of a local
+    output.md, and into knowledge_assertions instead of staged_systems.
+    Requires migration 065 applied — the child script itself surfaces a
+    clear error (not a stack trace) if knowledge_assertions doesn't exist
+    yet, same as every other pre-065 guard in this codebase.
+    """
+    job_id = job["id"]
+    payload = job["payload"]
+    manufacturer_id = payload["manufacturer_id"]
+    manufacturer_name = payload.get("manufacturer_name", "")
+    staged_system_id = payload["staged_system_id"]
+    source_document_id = payload["source_document_id"]
+    dry_run = payload.get("dry_run", False)
+
+    log: list[str] = []
+
+    def log_line(msg):
+        log.append(msg)
+        print(f"  {msg}")
+
+    script = REPO_ROOT / "scripts" / "parser" / "run_knowledge_parser.py"
+    cmd = [
+        sys.executable, "-u", str(script),
+        "--source-document-id", source_document_id,
+        "--staged-system-id", staged_system_id,
+        "--manufacturer-id", manufacturer_id,
+        "--manufacturer-name", manufacturer_name,
+    ]
+    if dry_run:
+        cmd.append("--dry-run")
+
+    log_line(f"Running knowledge parser: {manufacturer_name} ({'dry run' if dry_run else 'live'})")
+    update_progress(job_id, {"currentStage": "extracting"}, log)
+
+    proc = subprocess.Popen(
+        cmd, cwd=str(REPO_ROOT),
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1,
+        env={**os.environ, "PIPELINE_JOB_ID": str(job_id)},
+    )
+    for line in proc.stdout:
+        line = line.rstrip()
+        if not line:
+            continue
+        log.append(line)
+        if len(log) % 5 == 0:
+            update_progress(job_id, {"currentStage": "extracting"}, log)
+
+    proc.wait()
+    if proc.returncode != 0:
+        fail_job(job_id, f"Knowledge parser exited with code {proc.returncode}", log)
+        return
+
+    try:
+        assertions = sb_get(
+            "knowledge_assertions",
+            f"staged_system_id=eq.{staged_system_id}&select=id",
+        )
+        assertion_count = len(assertions)
+    except Exception:
+        assertion_count = 0
+
+    log_line(f"Done: {assertion_count} assertions for this system.")
+    complete_job(job_id, {"assertionCount": assertion_count, "dryRun": dry_run}, log)
+
+
 def handle_fetch_url(job: dict):
     """Fetch a PDF from a URL into R2, then (optionally) chain into docling.
 
@@ -948,6 +1020,7 @@ def handle_rerun_chunk(job: dict):
 HANDLERS = {
     "docling": handle_docling,
     "parser": handle_parser,
+    "knowledge_parser": handle_knowledge_parser,
     "rerun_chunk": handle_rerun_chunk,
     "fetch_url": handle_fetch_url,
     "embed": handle_embed,

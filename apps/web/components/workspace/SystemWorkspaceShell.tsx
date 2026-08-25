@@ -24,6 +24,7 @@ import { ColoursSection } from './ColoursSection'
 import { ComponentsSection } from './ComponentsSection'
 import { ImagesSection } from './ImagesSection'
 import { RelationshipsSection } from './RelationshipsSection'
+import { ApplicationsSection } from './ApplicationsSection'
 import type { FactViewModel } from './factViewModel'
 
 type PreviewTab = 'card' | 'ai'
@@ -39,6 +40,7 @@ export function SystemWorkspaceShell({
   systemId,
   systemName,
   manufacturerId,
+  manufacturerName,
   manufacturerSlug,
   verificationStatus,
   previewSystem,
@@ -55,10 +57,12 @@ export function SystemWorkspaceShell({
   heroUrl,
   galleryImages,
   ownSystems,
+  sourceDocumentId,
 }: {
   systemId: string
   systemName: string
   manufacturerId: string
+  manufacturerName: string
   manufacturerSlug: string
   verificationStatus: string
   previewSystem: SystemCardSystem
@@ -75,6 +79,7 @@ export function SystemWorkspaceShell({
   heroUrl: string | null
   galleryImages: GalleryImage[]
   ownSystems: { id: string; name: string }[]
+  sourceDocumentId: string | null
 }) {
   const [tab, setTab] = useState<PreviewTab>('card')
   const [customAttrs, setCustomAttrs] = useState(customAttributes)
@@ -184,10 +189,13 @@ export function SystemWorkspaceShell({
             <RelationshipsSection systemId={systemId} manufacturerId={manufacturerId} ownSystems={ownSystems} />
           </WorkspaceSection>
 
-          <WorkspaceSection title="Applications & installation" statusLabel="not yet extracted">
-            <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted, #6b7280)', margin: '0.4rem 0' }}>
-              Installation methods, fixing requirements and applications require the knowledge parser, which hasn&apos;t run yet.
-            </p>
+          <WorkspaceSection title="Applications & installation" statusLabel={sourceDocumentId ? 'not yet extracted' : 'no source document linked'}>
+            <ApplicationsSection
+              manufacturerId={manufacturerId}
+              manufacturerName={manufacturerName}
+              stagedSystemId={systemId}
+              sourceDocumentId={sourceDocumentId}
+            />
           </WorkspaceSection>
         </div>
 
