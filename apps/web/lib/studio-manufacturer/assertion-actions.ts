@@ -78,6 +78,32 @@ async function findOrCreateAssertion(
 
 // ─── ✓ Correct — confirm the extracted value as-is ─────────────────────────
 
+async function verifyAssertionCore(
+  supabase: ReturnType<typeof createStudioServerClient>,
+  systemId: string,
+  manufacturerId: string,
+  userId: string,
+  predicate: string,
+  claimType: ClaimType,
+  objectValue: unknown,
+  origin: string,
+): Promise<AssertionActionResult> {
+  const found = await findOrCreateAssertion(supabase, systemId, manufacturerId, predicate, claimType, objectValue, origin)
+  if (!found.ok) return found
+
+  const { error } = await supabase
+    .from('knowledge_assertions')
+    .update({
+      epistemic_status: 'manufacturer_verified',
+      verified_by: userId,
+      verified_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', found.id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, id: found.id }
+}
+
 export async function verifyAssertion(
   systemId: string,
   manufacturerId: string,
@@ -90,20 +116,45 @@ export async function verifyAssertion(
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
-  const found = await findOrCreateAssertion(supabase, systemId, manufacturerId, predicate, claimType, objectValue, origin)
-  if (!found.ok) return found
+  return verifyAssertionCore(supabase, systemId, manufacturerId, auth.userId, predicate, claimType, objectValue, origin)
+}
 
-  const { error } = await supabase
-    .from('knowledge_assertions')
-    .update({
-      epistemic_status: 'manufacturer_verified',
-      verified_by: auth.userId,
-      verified_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', found.id)
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, id: found.id }
+// ─── Evidence-group bulk verify — design doc §9.2 workload-killer #1 ──────
+// "A person who wrote the page can confirm the page." One auth check, one
+// client, then the same per-fact verify path as the single ✓ Correct action
+// — looped, not reimplemented, so the two can never drift apart.
+
+export type BulkVerifyItem = {
+  predicate: string
+  claimType: ClaimType
+  objectValue: unknown
+  origin: string
+}
+
+export type BulkVerifyResult = {
+  ok: boolean
+  results: { predicate: string; ok: boolean; error?: string }[]
+}
+
+export async function bulkVerifyAssertions(
+  systemId: string,
+  manufacturerId: string,
+  items: BulkVerifyItem[],
+): Promise<BulkVerifyResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) {
+    return { ok: false, results: items.map((i) => ({ predicate: i.predicate, ok: false, error: auth.error })) }
+  }
+
+  const supabase = createStudioServerClient()
+  const results: { predicate: string; ok: boolean; error?: string }[] = []
+  for (const item of items) {
+    const res = await verifyAssertionCore(
+      supabase, systemId, manufacturerId, auth.userId, item.predicate, item.claimType, item.objectValue, item.origin,
+    )
+    results.push(res.ok ? { predicate: item.predicate, ok: true } : { predicate: item.predicate, ok: false, error: res.error })
+  }
+  return { ok: results.every((r) => r.ok), results }
 }
 
 // ─── ✎ Fix — manufacturer supplies a corrected value ───────────────────────

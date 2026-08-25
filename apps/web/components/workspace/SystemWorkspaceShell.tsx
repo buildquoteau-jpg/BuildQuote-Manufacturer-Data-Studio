@@ -25,6 +25,7 @@ import { ComponentsSection } from './ComponentsSection'
 import { ImagesSection } from './ImagesSection'
 import { RelationshipsSection } from './RelationshipsSection'
 import { ApplicationsSection } from './ApplicationsSection'
+import { EvidenceGroupBulkVerify } from './EvidenceGroupBulkVerify'
 import type { FactViewModel } from './factViewModel'
 
 type PreviewTab = 'card' | 'ai'
@@ -139,6 +140,8 @@ export function SystemWorkspaceShell({
 
         {/* Left — accordion sections */}
         <div>
+          <EvidenceGroupBulkVerify facts={allFacts} systemId={systemId} manufacturerId={manufacturerId} />
+
           <WorkspaceSection title="Identity & description" status={identityStatus}
             statusLabel={identityNeeds > 0 ? `${identityNeeds} need${identityNeeds === 1 ? 's' : ''} you` : 'confirmed'} defaultOpen>
             {identityFacts.map((f) => (

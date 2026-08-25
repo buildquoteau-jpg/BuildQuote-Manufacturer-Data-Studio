@@ -90,6 +90,8 @@ export default async function SystemWorkspacePage({
             origin: assertion['bq:origin'],
             epistemicStatus: assertion['bq:epistemicStatus'],
             sourceLine,
+            sourceDocumentId: pe?.source_document_id ?? null,
+            sourcePageNumber: pe?.source_page_number ?? null,
           } satisfies FactViewModel
         })
         .filter((f): f is FactViewModel => f !== null)

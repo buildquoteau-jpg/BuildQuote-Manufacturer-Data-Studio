@@ -16,4 +16,10 @@ export type FactViewModel = {
   origin: AssertionOrigin
   epistemicStatus: EpistemicStatus
   sourceLine: string | null
+  // Raw evidence-page identity, kept alongside the formatted sourceLine so
+  // facts can be grouped by "same document, same page" without re-parsing a
+  // display string (design doc §9.2 workload-killer #1 — evidence-group
+  // bulk verification).
+  sourceDocumentId: string | null
+  sourcePageNumber: number | null
 }
