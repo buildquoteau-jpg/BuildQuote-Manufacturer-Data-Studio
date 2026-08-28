@@ -742,6 +742,83 @@ def handle_knowledge_parser(job: dict):
     log_line(f"Done: {assertion_count} assertions for this system.")
     complete_job(job_id, {"assertionCount": assertion_count, "dryRun": dry_run}, log)
 
+    # Design doc addendum 3 §C4: self-serve "Initiate extraction" enqueues
+    # both passes for a system's linked document. This is the second half
+    # of the chain — see the auto_chain block at the end of handle_docling,
+    # which enqueues *this* job after Docling; identity and knowledge are
+    # independent of each other's output, so either can run first, but only
+    # handle_docling triggers the chain (identity parser doesn't need to
+    # trigger knowledge parser or vice versa).
+
+
+def handle_system_identity_parser(job: dict):
+    """The system-identity parser (design doc addendum 3 §C3) — shells out
+    to run_system_identity_parser.py exactly as handle_knowledge_parser()
+    shells out to run_knowledge_parser.py: same document_chunks input, same
+    dry-run-plan-then-write pattern. Writes System Card identity fields
+    (description, category, profiles, colours, components, attributes)
+    directly onto the known staged_system_id via UPDATE/INSERT-with-known-
+    parent — never resolves a name match, never risks a duplicate system
+    row, unlike the bulk catalogue parser (run_parser.py).
+    """
+    job_id = job["id"]
+    payload = job["payload"]
+    manufacturer_id = payload["manufacturer_id"]
+    manufacturer_name = payload.get("manufacturer_name", "")
+    staged_system_id = payload["staged_system_id"]
+    system_name = payload.get("system_name", "")
+    source_document_id = payload["source_document_id"]
+    dry_run = payload.get("dry_run", False)
+
+    log: list[str] = []
+
+    def log_line(msg):
+        log.append(msg)
+        print(f"  {msg}")
+
+    script = REPO_ROOT / "scripts" / "parser" / "run_system_identity_parser.py"
+    cmd = [
+        sys.executable, "-u", str(script),
+        "--source-document-id", source_document_id,
+        "--staged-system-id", staged_system_id,
+        "--manufacturer-id", manufacturer_id,
+        "--manufacturer-name", manufacturer_name,
+        "--system-name", system_name,
+    ]
+    if dry_run:
+        cmd.append("--dry-run")
+
+    log_line(f"Running identity parser: {system_name} ({'dry run' if dry_run else 'live'})")
+    update_progress(job_id, {"currentStage": "extracting"}, log)
+
+    proc = subprocess.Popen(
+        cmd, cwd=str(REPO_ROOT),
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1,
+        env={**os.environ, "PIPELINE_JOB_ID": str(job_id)},
+    )
+    for line in proc.stdout:
+        line = line.rstrip()
+        if not line:
+            continue
+        log.append(line)
+        if len(log) % 5 == 0:
+            update_progress(job_id, {"currentStage": "extracting"}, log)
+
+    proc.wait()
+    if proc.returncode != 0:
+        fail_job(job_id, f"Identity parser exited with code {proc.returncode}", log)
+        return
+
+    try:
+        profiles = sb_get("staged_system_profiles", f"staged_system_id=eq.{staged_system_id}&select=id")
+        profile_count = len(profiles)
+    except Exception:
+        profile_count = 0
+
+    log_line(f"Done: {profile_count} profiles on this system.")
+    complete_job(job_id, {"profileCount": profile_count, "dryRun": dry_run}, log)
+
 
 def handle_fetch_url(job: dict):
     """Fetch a PDF from a URL into R2, then (optionally) chain into docling.
@@ -1021,6 +1098,7 @@ HANDLERS = {
     "docling": handle_docling,
     "parser": handle_parser,
     "knowledge_parser": handle_knowledge_parser,
+    "system_identity_parser": handle_system_identity_parser,
     "rerun_chunk": handle_rerun_chunk,
     "fetch_url": handle_fetch_url,
     "embed": handle_embed,
