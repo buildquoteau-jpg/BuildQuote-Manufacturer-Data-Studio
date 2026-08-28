@@ -1044,6 +1044,7 @@ export async function linkSourceDocument(
 
 export async function createBlankSystem(
   manufacturerId: string,
+  name?: string,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
@@ -1053,7 +1054,7 @@ export async function createBlankSystem(
     .from('staged_systems')
     .insert({
       manufacturer_id: manufacturerId,
-      name: 'New system',
+      name: name?.trim() || 'New system',
       verification_status: 'pending_review',
     })
     .select('id')
