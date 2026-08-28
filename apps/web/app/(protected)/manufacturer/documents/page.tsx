@@ -34,7 +34,17 @@ export default async function ManufacturerDocumentsPage() {
 
   return (
     <StudioShell role="manufacturer" workspaceName={workspaceName} subtitle="Documents">
-      <h1 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Documents</h1>
+      <h1 style={{ fontSize: '1.25rem', margin: '0 0 0.5rem' }}>Documents</h1>
+      <p style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', margin: '0 0 1.5rem', maxWidth: 640, lineHeight: 1.6 }}>
+        Upload your catalogues, installation guides, technical data sheets and brochures here —
+        this is the source material BuildQuote reads to build your System Cards and the underlying
+        product facts (what an AI agent will know about each product, with page-level evidence).
+        A document isn&apos;t tied to one product; the same install guide can support several
+        System Cards. After upload a document sits as <strong>Uploaded</strong> until BuildQuote
+        processes it (Queued → Extracting → In Review → Approved) — this page doesn&apos;t edit
+        product data directly; that happens once extraction is done, in{' '}
+        <a href="/manufacturer/cms" style={{ fontWeight: 600 }}>Products</a>.
+      </p>
 
       {/* Upload zone */}
       <div className="studio-section" style={{ marginTop: 0 }}>

@@ -39,7 +39,7 @@ export function ManufacturersList({ manufacturers }: { manufacturers: Manufactur
         body: JSON.stringify({ manufacturerId: gating.id, password }),
       })
       if (res.ok) {
-        window.location.href = '/manufacturer/dashboard'
+        window.location.href = '/manufacturer/start-here'
       } else {
         const body = await res.json().catch(() => ({}))
         setError(body.error === 'Incorrect password' ? 'Incorrect password.' : 'Access denied.')

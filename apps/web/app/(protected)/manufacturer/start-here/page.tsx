@@ -68,7 +68,7 @@ export default async function StartHerePage() {
       done: brandComplete,
       count: brandComplete ? 'Complete' : 'Needs attention',
       href: '/manufacturer/profile',
-      body: 'Your company name, description, website and hero image — shown on every one of your System Cards.',
+      body: 'Your company name, description, website and hero image — shown on your manufacturer page, not on individual product cards.',
     },
     {
       n: 2,

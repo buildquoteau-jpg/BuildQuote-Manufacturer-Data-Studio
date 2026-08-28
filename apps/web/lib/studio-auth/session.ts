@@ -89,7 +89,7 @@ export function resolvePostLoginPath(session: StudioSession): string {
       // No reviewer workspace yet — land on dashboard which shows the appropriate message
       return '/dashboard'
     case 'manufacturer_user':
-      return session.memberships.length > 0 ? '/manufacturer/dashboard' : '/dashboard'
+      return session.memberships.length > 0 ? '/manufacturer/start-here' : '/dashboard'
     default:
       return '/dashboard'
   }

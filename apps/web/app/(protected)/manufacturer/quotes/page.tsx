@@ -74,8 +74,8 @@ export default async function ManufacturerQuotesPage() {
       )}
 
       <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
-        <a href="/manufacturer/dashboard" style={{ fontSize: '0.83rem', color: '#475569', fontWeight: 600, textDecoration: 'none' }}>
-          ← Back to dashboard
+        <a href="/manufacturer/start-here" style={{ fontSize: '0.83rem', color: '#475569', fontWeight: 600, textDecoration: 'none' }}>
+          ← Back to Start Here
         </a>
       </div>
     </StudioShell>

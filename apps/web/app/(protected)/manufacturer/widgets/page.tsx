@@ -9,7 +9,7 @@ import { WidgetManager } from './WidgetManager'
 export default async function ManufacturerWidgetsPage() {
   const session = await getStudioSession()
   const ctx = await resolveWorkspaceContextFromRequest(session)
-  if (!ctx.found) redirect('/manufacturer/dashboard')
+  if (!ctx.found) redirect('/manufacturer/start-here')
 
   const sb   = createStudioServerClient()
   const prod = createProductionServiceClient()

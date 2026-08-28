@@ -22,9 +22,13 @@ export default async function DashboardPage() {
 
   if (!session.profile) redirect('/login')
 
-  // Manufacturer with at least one active membership → go to their workspace
+  // Manufacturer with at least one active membership → go to their workspace.
+  // Start Here is the front door now (brand snapshot + guided flow) — the
+  // old /manufacturer/dashboard page still exists (package shortcuts and
+  // the catalogue list it had are now covered by Packages/Documents), it's
+  // just no longer where anyone is sent or linked to.
   if (session.globalRole === 'manufacturer_user' && session.memberships.length > 0) {
-    redirect('/manufacturer/dashboard')
+    redirect('/manufacturer/start-here')
   }
 
   const isAdmin = session.globalRole === 'buildquote_admin'

@@ -21,7 +21,6 @@ const REVIEWER_NAV: NavItem[] = [
 
 const MFR_NAV: NavItem[] = [
   { label: 'Start Here',      href: '/manufacturer/start-here' },
-  { label: 'Dashboard',       href: '/manufacturer/dashboard' },
   { label: 'Brand profile',   href: '/manufacturer/profile' },
   { label: 'User profile',    href: '/manufacturer/account' },
   { label: 'Documents',       href: '/manufacturer/documents' },

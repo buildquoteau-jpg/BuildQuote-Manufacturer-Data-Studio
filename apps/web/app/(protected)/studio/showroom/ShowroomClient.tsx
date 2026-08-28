@@ -199,7 +199,7 @@ export function ShowroomClient({
       <div style={{ background: '#0f4461', borderBottom: '1px solid rgba(255,255,255,0.12)', padding: '10px 20px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <a
-            href="/manufacturer/dashboard"
+            href="/manufacturer/start-here"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '6px 14px', borderRadius: '8px',

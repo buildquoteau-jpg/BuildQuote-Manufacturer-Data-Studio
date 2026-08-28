@@ -56,7 +56,7 @@ export default async function PipelinePage() {
 
   // Pipeline is admin-only
   if (session.globalRole !== 'buildquote_admin') {
-    redirect('/manufacturer/dashboard')
+    redirect('/manufacturer/start-here')
   }
 
   const ctx = await resolveWorkspaceContextFromRequest(session)
