@@ -240,3 +240,16 @@ export const QUERY_TERMS: QueryTerm[] = [
 export function queryTermFor(predicate: string): QueryTerm | undefined {
   return QUERY_TERMS.find((t) => t.predicate === predicate)
 }
+
+/**
+ * Finds which of the shared query terms a free-text question touches on —
+ * stage 1 of the AI Knowledge Gap ask pipeline's retrieval order (design doc
+ * addendum §A5): try the cheap, exact synonym dictionary before anything
+ * that costs an API call. Plain substring matching, case-insensitive — this
+ * is deliberately not NLU; it only has to catch the vocabulary this
+ * codebase already knows about.
+ */
+export function findMatchingQueryTerms(question: string): QueryTerm[] {
+  const q = question.toLowerCase()
+  return QUERY_TERMS.filter((t) => q.includes(t.concept.toLowerCase()) || t.synonyms.some((s) => q.includes(s.toLowerCase())))
+}

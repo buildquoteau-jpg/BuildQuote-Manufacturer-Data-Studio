@@ -57,7 +57,12 @@ CREATE TABLE public.ai_knowledge_gaps (
   -- What the AI actually did.
   ai_response_status        TEXT        NOT NULL,   -- NO_VERIFIED_ANSWER | ANSWERED_WITH_CAVEAT
   retrieval_summary         JSONB,      -- which retrieval stages ran and what each returned
-  matched_assertion_ids     UUID[],     -- knowledge_assertions rows retrieval found, if any
+  -- TEXT, not UUID: the live knowledge generator (buildFactsForCanonicalSystem)
+  -- assigns each fact a synthetic id like "fact:shieldclad-180-001" whether or
+  -- not a real knowledge_assertions row backs it yet (the backfill, task #3,
+  -- hasn't run against any live project). These are candidate fact ids the
+  -- ask route's retrieval considered, for audit — not a guaranteed FK.
+  matched_assertion_ids     TEXT[],
   missing_information       TEXT,       -- human-readable: what was needed but absent
 
   repeat_count              INTEGER     NOT NULL DEFAULT 1,
