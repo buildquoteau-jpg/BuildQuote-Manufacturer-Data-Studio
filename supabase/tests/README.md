@@ -4,6 +4,18 @@ Tests for `insert_parser_output_plan_v1` (migrations 010/012/057/058). All
 assertion failures `RAISE EXCEPTION`, so a failing test exits non-zero — no
 eyeballing NOTICE output.
 
+## `066_*` — RLS tests
+
+A separate family, one test so far: `066_01_rls_manufacturer_isolation.sql`
+confirms `ai_knowledge_gaps` RLS (migration 066) — a manufacturer can read
+only its own gap rows, BuildQuote staff can read across all manufacturers,
+and a manufacturer cannot INSERT a gap directly (service-role only). Unlike
+the `012_*` suite (service role, bypasses RLS to test the RPC), this one
+switches Postgres role to `authenticated` and sets `request.jwt.claims` to
+impersonate a specific `auth.uid()` — the standard way to exercise RLS
+policies directly in psql/the SQL editor. Self-contained fixtures, self-
+cleaning, run the same way as the `012_*` files below.
+
 ## When to run
 
 **After every migration that touches a `staged_*` table or the parser RPC.**
