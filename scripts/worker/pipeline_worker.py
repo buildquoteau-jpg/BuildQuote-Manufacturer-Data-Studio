@@ -416,6 +416,20 @@ def handle_docling(job: dict):
     chunk_size = payload.get("chunk_size", 7)
     system_source_id = payload.get("system_source_id")
 
+    # Design doc addendum 3 §C4: opt-in auto-chain into the identity and
+    # knowledge parsers once this document's chunks exist. Off by default so
+    # every existing admin-triggered single-stage docling run (manual re-runs,
+    # handle_fetch_url's then_docling chain, etc.) is completely unaffected —
+    # only the self-serve initiate-extraction route sets this true, and only
+    # it is expected to pass staged_system_id/system_name/manufacturer_id
+    # alongside it.
+    auto_chain = payload.get("auto_chain", False)
+    auto_chain_manufacturer_id = payload.get("manufacturer_id")
+    auto_chain_manufacturer_name = payload.get("manufacturer_name", "")
+    auto_chain_staged_system_id = payload.get("staged_system_id")
+    auto_chain_system_name = payload.get("system_name", "")
+    auto_chain_dry_run = payload.get("dry_run", False)
+
     log: list[str] = []
     progress = {"totalChunks": None, "totalPages": None, "completedChunks": [], "currentChunk": None}
 
@@ -573,6 +587,42 @@ def handle_docling(job: dict):
             pass
 
     log_line(f"Done: {len(chunks)} chunks, {page_count} pages, {len(failed)} issues")
+
+    # See the auto_chain block comment above handle_knowledge_parser's
+    # complete_job() call — this is the first half of the chain. Both chained
+    # jobs are independent of each other's output, so order between them
+    # doesn't matter; only chaining off a successful docling run does.
+    chained_job_ids = []
+    if auto_chain and auto_chain_staged_system_id and auto_chain_manufacturer_id and chunks:
+        chain_payload = {
+            "manufacturer_id": auto_chain_manufacturer_id,
+            "manufacturer_name": auto_chain_manufacturer_name,
+            "staged_system_id": auto_chain_staged_system_id,
+            "source_document_id": document_id,
+            "dry_run": auto_chain_dry_run,
+        }
+        try:
+            rows = sb_post("pipeline_jobs", [
+                {
+                    "manufacturer_id": auto_chain_manufacturer_id,
+                    "document_id": document_id,
+                    "job_type": "system_identity_parser",
+                    "status": "pending",
+                    "payload": {**chain_payload, "system_name": auto_chain_system_name},
+                },
+                {
+                    "manufacturer_id": auto_chain_manufacturer_id,
+                    "document_id": document_id,
+                    "job_type": "knowledge_parser",
+                    "status": "pending",
+                    "payload": chain_payload,
+                },
+            ])
+            chained_job_ids = [r["id"] for r in rows]
+            log_line(f"Auto-chained {len(chained_job_ids)} jobs: system_identity_parser, knowledge_parser")
+        except Exception as e:
+            log_line(f"warning: auto-chain enqueue failed: {e}")
+
     complete_job(job_id, {
         "outputDir": str(output_dir),
         "outputMdPath": str(output_md),
@@ -580,6 +630,7 @@ def handle_docling(job: dict):
         "pageCount": page_count,
         "chunks": chunks,
         "failedChunks": failed,
+        "chainedJobIds": chained_job_ids,
     }, log)
 
 
