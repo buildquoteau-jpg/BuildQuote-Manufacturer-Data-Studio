@@ -243,7 +243,14 @@ export async function setCustomDocumentLinks(
 export async function setGalleryImages(
   systemId: string,
   manufacturerId: string,
-  images: { asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null }[],
+  images: {
+    asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null
+    // Focal-point position as a percentage (0-100), same semantics as the
+    // hero's hero_image_position_x/y — a click-to-set anchor point, not a
+    // full crop tool (design doc addendum 3 §C5 step 1 / §C6). Stored
+    // in-array since gallery_images is jsonb — no migration needed.
+    position_x?: number | null; position_y?: number | null
+  }[],
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }

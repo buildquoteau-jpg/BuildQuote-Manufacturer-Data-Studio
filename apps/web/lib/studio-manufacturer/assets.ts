@@ -33,6 +33,9 @@ export type ManufacturerAsset = {
   displayUrl: string | null
   /** Human-readable list of places this asset is referenced. */
   usedBy: string[]
+  /** NULL = a brand-level asset, not scoped to any one system (migration 065). */
+  stagedSystemId: string | null
+  assetRole: string | null
 }
 
 export type ManufacturerAssetsResult =
@@ -58,6 +61,8 @@ type AssetRow = {
   archived: boolean
   created_at: string
   updated_at: string
+  staged_system_id: string | null
+  asset_role: string | null
 }
 
 // Postgres "relation does not exist" (42P01) / "column does not exist" (42703)
@@ -68,9 +73,14 @@ function isMissingSchemaError(err: { code?: string; message?: string } | null): 
   return /does not exist/i.test(err.message ?? '')
 }
 
+const BASE_ASSET_COLUMNS =
+  'id, asset_type, title, alt_text, caption, storage_key, source_url, public_url, ' +
+  'mime_type, file_size_bytes, width, height, focal_x, focal_y, ' +
+  'approved_for_publication, archived, created_at, updated_at'
+
 export async function getManufacturerAssets(
   manufacturerId: string,
-  opts: { includeArchived?: boolean } = {},
+  opts: { includeArchived?: boolean; stagedSystemId?: string | null } = {},
 ): Promise<ManufacturerAssetsResult> {
   let supabase: ReturnType<typeof createStudioServerClient>
   try {
@@ -79,27 +89,39 @@ export async function getManufacturerAssets(
     return { ok: false, error: 'Supabase client not configured — check env vars.' }
   }
 
-  let query = supabase
-    .from('manufacturer_assets')
-    .select(
-      'id, asset_type, title, alt_text, caption, storage_key, source_url, public_url, ' +
-      'mime_type, file_size_bytes, width, height, focal_x, focal_y, ' +
-      'approved_for_publication, archived, created_at, updated_at',
-    )
-    .eq('manufacturer_id', manufacturerId)
-    .order('created_at', { ascending: false })
-    .limit(200)
+  function buildQuery(columns: string) {
+    let q = supabase
+      .from('manufacturer_assets')
+      .select(columns)
+      .eq('manufacturer_id', manufacturerId)
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (!opts.includeArchived) q = q.eq('archived', false)
+    if (opts.stagedSystemId) q = q.eq('staged_system_id', opts.stagedSystemId)
+    return q
+  }
 
-  if (!opts.includeArchived) query = query.eq('archived', false)
+  let { data, error } = await buildQuery(`${BASE_ASSET_COLUMNS}, staged_system_id, asset_role`)
 
-  const { data, error } = await query
+  // Migration 065 (staged_system_id/asset_role) may not be applied yet. A
+  // caller that didn't ask to scope by system can fall back to the flat
+  // pool transparently; one that DID ask to scope by system can't safely
+  // degrade — silently ignoring the filter would leak every other system's
+  // assets into a per-system view — so that case surfaces a clear error
+  // instead (same "migration needed" convention as everywhere else this
+  // session).
+  if (error && isMissingSchemaError(error) && !opts.stagedSystemId) {
+    ;({ data, error } = await buildQuery(BASE_ASSET_COLUMNS))
+  }
 
   if (error) {
     if (isMissingSchemaError(error)) {
       return {
         ok: false,
         migrationMissing: true,
-        error: 'The asset library tables are not set up yet (migration 046 has not been applied to this Supabase project).',
+        error: opts.stagedSystemId
+          ? 'Per-system asset scoping needs migration 065 applied to this project first.'
+          : 'The asset library tables are not set up yet (migration 046 has not been applied to this Supabase project).',
       }
     }
     return { ok: false, error: `Failed to load assets: ${error.message}` }
@@ -130,6 +152,8 @@ export async function getManufacturerAssets(
       updatedAt: r.updated_at,
       displayUrl: await resolveDisplayUrl(r),
       usedBy: usageMap.get(r.id) ?? [],
+      stagedSystemId: r.staged_system_id ?? null,
+      assetRole: r.asset_role ?? null,
     })),
   )
 

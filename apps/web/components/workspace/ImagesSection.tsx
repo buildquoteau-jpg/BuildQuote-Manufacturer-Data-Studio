@@ -11,7 +11,17 @@ import { useState, useTransition } from 'react'
 import { AssetSlotControl, type SlotAsset, type SlotPick } from '@/app/(protected)/manufacturer/profile/AssetSlotControl'
 import { updateSystemHeroAsset, setGalleryImages } from '@/lib/studio-manufacturer/verification-actions'
 
-type GalleryImage = { asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null }
+type GalleryImage = {
+  asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null
+  position_x?: number | null; position_y?: number | null
+}
+
+function setFocalPoint(e: React.MouseEvent<HTMLDivElement>, onSet: (x: number, y: number) => void) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  const x = Math.round(((e.clientX - rect.left) / rect.width) * 100)
+  const y = Math.round(((e.clientY - rect.top) / rect.height) * 100)
+  onSet(Math.min(100, Math.max(0, x)), Math.min(100, Math.max(0, y)))
+}
 
 export function ImagesSection({
   systemId, manufacturerId, heroAssetId, heroUrl, initialGallery, pickerAssets,
@@ -70,6 +80,12 @@ export function ImagesSection({
     saveGallery(next)
   }
 
+  function setGalleryPosition(i: number, x: number, y: number) {
+    const next = [...gallery]
+    next[i] = { ...next[i], position_x: x, position_y: y }
+    saveGallery(next)
+  }
+
   return (
     <div>
       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--ds-text-muted, #6b7280)', marginBottom: '0.4rem' }}>Hero image</div>
@@ -88,8 +104,28 @@ export function ImagesSection({
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {gallery.map((img, i) => (
           <div key={i} style={{ width: 76, textAlign: 'center' }}>
-            <div style={{ width: 76, height: 76, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--ds-border, #e5e7eb)', background: '#f1f5f9' }}>
-              {img.url && <img src={img.asset_id ? `/api/assets/${img.asset_id}` : img.url} alt={img.alt} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            <div
+              onClick={(e) => setFocalPoint(e, (x, y) => setGalleryPosition(i, x, y))}
+              title="Click to set the focal point"
+              style={{ width: 76, height: 76, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--ds-border, #e5e7eb)', background: '#f1f5f9', position: 'relative', cursor: 'crosshair' }}
+            >
+              {img.url && (
+                <img
+                  src={img.asset_id ? `/api/assets/${img.asset_id}` : img.url}
+                  alt={img.alt}
+                  style={{
+                    width: '100%', height: '100%', objectFit: 'cover',
+                    objectPosition: `${img.position_x ?? 50}% ${img.position_y ?? 50}%`,
+                  }}
+                />
+              )}
+              {(img.position_x != null || img.position_y != null) && (
+                <div style={{
+                  position: 'absolute', left: `${img.position_x ?? 50}%`, top: `${img.position_y ?? 50}%`,
+                  width: 8, height: 8, marginLeft: -4, marginTop: -4, borderRadius: '50%',
+                  background: '#185D7A', border: '1.5px solid #fff', pointerEvents: 'none',
+                }} />
+              )}
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '0.2rem', marginTop: '0.2rem' }}>
               <button type="button" onClick={() => move(i, -1)} disabled={i === 0} style={{ fontSize: '0.7rem', background: 'none', border: 'none', cursor: 'pointer' }}>◀</button>

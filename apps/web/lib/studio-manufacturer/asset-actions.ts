@@ -16,7 +16,7 @@ import {
   getObjectFromR2,
   deleteObjectFromR2,
 } from '@/lib/r2'
-import { ASSET_TYPES } from './asset-types'
+import { ASSET_TYPES, ASSET_ROLES } from './asset-types'
 import { processAssetImage, extensionForMime } from './image-processing'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
@@ -114,6 +114,11 @@ export type RecordAssetUploadInput = {
   altText: string | null
   width: number | null
   height: number | null
+  /** Scopes this asset to one system's "perfect miniature data set" (design
+   * doc addendum 3 §C2) instead of the flat manufacturer-wide pool. Omit for
+   * a brand-level asset (logo, brand hero, banner). */
+  stagedSystemId?: string | null
+  assetRole?: string | null
 }
 
 export type RecordAssetResult =
@@ -145,6 +150,9 @@ export async function recordAssetUpload(
   if (!ASSET_TYPES.includes(input.assetType)) {
     return { ok: false, error: `Unknown asset type: ${input.assetType}` }
   }
+  if (input.assetRole && !ASSET_ROLES.includes(input.assetRole)) {
+    return { ok: false, error: `Unknown asset role: ${input.assetRole}` }
+  }
 
   const c = makeClient()
   if (!c.ok) return { ok: false, error: c.error }
@@ -167,6 +175,8 @@ export async function recordAssetUpload(
       file_size_bytes: input.fileSizeBytes,
       width: input.width,
       height: input.height,
+      staged_system_id: input.stagedSystemId ?? null,
+      asset_role: input.assetRole ?? null,
       created_by: auth.userId,
     })
     .select('id')
@@ -177,6 +187,7 @@ export async function recordAssetUpload(
   }
 
   revalidatePath('/manufacturer/assets')
+  if (input.stagedSystemId) revalidatePath(`/manufacturer/systems/${input.stagedSystemId}/setup`)
   return {
     ok: true,
     assetId: (data as { id: string }).id,
@@ -206,6 +217,9 @@ export async function processAndRecordAssetUpload(
 
   if (!ASSET_TYPES.includes(input.assetType)) {
     return { ok: false, error: `Unknown asset type: ${input.assetType}` }
+  }
+  if (input.assetRole && !ASSET_ROLES.includes(input.assetRole)) {
+    return { ok: false, error: `Unknown asset role: ${input.assetRole}` }
   }
 
   const original = await getObjectFromR2(input.storageKey)
@@ -250,6 +264,8 @@ export async function processAndRecordAssetUpload(
       file_size_bytes: processed.bytes.byteLength,
       width: processed.width,
       height: processed.height,
+      staged_system_id: input.stagedSystemId ?? null,
+      asset_role: input.assetRole ?? null,
       created_by: auth.userId,
     })
     .select('id')
@@ -260,6 +276,7 @@ export async function processAndRecordAssetUpload(
   }
 
   revalidatePath('/manufacturer/assets')
+  if (input.stagedSystemId) revalidatePath(`/manufacturer/systems/${input.stagedSystemId}/setup`)
   return {
     ok: true,
     assetId: (data as { id: string }).id,
@@ -279,6 +296,8 @@ export type ImportAssetInput = {
   assetType: string
   title: string | null
   altText: string | null
+  stagedSystemId?: string | null
+  assetRole?: string | null
 }
 
 export async function importAssetFromUrl(
@@ -289,6 +308,9 @@ export async function importAssetFromUrl(
 
   if (!ASSET_TYPES.includes(input.assetType)) {
     return { ok: false, error: `Unknown asset type: ${input.assetType}` }
+  }
+  if (input.assetRole && !ASSET_ROLES.includes(input.assetRole)) {
+    return { ok: false, error: `Unknown asset role: ${input.assetRole}` }
   }
 
   let url: URL
@@ -366,6 +388,8 @@ export async function importAssetFromUrl(
       file_size_bytes: processed.bytes.byteLength,
       width: processed.width,
       height: processed.height,
+      staged_system_id: input.stagedSystemId ?? null,
+      asset_role: input.assetRole ?? null,
       created_by: auth.userId,
     })
     .select('id')
@@ -376,6 +400,7 @@ export async function importAssetFromUrl(
   }
 
   revalidatePath('/manufacturer/assets')
+  if (input.stagedSystemId) revalidatePath(`/manufacturer/systems/${input.stagedSystemId}/setup`)
   return {
     ok: true,
     assetId: (data as { id: string }).id,
