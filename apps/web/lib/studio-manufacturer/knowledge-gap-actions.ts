@@ -18,10 +18,19 @@
 // finished knowledge model.
 
 import { createStudioServerClient } from '@/lib/supabase/server'
+import { getStudioSession } from '@/lib/studio-auth/session'
 import { assertManufacturerAccess } from './verification-actions'
 import { correctAssertion, markAssertionUnknown } from './assertion-actions'
 import type { ClaimType } from '@/lib/knowledge/vocabulary'
 import type { NormalisedQuestion, QuestionType } from '@/lib/knowledge/askPipeline'
+
+async function assertBuildquoteStaff(): Promise<{ allowed: true } | { allowed: false; error: string }> {
+  const session = await getStudioSession()
+  if (session.globalRole !== 'buildquote_admin' && session.globalRole !== 'buildquote_reviewer') {
+    return { allowed: false, error: 'Access denied.' }
+  }
+  return { allowed: true }
+}
 
 export type KnowledgeGapRow = {
   id: string
@@ -41,6 +50,7 @@ export type KnowledgeGapRow = {
   resolved_at: string | null
   systemName?: string | null
   systemId?: string | null
+  manufacturerName?: string | null
 }
 
 function isMissingSchemaError(message: string | undefined): boolean {
@@ -201,6 +211,94 @@ export async function resolveKnowledgeGap(
     })
     .eq('id', gapId)
     .eq('manufacturer_id', manufacturerId)
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ─── Admin cross-manufacturer triage (design doc addendum §A6) ─────────────
+// Mirrors admin/messages' getAllMessageThreads() shape exactly — same list
+// pattern, same auth gate. Primary use: RETRIEVAL_GAP and SCHEMA_GAP rows,
+// which route to BuildQuote's own team rather than the manufacturer (§25/§23
+// of the master spec), plus a cross-manufacturer view of what's still open.
+
+export async function getAllKnowledgeGaps(): Promise<
+  { ok: true; gaps: KnowledgeGapRow[] } | { ok: false; error: string }
+> {
+  const auth = await assertBuildquoteStaff()
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data, error } = await supabase
+    .from('ai_knowledge_gaps')
+    .select('id, created_at, status, failure_type, priority, user_question, normalised_question, staged_system_id, manufacturer_id, missing_information, repeat_count, resolution_type, manufacturer_response, resolution_notes, resolved_at, staged_systems(name), data_studio_manufacturers(name)')
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  if (error) {
+    if (isMissingSchemaError(error.message)) {
+      return { ok: false, error: 'The AI Knowledge Gap feature needs migration 066 applied to this project first.' }
+    }
+    return { ok: false, error: error.message }
+  }
+
+  type Row = Omit<KnowledgeGapRow, 'systemName' | 'systemId'> & {
+    staged_systems: { name: string } | { name: string }[] | null
+    data_studio_manufacturers: { name: string } | { name: string }[] | null
+  }
+  const rows = (data ?? []) as unknown as Row[]
+  const gaps: KnowledgeGapRow[] = rows.map((r) => {
+    const sys = Array.isArray(r.staged_systems) ? r.staged_systems[0] : r.staged_systems
+    const mfr = Array.isArray(r.data_studio_manufacturers) ? r.data_studio_manufacturers[0] : r.data_studio_manufacturers
+    return { ...r, systemName: sys?.name ?? null, systemId: r.staged_system_id, manufacturerName: mfr?.name ?? null }
+  })
+  return { ok: true, gaps }
+}
+
+export async function getKnowledgeGapAsStaff(
+  gapId: string,
+): Promise<{ ok: true; gap: KnowledgeGapRow } | { ok: false; error: string }> {
+  const auth = await assertBuildquoteStaff()
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { data, error } = await supabase
+    .from('ai_knowledge_gaps')
+    .select('id, created_at, status, failure_type, priority, user_question, normalised_question, staged_system_id, manufacturer_id, missing_information, repeat_count, resolution_type, manufacturer_response, resolution_notes, resolved_at, staged_systems(name), data_studio_manufacturers(name)')
+    .eq('id', gapId)
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingSchemaError(error.message)) {
+      return { ok: false, error: 'The AI Knowledge Gap feature needs migration 066 applied to this project first.' }
+    }
+    return { ok: false, error: error.message }
+  }
+  if (!data) return { ok: false, error: 'Not found.' }
+
+  type Row = Omit<KnowledgeGapRow, 'systemName' | 'systemId'> & {
+    staged_systems: { name: string } | { name: string }[] | null
+    data_studio_manufacturers: { name: string } | { name: string }[] | null
+  }
+  const r = data as unknown as Row
+  const sys = Array.isArray(r.staged_systems) ? r.staged_systems[0] : r.staged_systems
+  const mfr = Array.isArray(r.data_studio_manufacturers) ? r.data_studio_manufacturers[0] : r.data_studio_manufacturers
+  return { ok: true, gap: { ...r, systemName: sys?.name ?? null, systemId: r.staged_system_id, manufacturerName: mfr?.name ?? null } }
+}
+
+export async function setKnowledgeGapStatus(
+  gapId: string,
+  status: 'TRIAGED' | 'NO_ACTION_REQUIRED' | 'DUPLICATE' | 'OUT_OF_SCOPE',
+  notes: string | null,
+): Promise<ResolveKnowledgeGapResult> {
+  const auth = await assertBuildquoteStaff()
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('ai_knowledge_gaps')
+    .update({ status, resolution_notes: notes, updated_at: new Date().toISOString() })
+    .eq('id', gapId)
 
   if (error) return { ok: false, error: error.message }
   return { ok: true }
