@@ -2,6 +2,7 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import {
   resolveWorkspaceContextFromRequest,
   getPortalData,
+  getOpenAiQuestionsCount,
   type PortalSystem,
   type PortalDocument,
 } from '@/lib/studio-manufacturer/workspace'
@@ -433,6 +434,7 @@ export default async function ManufacturerPortalPage() {
   const pendingCount  = systems.filter(
     (s) => s.verificationStatus === 'pending_review' || s.verificationStatus === 'in_review',
   ).length
+  const aiQuestionsCount = await getOpenAiQuestionsCount(ctx.manufacturerId)
 
   return (
     <StudioShell role="manufacturer" workspaceName={manufacturer.name}>
@@ -490,6 +492,7 @@ export default async function ManufacturerPortalPage() {
             { label: 'Cards staged',         value: systems.length },
             { label: 'Verified',             value: verifiedCount },
             { label: 'BuildQuote approved',  value: approvedCount },
+            { label: 'AI questions',         value: aiQuestionsCount },
           ].map((s) => (
             <div key={s.label} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>

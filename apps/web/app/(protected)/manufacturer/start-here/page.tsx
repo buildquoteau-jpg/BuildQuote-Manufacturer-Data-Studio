@@ -5,6 +5,7 @@ import {
   getManufacturerInfo,
   getManufacturerDocuments,
   getManufacturerVerificationData,
+  getOpenAiQuestionsCount,
 } from '@/lib/studio-manufacturer/workspace'
 import { StudioShell } from '@/components/studio/StudioShell'
 
@@ -32,10 +33,11 @@ export default async function StartHerePage() {
     )
   }
 
-  const [infoResult, docsResult, verificationResult] = await Promise.all([
+  const [infoResult, docsResult, verificationResult, aiQuestionsCount] = await Promise.all([
     getManufacturerInfo(ctx.manufacturerId),
     getManufacturerDocuments(ctx.manufacturerId),
     getManufacturerVerificationData(ctx.manufacturerId),
+    getOpenAiQuestionsCount(ctx.manufacturerId),
   ])
 
   if (!infoResult.ok) {
@@ -178,6 +180,28 @@ export default async function StartHerePage() {
           </div>
         </div>
       </Link>
+
+      {aiQuestionsCount > 0 && (
+        <Link href="/manufacturer/ai-questions" style={{ textDecoration: 'none' }}>
+          <div style={{
+            padding: '1rem 1.1rem', borderRadius: 10, border: '1.5px solid #fde68a', background: '#fffbeb',
+            display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.6rem',
+          }}>
+            <div style={{ fontSize: '1.3rem' }}>💬</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#92400e' }}>
+                {aiQuestionsCount} builder question{aiQuestionsCount === 1 ? '' : 's'} need{aiQuestionsCount === 1 ? 's' : ''} your input
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#b45309', marginTop: '0.15rem' }}>
+                Builders asked something our AI couldn&apos;t answer from your verified product data.
+              </div>
+            </div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>
+              Review AI Questions →
+            </div>
+          </div>
+        </Link>
+      )}
     </StudioShell>
   )
 }

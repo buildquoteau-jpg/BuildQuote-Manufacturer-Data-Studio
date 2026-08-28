@@ -27,6 +27,7 @@ const MFR_NAV: NavItem[] = [
   { label: 'Asset upload',    href: '/manufacturer/assets' },
   { label: 'Products',        href: '/manufacturer/cms' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
+  { label: 'AI Questions',    href: '/manufacturer/ai-questions' },
   { label: 'Stockists',       href: '/manufacturer/stockists' },
   { label: 'Publish',         href: '/manufacturer/publish' },
   { label: 'Packages',        href: '/manufacturer/packages' },

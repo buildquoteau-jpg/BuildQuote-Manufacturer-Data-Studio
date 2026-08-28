@@ -978,3 +978,26 @@ export async function getPortalData(
     },
   }
 }
+
+// ============================================================
+// getOpenAiQuestionsCount
+// AI Knowledge Gap & Feedback Loop (design doc addendum §A6) — count of a
+// manufacturer's still-open questions, for the dashboard stat row, the
+// Start Here guided flow, and the AI Questions list header. Centralized
+// here rather than queried inline in three places, so all three always
+// agree. Degrades to 0 (never throws) when migration 066 hasn't been
+// applied yet in this environment — a missing feature should never break
+// the dashboard.
+// ============================================================
+
+export async function getOpenAiQuestionsCount(manufacturerId: string): Promise<number> {
+  const c = makeClient()
+  if (!c.ok) return 0
+  const { count, error } = await c.supabase
+    .from('ai_knowledge_gaps')
+    .select('id', { count: 'exact', head: true })
+    .eq('manufacturer_id', manufacturerId)
+    .in('status', ['NEW', 'TRIAGED', 'MANUFACTURER_RESPONDED'])
+  if (error) return 0
+  return count ?? 0
+}
