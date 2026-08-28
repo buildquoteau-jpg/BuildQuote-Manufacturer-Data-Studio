@@ -52,6 +52,12 @@ export type EpistemicStatus =
   | 'unknown'
   | 'superseded'
   | 'stale'
+  // The source material was checked and does not state this field — distinct
+  // from 'unknown' (a manufacturer explicitly said "we don't know") and from
+  // simply omitting the field (which reads as "never checked"). Added for
+  // the AI Knowledge Gap & Feedback Loop's "absence must never read as a
+  // negative answer" rule (design doc addendum §A3/§5 of the master spec).
+  | 'not_specified'
 
 /** Collapsed single-token trust signal for consumers that ignore the two-axis model. */
 export type TrustLevel = 'verified' | 'checked' | 'extracted' | 'unknown'
@@ -66,6 +72,7 @@ const TRUST_LEVEL_BY_STATUS: Record<EpistemicStatus, TrustLevel> = {
   not_applicable: 'unknown',
   disputed: 'unknown',
   superseded: 'unknown',
+  not_specified: 'unknown',
 }
 
 export function trustLevelFor(status: EpistemicStatus): TrustLevel {
@@ -83,6 +90,7 @@ export const SUPPRESSED_FROM_READING_SURFACE: ReadonlySet<EpistemicStatus> = new
   'unknown',
   'not_applicable',
   'superseded',
+  'not_specified',
 ])
 
 // ─── claimType — what KIND of claim, independent of which entity it's about ─
@@ -152,7 +160,7 @@ export function isTighteningOverride(current: AnswerPolicy, next: AnswerPolicy):
  * uses this default.
  */
 export function resolveAnswerPolicy(status: EpistemicStatus, claimType: ClaimType): AnswerPolicy {
-  if (status === 'unknown') return 'unknown'
+  if (status === 'unknown' || status === 'not_specified') return 'unknown'
   if (status === 'not_applicable') return 'not_applicable'
   if (status === 'disputed' || status === 'superseded') return 'do_not_infer'
   if (claimType === 'incompatibility' || claimType === 'limitation' || claimType === 'safety') {

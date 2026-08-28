@@ -22,6 +22,7 @@ const STATUS_STYLES: Record<EpistemicStatus, { bg: string; border: string; text:
   unverified: { bg: '#fffbeb', border: '#fde68a', text: '#d97706', label: 'Extracted, unverified' },
   stale: { bg: '#fffbeb', border: '#fde68a', text: '#d97706', label: 'Stale — needs re-check' },
   unknown: { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280', label: 'Unknown' },
+  not_specified: { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280', label: 'Not specified' },
   not_applicable: { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280', label: 'Not applicable' },
   disputed: { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c', label: 'Disputed' },
   superseded: { bg: '#f3f4f6', border: '#d1d5db', text: '#9ca3af', label: 'Superseded' },
