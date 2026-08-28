@@ -26,11 +26,13 @@ export function LinksSection({
   manufacturerId,
   initialLinks,
   linkLibrary,
+  onChanged,
 }: {
   systemId: string
   manufacturerId: string
   initialLinks: CustomDocumentLink[]
   linkLibrary: LinkLibraryEntry[]
+  onChanged?: (count: number) => void
 }) {
   const [links, setLinks] = useState<CustomDocumentLink[]>(initialLinks)
   const [library, setLibrary] = useState(linkLibrary)
@@ -40,6 +42,7 @@ export function LinksSection({
 
   function save(next: CustomDocumentLink[]) {
     setLinks(next)
+    onChanged?.(next.filter((l) => l.label.trim() && l.url.trim()).length)
     setSaveState('saving')
     setError(null)
     if (timer.current) clearTimeout(timer.current)
