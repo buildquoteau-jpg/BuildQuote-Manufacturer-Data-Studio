@@ -19,22 +19,18 @@ const REVIEWER_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard' },
 ]
 
+// Design doc addendum 3, §C1: everything is noise until the system-by-system
+// workflow is proven. Not deleted — Documents/Asset upload/AI Questions/
+// Stockists/Packages/Embeds & Links/Analytics/Inbox/Help routes and code all
+// still exist, just unlinked from the nav, same "de-link, don't delete"
+// pattern as the earlier Dashboard retirement.
 const MFR_NAV: NavItem[] = [
   { label: 'Start Here',      href: '/manufacturer/start-here' },
   { label: 'Brand profile',   href: '/manufacturer/profile' },
   { label: 'User profile',    href: '/manufacturer/account' },
-  { label: 'Documents',       href: '/manufacturer/documents' },
-  { label: 'Asset upload',    href: '/manufacturer/assets' },
-  { label: 'Products',        href: '/manufacturer/cms' },
+  { label: 'Systems',         href: '/manufacturer/systems' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
-  { label: 'AI Questions',    href: '/manufacturer/ai-questions' },
-  { label: 'Stockists',       href: '/manufacturer/stockists' },
   { label: 'Publish',         href: '/manufacturer/publish' },
-  { label: 'Packages',        href: '/manufacturer/packages' },
-  { label: 'Embeds & Links',  href: '/manufacturer/widgets' },
-  { label: 'Analytics',       href: '/manufacturer/analytics' },
-  { label: 'Inbox',           href: '/manufacturer/inbox' },
-  { label: 'Help',            href: '/manufacturer/help' },
 ]
 
 const DASHBOARD_NAV: NavItem[] = [
