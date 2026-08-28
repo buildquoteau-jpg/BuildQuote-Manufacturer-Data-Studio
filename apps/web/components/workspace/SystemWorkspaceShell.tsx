@@ -26,7 +26,10 @@ import { ImagesSection } from './ImagesSection'
 import { RelationshipsSection } from './RelationshipsSection'
 import { ApplicationsSection } from './ApplicationsSection'
 import { EvidenceGroupBulkVerify } from './EvidenceGroupBulkVerify'
+import { LinksSection } from './LinksSection'
 import type { FactViewModel } from './factViewModel'
+import type { CustomDocumentLink } from '@/lib/studio-manufacturer/verification-actions'
+import type { LinkLibraryEntry } from '@/lib/studio-manufacturer/link-library'
 
 type PreviewTab = 'card' | 'ai'
 type GalleryImage = { asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null }
@@ -59,6 +62,8 @@ export function SystemWorkspaceShell({
   galleryImages,
   ownSystems,
   sourceDocumentId,
+  customDocumentLinks,
+  linkLibrary,
 }: {
   systemId: string
   systemName: string
@@ -81,6 +86,8 @@ export function SystemWorkspaceShell({
   galleryImages: GalleryImage[]
   ownSystems: { id: string; name: string }[]
   sourceDocumentId: string | null
+  customDocumentLinks: CustomDocumentLink[]
+  linkLibrary: LinkLibraryEntry[]
 }) {
   const [tab, setTab] = useState<PreviewTab>('card')
   const [customAttrs, setCustomAttrs] = useState(customAttributes)
@@ -164,6 +171,13 @@ export function SystemWorkspaceShell({
               systemId={systemId} manufacturerId={manufacturerId}
               heroAssetId={heroAssetId} heroUrl={heroUrl}
               initialGallery={galleryImages} pickerAssets={pickerAssets}
+            />
+          </WorkspaceSection>
+
+          <WorkspaceSection title="Links & resources" statusLabel={`${customDocumentLinks.length} link${customDocumentLinks.length === 1 ? '' : 's'}`}>
+            <LinksSection
+              systemId={systemId} manufacturerId={manufacturerId}
+              initialLinks={customDocumentLinks} linkLibrary={linkLibrary}
             />
           </WorkspaceSection>
 

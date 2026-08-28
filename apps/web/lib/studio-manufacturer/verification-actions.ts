@@ -192,10 +192,18 @@ export async function setInstallGuideUrls(
 // Fails soft pre-migration-055 (column absent) so older environments don't
 // break — the update simply no-ops there.
 
+// `type` categorises each link for the self-serve setup flow's "Links &
+// resources" step (design doc addendum 3 §C5 step 2) — 'product_page' (the
+// manufacturer's own page for this product) vs 'web_guide' (any other
+// external resource). Optional and purely presentational: no schema change,
+// it rides inside the existing custom_document_links jsonb array, and older
+// entries with no type render as an unlabelled "resource".
+export type CustomDocumentLink = { label: string; url: string; type?: 'product_page' | 'web_guide' }
+
 export async function setCustomDocumentLinks(
   systemId: string,
   manufacturerId: string,
-  links: { label: string; url: string }[],
+  links: CustomDocumentLink[],
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }

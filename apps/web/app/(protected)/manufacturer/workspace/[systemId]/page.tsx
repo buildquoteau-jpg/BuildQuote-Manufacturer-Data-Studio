@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
+import { getManufacturerLinkLibrary } from '@/lib/studio-manufacturer/link-library'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { SystemWorkspaceShell } from '@/components/workspace/SystemWorkspaceShell'
@@ -101,6 +102,9 @@ export default async function SystemWorkspacePage({
   const identityFacts = allFacts.filter((f) => f.uiSection === 'identity')
   const attributeFacts = allFacts.filter((f) => f.uiSection === 'attributes')
 
+  const linkLibraryResult = await getManufacturerLinkLibrary(ctx.manufacturerId)
+  const linkLibrary = linkLibraryResult.ok ? linkLibraryResult.links : []
+
   return (
     <StudioShell role="manufacturer" subtitle={`${result.manufacturer.name} · Product workspace`}>
       <SystemWorkspaceShell
@@ -125,6 +129,8 @@ export default async function SystemWorkspacePage({
         galleryImages={system.gallery_images ?? []}
         ownSystems={result.systems.filter((s) => s.id !== system.id).map((s) => ({ id: s.id, name: s.name }))}
         sourceDocumentId={system.source_document_id}
+        customDocumentLinks={system.custom_document_links ?? []}
+        linkLibrary={linkLibrary}
       />
     </StudioShell>
   )
