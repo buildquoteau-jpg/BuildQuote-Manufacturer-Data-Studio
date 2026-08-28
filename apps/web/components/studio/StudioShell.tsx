@@ -19,12 +19,13 @@ const REVIEWER_NAV: NavItem[] = [
 ]
 
 const MFR_NAV: NavItem[] = [
+  { label: 'Start Here',      href: '/manufacturer/start-here' },
   { label: 'Dashboard',       href: '/manufacturer/dashboard' },
   { label: 'Brand profile',   href: '/manufacturer/profile' },
   { label: 'User profile',    href: '/manufacturer/account' },
   { label: 'Documents',       href: '/manufacturer/documents' },
   { label: 'Asset upload',    href: '/manufacturer/assets' },
-  { label: 'Asset picker',    href: '/manufacturer/cms' },
+  { label: 'Products',        href: '/manufacturer/cms' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
   { label: 'Stockists',       href: '/manufacturer/stockists' },
   { label: 'Publish',         href: '/manufacturer/publish' },

@@ -1,9 +1,10 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
 import { getManufacturerLinkLibrary } from '@/lib/studio-manufacturer/link-library'
 import { StudioShell } from '@/components/studio/StudioShell'
+import { WORKSPACE_REDESIGN_ENABLED } from '@/lib/workspaceRedesignFlag'
 import { CmsEditor } from './CmsEditor'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +14,14 @@ export default async function CmsEditorPage({
 }: {
   params: { systemId: string }
 }) {
+  // The System Workspace is the real editor now — see workspaceRedesignFlag.ts.
+  // No stale link or bookmark should ever land a manufacturer on the old
+  // CmsEditor while the flag is on; CmsEditor itself stays in the codebase,
+  // just unreachable, until it's deleted for real (design doc §14 step 10).
+  if (WORKSPACE_REDESIGN_ENABLED) {
+    redirect(`/manufacturer/workspace/${params.systemId}`)
+  }
+
   const session = await getStudioSession()
   const ctx = await resolveWorkspaceContextFromRequest(session)
   if (!ctx.found) {

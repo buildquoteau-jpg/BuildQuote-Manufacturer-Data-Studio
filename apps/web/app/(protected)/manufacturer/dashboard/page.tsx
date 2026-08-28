@@ -195,9 +195,23 @@ function SystemCard({ system, manufacturerSlug }: { system: PortalSystem; manufa
         )}
       </div>
 
-      {/* Verification link */}
-      {verificationHref && (
-        <div style={{ padding: '0 1.1rem 0.7rem' }}>
+      {/* Primary action — the System Workspace, not the raw source document */}
+      <div style={{ padding: '0 1.1rem 0.7rem', display: 'flex', alignItems: 'center', gap: '0.9rem', flexWrap: 'wrap' }}>
+        <a
+          href={`/manufacturer/workspace/${system.id}`}
+          style={{
+            fontSize: '0.78rem',
+            color: '#fff',
+            fontWeight: 700,
+            background: '#185D7A',
+            borderRadius: 6,
+            padding: '0.35rem 0.75rem',
+            textDecoration: 'none',
+          }}
+        >
+          Open workspace →
+        </a>
+        {verificationHref && (
           <a
             href={verificationHref}
             style={{
@@ -210,10 +224,10 @@ function SystemCard({ system, manufacturerSlug }: { system: PortalSystem; manufa
               textDecoration: 'none',
             }}
           >
-            View verification details →
+            View source document →
           </a>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Verification progress banner */}
       <div style={{ padding: '0 0.75rem 0.75rem' }}>

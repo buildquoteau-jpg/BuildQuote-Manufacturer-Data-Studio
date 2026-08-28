@@ -6,12 +6,11 @@ import { CmsCreateCardButton } from './CmsCreateCardButton'
 
 export const dynamic = 'force-dynamic'
 
-// Hybrid publishing (Library V7): "Asset picker" — CMS-style card manager for
-// everything except the actual publish step, which lives on its own
-// /manufacturer/publish tab. Runs alongside the existing "Verify systems"
-// grid (manufacturer/review) so the two editing experiences can be compared.
-// Every edit here autosaves to the Draft; the live card never changes until
-// a card is published from the Publish tab.
+// Products list. Every row now opens the System Workspace
+// (/manufacturer/workspace/[id]) — the one-page-per-product editor that
+// replaces this page's own CmsEditor as the actual editing surface (see
+// workspaceRedesignFlag.ts). This list itself stays: it's still the fastest
+// way to see every product and its publish status at a glance.
 
 const V6_ORIGIN = process.env.BUILDQUOTE_PUBLIC_ORIGIN || 'https://buildquote.com.au'
 
@@ -35,8 +34,8 @@ export default async function CmsListPage() {
 
   if (!ctx.found) {
     return (
-      <StudioShell role="manufacturer" subtitle="Asset picker">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Asset picker</h1>
+      <StudioShell role="manufacturer" subtitle="Products">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Products</h1>
         <div className="studio-info">
           {ctx.reason === 'admin_no_context'
             ? 'Admin support access — select a manufacturer workspace from the admin panel first.'
@@ -49,8 +48,8 @@ export default async function CmsListPage() {
   const result = await getManufacturerVerificationData(ctx.manufacturerId)
   if (!result.ok) {
     return (
-      <StudioShell role="manufacturer" subtitle="Asset picker">
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Asset picker</h1>
+      <StudioShell role="manufacturer" subtitle="Products">
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Products</h1>
         <div className="studio-warn">Could not load cards: {result.error}</div>
       </StudioShell>
     )
@@ -59,13 +58,15 @@ export default async function CmsListPage() {
   const { manufacturer, systems } = result
 
   return (
-    <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Asset picker`}>
+    <StudioShell role="manufacturer" subtitle={`${manufacturer.name} · Products`}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Asset picker</h1>
+          <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Products</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0.5rem 0 0', lineHeight: 1.65, maxWidth: 640 }}>
-            Edit a card here and it autosaves as a <strong>Draft</strong> — the live card never
-            changes until you publish it from the{' '}
+            Open a product to work it start to finish — identity, images, variants, colours,
+            components, attributes, applications and evidence, all in one place. Every change
+            autosaves as a <strong>Draft</strong> — the live card never changes until you publish
+            it from the{' '}
             <Link href="/manufacturer/publish" style={{ fontWeight: 700 }}>Publish</Link> tab.
           </p>
         </div>
@@ -119,11 +120,11 @@ export default async function CmsListPage() {
                   View live ↗
                 </a>
               )}
-              <Link href={`/manufacturer/cms/${s.id}`} style={{
+              <Link href={`/manufacturer/workspace/${s.id}`} style={{
                 fontSize: '0.8rem', fontWeight: 700, color: '#fff', background: '#185D7A',
                 borderRadius: 8, padding: '7px 16px', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
               }}>
-                Edit
+                Open workspace →
               </Link>
             </div>
           )
