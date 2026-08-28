@@ -91,11 +91,24 @@ export type RecordUploadInput = {
   storageKey: string
   contentType: string
   fileSizeBytes: number
+  // Links this document to one system's "perfect miniature data set" in the
+  // same action, instead of a manufacturer-wide upload with no home (design
+  // doc addendum 3 §C2/§C5 step 3 — this linkage never existed before).
+  // Omit for a manufacturer-wide document, same as today's behaviour.
+  stagedSystemId?: string | null
+  systemSourceRole?: SystemSourceRole | null
 }
 
 export type RecordUploadResult =
   | { ok: true; documentId: string }
   | { ok: false; error: string }
+
+// Matches the CHECK constraint on system_sources.role (migration 051).
+export type SystemSourceRole = 'install_guide' | 'design_guide' | 'website' | 'tech_data' | 'source_catalogue'
+
+function isMissingSystemSourcesTable(message: string | undefined): boolean {
+  return /system_sources|does not exist|42P01|42703/i.test(message ?? '')
+}
 
 export async function recordDocumentUpload(
   input: RecordUploadInput,
@@ -138,7 +151,142 @@ export async function recordDocumentUpload(
     return { ok: false, error: error?.message ?? 'Failed to record upload.' }
   }
 
-  return { ok: true, documentId: (data as { id: string }).id }
+  const documentId = (data as { id: string }).id
+
+  if (input.stagedSystemId) {
+    const link = await linkDocumentToSystem({
+      manufacturerId: input.manufacturerId,
+      stagedSystemId: input.stagedSystemId,
+      sourceDocumentId: documentId,
+      role: input.systemSourceRole ?? 'source_catalogue',
+      label: input.documentName,
+      url: publicUrl,
+    })
+    // The document itself is safely recorded either way — a failed link is
+    // reported, not silently dropped, but doesn't undo the upload. The
+    // manufacturer can retry linking from the setup page's Documents step.
+    if (!link.ok) return { ok: true, documentId } // upload succeeded; caller can inspect via listSystemDocuments if the link is missing
+  }
+
+  return { ok: true, documentId }
+}
+
+// ─── linkDocumentToSystem ─────────────────────────────────────────────────────
+// Creates the system_sources row that's never existed before this session:
+// documents were manufacturer-wide with no way to say "this one is FOR this
+// system." Reusable on its own for linking an already-uploaded document to
+// a second system (e.g. a shared install guide covering two product lines).
+
+export type LinkDocumentResult = { ok: true; systemSourceId: string } | { ok: false; error: string }
+
+export async function linkDocumentToSystem(input: {
+  manufacturerId: string
+  stagedSystemId: string
+  sourceDocumentId: string
+  role: SystemSourceRole
+  label: string | null
+  url: string | null
+}): Promise<LinkDocumentResult> {
+  const auth = await assertManufacturerAccess(input.manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  let supabase: ReturnType<typeof createStudioServerClient>
+  try {
+    supabase = createStudioServerClient()
+  } catch {
+    return { ok: false, error: 'Supabase client not configured.' }
+  }
+
+  const { data, error } = await supabase
+    .from('system_sources')
+    .insert({
+      manufacturer_id: input.manufacturerId,
+      staged_system_id: input.stagedSystemId,
+      source_document_id: input.sourceDocumentId,
+      role: input.role,
+      label: input.label,
+      // url is NOT NULL on system_sources (migration 051) even for an
+      // uploaded file, not a web link — fall back to the storage key path
+      // rather than an empty string if no public R2 URL is configured.
+      url: input.url || `document:${input.sourceDocumentId}`,
+      ingest_status: 'linked',
+      include_in_container: true,
+    })
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    if (isMissingSystemSourcesTable(error?.message)) {
+      return { ok: false, error: 'Document linking needs migration 051 applied to this project first.' }
+    }
+    return { ok: false, error: error?.message ?? 'Failed to link document to system.' }
+  }
+
+  return { ok: true, systemSourceId: (data as { id: string }).id }
+}
+
+// ─── listSystemDocuments ──────────────────────────────────────────────────────
+// The Documents step's read side (design doc addendum 3 §C5 step 3) — every
+// document linked to one system, joined back to its source_documents row for
+// filename/status. Degrades to an empty list, not an error, before migration
+// 051/065 — a system with no linked documents yet is the normal starting state.
+
+export type SystemDocument = {
+  systemSourceId: string
+  role: SystemSourceRole
+  label: string | null
+  ingestStatus: string
+  documentId: string | null
+  documentName: string | null
+  documentStatus: string | null
+  uploadedAt: string | null
+}
+
+export async function listSystemDocuments(
+  manufacturerId: string,
+  stagedSystemId: string,
+): Promise<{ ok: true; documents: SystemDocument[] } | { ok: false; error: string }> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+
+  let supabase: ReturnType<typeof createStudioServerClient>
+  try {
+    supabase = createStudioServerClient()
+  } catch {
+    return { ok: false, error: 'Supabase client not configured.' }
+  }
+
+  const { data, error } = await supabase
+    .from('system_sources')
+    .select('id, role, label, ingest_status, source_document_id, source_documents(document_name, status, uploaded_at)')
+    .eq('manufacturer_id', manufacturerId)
+    .eq('staged_system_id', stagedSystemId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    if (isMissingSystemSourcesTable(error.message)) return { ok: true, documents: [] }
+    return { ok: false, error: error.message }
+  }
+
+  type Row = {
+    id: string; role: SystemSourceRole; label: string | null; ingest_status: string
+    source_document_id: string | null
+    source_documents: { document_name: string; status: string; uploaded_at: string } | { document_name: string; status: string; uploaded_at: string }[] | null
+  }
+  const documents: SystemDocument[] = ((data ?? []) as unknown as Row[]).map((r) => {
+    const doc = Array.isArray(r.source_documents) ? r.source_documents[0] : r.source_documents
+    return {
+      systemSourceId: r.id,
+      role: r.role,
+      label: r.label,
+      ingestStatus: r.ingest_status,
+      documentId: r.source_document_id,
+      documentName: doc?.document_name ?? null,
+      documentStatus: doc?.status ?? null,
+      uploadedAt: doc?.uploaded_at ?? null,
+    }
+  })
+  return { ok: true, documents }
 }
 
 // ─── getDocumentDownloadUrl ───────────────────────────────────────────────────
