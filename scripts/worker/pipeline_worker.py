@@ -599,6 +599,7 @@ def handle_docling(job: dict):
             "manufacturer_name": auto_chain_manufacturer_name,
             "staged_system_id": auto_chain_staged_system_id,
             "source_document_id": document_id,
+            "system_name": auto_chain_system_name,
             "dry_run": auto_chain_dry_run,
         }
         try:
@@ -608,7 +609,7 @@ def handle_docling(job: dict):
                     "document_id": document_id,
                     "job_type": "system_identity_parser",
                     "status": "pending",
-                    "payload": {**chain_payload, "system_name": auto_chain_system_name},
+                    "payload": chain_payload,
                 },
                 {
                     "manufacturer_id": auto_chain_manufacturer_id,
@@ -740,6 +741,7 @@ def handle_knowledge_parser(job: dict):
     manufacturer_name = payload.get("manufacturer_name", "")
     staged_system_id = payload["staged_system_id"]
     source_document_id = payload["source_document_id"]
+    system_name = payload.get("system_name", "")
     dry_run = payload.get("dry_run", False)
 
     log: list[str] = []
@@ -755,6 +757,7 @@ def handle_knowledge_parser(job: dict):
         "--staged-system-id", staged_system_id,
         "--manufacturer-id", manufacturer_id,
         "--manufacturer-name", manufacturer_name,
+        "--system-name", system_name,
     ]
     if dry_run:
         cmd.append("--dry-run")

@@ -265,6 +265,7 @@ function buildDocumentedBy(bundle: CanonicalSystemBundle): Record<string, unknow
     if (seen.has(s.url)) continue
     seen.add(s.url)
     const doc = s.source_document_id ? bundle.sourceDocuments.get(s.source_document_id) : undefined
+    const summary = s.source_document_id ? bundle.documentSummaries.get(s.source_document_id) : undefined
     docs.push({
       '@id': doc ? `#doc-${doc.id}` : undefined,
       '@type': ['bq:SourceDocument', 'DigitalDocument'],
@@ -273,9 +274,46 @@ function buildDocumentedBy(bundle: CanonicalSystemBundle): Record<string, unknow
       url: s.url,
       'bq:ingestStatus': s.ingest_status,
       'bq:includedInContainer': s.include_in_container,
+      ...(summary ? { 'bq:summary': summary.summary } : {}),
     })
   }
   return docs
+}
+
+// ─── Retrieval documents — one per source document (design doc addendum 3
+// §C6 "per-document-type JSON-LD summaries", un-deferred) ──────────────────
+// Distinct from buildRetrievalDocuments() below, which segments facts by
+// claim type across the whole system. This is the orientation synopsis for
+// ONE whole document — an install guide, a design guide — generated once by
+// run_knowledge_parser.py and stored on system_sources.ai_summary (migration
+// 067), not recomputed here. Only documents with a saved summary produce an
+// entry; a document the knowledge parser hasn't processed yet is silently
+// absent, same "declare only what's actually there" rule as everywhere else
+// in this generator.
+
+function buildDocumentSummaryRetrievalDocuments(
+  bundle: CanonicalSystemBundle,
+  systemSlug: string,
+  subjectName: string,
+  manufacturerName: string,
+): RetrievalDocument[] {
+  const out: RetrievalDocument[] = []
+  const seen = new Set<string>()
+  for (const s of bundle.systemSources) {
+    if (!s.source_document_id || seen.has(s.source_document_id)) continue
+    const summary = bundle.documentSummaries.get(s.source_document_id)
+    if (!summary) continue
+    seen.add(s.source_document_id)
+    const doc = bundle.sourceDocuments.get(s.source_document_id)
+    const docName = doc?.document_name ?? s.label ?? s.role
+    out.push({
+      '@id': `${STUDIO_ORIGIN}/api/cards/${systemSlug}/retrieval/document/${s.source_document_id}`,
+      'bq:type': s.role,
+      'bq:title': `${subjectName} — ${docName}`,
+      'bq:text': `${subjectName} (${manufacturerName}). ${docName}: ${summary.summary}`,
+    })
+  }
+  return out
 }
 
 // ─── Retrieval documents — segmented by claim type ─────────────────────────
@@ -378,7 +416,10 @@ export function buildFactsForCanonicalSystem(bundle: CanonicalSystemBundle): Sys
     })
   }
 
-  const retrievalDocuments = buildRetrievalDocuments(bundle.system.slug, bundle.system.name, bundle.manufacturer.name, atomicAssertions)
+  const retrievalDocuments = [
+    ...buildRetrievalDocuments(bundle.system.slug, bundle.system.name, bundle.manufacturer.name, atomicAssertions),
+    ...buildDocumentSummaryRetrievalDocuments(bundle, bundle.system.slug, bundle.system.name, bundle.manufacturer.name),
+  ]
 
   // Dedup query terms actually used.
   const usedPredicates = new Set(compactAssertions.map((a) => a['bq:predicate']))

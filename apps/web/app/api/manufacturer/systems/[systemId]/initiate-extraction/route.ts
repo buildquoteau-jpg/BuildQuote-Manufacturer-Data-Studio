@@ -162,6 +162,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
       manufacturer_name: manufacturerName,
       staged_system_id: systemId,
       source_document_id: documentId,
+      system_name: systemName,
       dry_run: dryRun,
     }
 
@@ -176,7 +177,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
             document_id: documentId,
             job_type: 'system_identity_parser',
             status: 'pending',
-            payload: { ...chainPayload, system_name: systemName },
+            payload: chainPayload,
           },
           {
             manufacturer_id: manufacturerId,

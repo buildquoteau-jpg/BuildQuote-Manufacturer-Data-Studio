@@ -58,6 +58,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib.pipeline_report import PipelineReporter  # noqa: E402
 
 PROMPT_PATH = REPO_ROOT / "prompts" / "knowledge_extraction.md"
+SUMMARY_PROMPT_PATH = REPO_ROOT / "prompts" / "document_summary.md"
 DRY_RUN_DIR = REPO_ROOT / ".local" / "parser-dry-run"
 
 # Facts whose claim_type/predicate genuinely has no evidence attachment
@@ -107,6 +108,13 @@ def sb_post(supabase_url: str, headers: dict, table: str, rows: list) -> list:
     r = requests.post(f"{supabase_url}/rest/v1/{table}", headers=headers, json=rows)
     if r.status_code >= 400:
         raise RuntimeError(f"POST {table} failed ({r.status_code}): {r.text[:500]}")
+    return r.json()
+
+
+def sb_patch(supabase_url: str, headers: dict, table: str, params: str, data: dict) -> list:
+    r = requests.patch(f"{supabase_url}/rest/v1/{table}?{params}", headers=headers, json=data)
+    if r.status_code >= 400:
+        raise RuntimeError(f"PATCH {table} failed ({r.status_code}): {r.text[:500]}")
     return r.json()
 
 
@@ -194,6 +202,54 @@ def extract_facts(client, chunks: list, manufacturer_name: str, document_name: s
     return all_facts
 
 
+# ── Document summary — design doc addendum 3 §C6, un-deferred ──────────────
+# One extra Claude call per document (not per chunk) — a short orientation
+# synopsis distinct from both the discrete facts above and the existing
+# claim-type-grouped bq:retrievalDocuments (buildSystemKnowledge.ts). Stored
+# on system_sources.ai_summary (migration 067) rather than recomputed on
+# every knowledge.jsonld request.
+
+MAX_SUMMARY_INPUT_CHARS = 8000
+
+
+def synthesize_document_summary(
+    client, chunks: list, manufacturer_name: str, document_name: str, system_name: str, reporter: PipelineReporter | None,
+) -> dict | None:
+    if not SUMMARY_PROMPT_PATH.exists():
+        return None
+    system_prompt = SUMMARY_PROMPT_PATH.read_text(encoding="utf-8")
+
+    excerpt = ""
+    for chunk in chunks:
+        text = chunk.get("raw_text") or ""
+        if not text:
+            continue
+        remaining = MAX_SUMMARY_INPUT_CHARS - len(excerpt)
+        if remaining <= 0:
+            break
+        excerpt += (("\n\n" if excerpt else "") + text[:remaining])
+
+    if not excerpt.strip():
+        return None
+
+    user_prompt = (
+        f"Manufacturer: {manufacturer_name}\n"
+        f"Product: {system_name or '(unnamed)'}\n"
+        f"Document: {document_name}\n\n"
+        f"--- EXCERPTS ---\n{excerpt}\n--- END EXCERPTS ---\n\n"
+        f"Summarise what this document covers for this product per the system prompt. Return JSON only."
+    )
+
+    print("  [knowledge-parser] Synthesizing document summary")
+    if reporter:
+        reporter.progress({"stage": "summarizing"}, log_line="Synthesizing document summary")
+
+    result = call_claude(client, system_prompt, user_prompt, "document summary")
+    if not result or not result.get("summary"):
+        return None
+    return {"summary": result["summary"], "topics": result.get("topics") or []}
+
+
 # ── Plan → knowledge_assertions / assertion_evidence rows ──────────────────
 
 def build_plan(
@@ -202,6 +258,7 @@ def build_plan(
     staged_system_id: str,
     source_document_id: str,
     extraction_run_id: str | None,
+    document_summary: dict | None = None,
 ) -> dict:
     assertions = []
     for fact in facts:
@@ -238,7 +295,34 @@ def build_plan(
         "staged_system_id": staged_system_id,
         "source_document_id": source_document_id,
         "assertions": assertions,
+        "document_summary": document_summary,
     }
+
+
+def insert_document_summary(supabase_url: str, headers: dict, plan: dict) -> bool:
+    """Writes plan['document_summary'] onto the matching system_sources row
+    (migration 067). Best-effort: a pre-067 environment or a document with no
+    system_sources link yet just skips this — the assertions above are the
+    primary payload and must not be lost over a missing summary column."""
+    summary = plan.get("document_summary")
+    if not summary or not summary.get("summary"):
+        return False
+    try:
+        rows = sb_get(
+            supabase_url, headers, "system_sources",
+            f"staged_system_id=eq.{plan['staged_system_id']}&source_document_id=eq.{plan['source_document_id']}&select=id",
+        )
+        if not rows:
+            print("  [knowledge-parser] warning: no system_sources row found to attach the document summary to — skipped")
+            return False
+        sb_patch(
+            supabase_url, headers, "system_sources", f"id=eq.{rows[0]['id']}",
+            {"ai_summary": summary["summary"], "ai_summary_generated_at": datetime.now(timezone.utc).isoformat()},
+        )
+        return True
+    except Exception as e:
+        print(f"  [knowledge-parser] warning: could not save document summary (migration 067 applied?): {e}")
+        return False
 
 
 def insert_plan(supabase_url: str, headers: dict, plan: dict) -> dict:
@@ -254,7 +338,8 @@ def insert_plan(supabase_url: str, headers: dict, plan: dict) -> dict:
             "assertion_id": assertion_id,
             **evidence,
         }])
-    return {"inserted": inserted, "total": len(plan["assertions"])}
+    summary_saved = insert_document_summary(supabase_url, headers, plan)
+    return {"inserted": inserted, "total": len(plan["assertions"]), "summarySaved": summary_saved}
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -265,6 +350,7 @@ def main():
     parser.add_argument("--staged-system-id")
     parser.add_argument("--manufacturer-id")
     parser.add_argument("--manufacturer-name", default="")
+    parser.add_argument("--system-name", default="", help="Product name, used only for the document-summary synopsis")
     parser.add_argument("--model", default="claude-sonnet-5")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--from-plan", default=None, help="Skip extraction: insert a previously saved plan JSON")
@@ -329,7 +415,14 @@ def main():
         facts = extract_facts(client, chunks, args.manufacturer_name, document_name, reporter)
         print(f"[knowledge-parser] Extracted {len(facts)} candidate facts.")
 
-        plan = build_plan(facts, args.manufacturer_id, args.staged_system_id, args.source_document_id, None)
+        document_summary = synthesize_document_summary(
+            client, chunks, args.manufacturer_name, document_name, args.system_name, reporter,
+        )
+
+        plan = build_plan(
+            facts, args.manufacturer_id, args.staged_system_id, args.source_document_id, None,
+            document_summary=document_summary,
+        )
 
         DRY_RUN_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -349,8 +442,11 @@ def main():
             reporter.fail(msg)
             sys.exit(f"[ERROR] {msg}")
 
-        print(f"[knowledge-parser] Inserted {result['inserted']}/{result['total']} assertions.")
-        reporter.done({"factCount": len(facts), "inserted": result["inserted"], "planPath": str(plan_path)})
+        print(f"[knowledge-parser] Inserted {result['inserted']}/{result['total']} assertions. Document summary saved: {result['summarySaved']}.")
+        reporter.done({
+            "factCount": len(facts), "inserted": result["inserted"],
+            "summarySaved": result["summarySaved"], "planPath": str(plan_path),
+        })
 
     except Exception as e:
         reporter.fail(str(e))

@@ -112,6 +112,10 @@ export type CanonicalSystemBundle = {
   reviewerRoles: Map<string, string>
   systemSources: SystemSourceRow[]
   sourceDocuments: Map<string, SourceDocumentRow>
+  /** source_document_id -> AI-generated document synopsis (migration 067,
+   * design doc addendum 3 §C6 "per-document-type JSON-LD summaries"). Empty
+   * pre-067 or before the knowledge parser has run for a document. */
+  documentSummaries: Map<string, { summary: string; generatedAt: string | null }>
 }
 
 export async function fetchCanonicalSystemBundle(
@@ -226,6 +230,26 @@ export async function fetchCanonicalSystemBundle(
       for (const d of (docs ?? []) as SourceDocumentRow[]) sourceDocuments.set(d.id, d)
     }
 
+    // Isolated, separately-caught query (not part of the Promise.all above)
+    // so a pre-067 environment — this column doesn't exist yet — degrades to
+    // "no summaries" rather than failing the whole bundle fetch, same
+    // convention as parserEvidence above.
+    const documentSummaries = new Map<string, { summary: string; generatedAt: string | null }>()
+    try {
+      const { data } = await supabase
+        .from('system_sources')
+        .select('source_document_id, ai_summary, ai_summary_generated_at')
+        .eq('staged_system_id', systemId)
+        .not('ai_summary', 'is', null)
+      for (const row of (data ?? []) as { source_document_id: string | null; ai_summary: string | null; ai_summary_generated_at: string | null }[]) {
+        if (row.source_document_id && row.ai_summary) {
+          documentSummaries.set(row.source_document_id, { summary: row.ai_summary, generatedAt: row.ai_summary_generated_at })
+        }
+      }
+    } catch {
+      // pre-067 environments — ai_summary column not present yet
+    }
+
     return {
       system: system as CanonicalSystemBundle['system'],
       manufacturer: manufacturer as CanonicalSystemBundle['manufacturer'],
@@ -237,6 +261,7 @@ export async function fetchCanonicalSystemBundle(
       reviewerRoles,
       systemSources,
       sourceDocuments,
+      documentSummaries,
     }
   } catch {
     return null // missing env/tables — caller 404s rather than crashing
