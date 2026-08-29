@@ -66,7 +66,6 @@ export default async function StartHerePage() {
 
   const firstNeedsReview = systems.find((s) => s.verification_status !== 'manufacturer_verified')
   const reviewHref = firstNeedsReview ? `/manufacturer/workspace/${firstNeedsReview.id}` : '/manufacturer/systems'
-  const knowledgeTabHref = systems[0] ? `/manufacturer/workspace/${systems[0].id}` : '/manufacturer/systems'
 
   const steps = [
     {
@@ -167,26 +166,6 @@ export default async function StartHerePage() {
           </Link>
         ))}
       </div>
-
-      {/* Direct callout to the machine-readable object — this was previously unreachable. */}
-      <Link href={knowledgeTabHref} style={{ textDecoration: 'none' }}>
-        <div style={{
-          padding: '1rem 1.1rem', borderRadius: 10, border: '1.5px solid #bfdbfe', background: '#eff6ff',
-          display: 'flex', alignItems: 'center', gap: '1rem',
-        }}>
-          <div style={{ fontSize: '1.3rem' }}>🤖</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a' }}>See what the AI knows about your products</div>
-            <div style={{ fontSize: '0.8rem', color: '#1d4ed8', marginTop: '0.15rem' }}>
-              Every product page has a &ldquo;What the AI knows&rdquo; view — every fact, its verification
-              status, and the source it came from. Verified, sourced, and never guessed.
-            </div>
-          </div>
-          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1d4ed8', whiteSpace: 'nowrap' }}>
-            Open a workspace →
-          </div>
-        </div>
-      </Link>
 
       {aiQuestionsCount > 0 && (
         <Link href="/manufacturer/ai-questions" style={{ textDecoration: 'none' }}>

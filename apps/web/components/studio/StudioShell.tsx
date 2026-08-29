@@ -30,6 +30,7 @@ const MFR_NAV: NavItem[] = [
   { label: 'User profile',    href: '/manufacturer/account' },
   { label: 'Systems',         href: '/manufacturer/systems' },
   { label: 'Verify systems',  href: '/manufacturer/review' },
+  { label: 'Agent Ready',     href: '/manufacturer/agent-ready' },
   { label: 'Publish',         href: '/manufacturer/publish' },
 ]
 
