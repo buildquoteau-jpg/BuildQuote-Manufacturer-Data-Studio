@@ -2,6 +2,57 @@
 
 PDF catalogue ingestion pipeline and review UI for BuildQuote.
 
+## NEXT SESSION — open-source README rewrite (do this first, read before anything else)
+
+Melia's explicit ask (2026-08-29, end of the AI-knowledge-layer/System-Card-V2 session): rewrite the
+README for **all three BuildQuote repos** as prep for open-sourcing them. Requirements, verbatim intent:
+- **Point form**, not prose essays.
+- **Sell the repo** — make a stranger want to use/fork it.
+- Explain **concrete use cases** for three audiences: the **manufacturer**, the **supplier**, and the
+  **builder** — including "I only want to use one part of one repo" scenarios, not just the full
+  three-repo picture.
+- Explain the **links between the repos** (how data/flow moves between them).
+- Link out to the **live product surfaces**: buildquote.com.au, buildquote.com.au/library,
+  search.buildquote.com.au, studio.buildquote.com.au.
+
+**The three repos** (GitHub renamed all three mid-session on 2026-08-29 — do NOT change local git
+remote URLs to the new names; GitHub's redirect keeps `git fetch`/`git push` working transparently
+against the ORIGINAL remote URL, and this sandbox's auth/proxy is scoped to the original names only):
+
+| Local repo | Original GitHub name | Current GitHub name | Visibility |
+|---|---|---|---|
+| `Build-Quote-v6` | `Build-Quote-v6` | `Build-Quote-Library-and-Request-for-Quotation` | **Private** |
+| `buildquote-data-studio` (this repo) | `buildquote-data-studio` | `BuildQuote-Manufacturer-Data-Studio` | Public |
+| *(not attached this session — `add_repo` it)* | `BuildQuote-Supplier-Trade-Desk` | *(same)* | Public — internally called "manufacturer-portal"/"Trade Desk"; serves search.buildquote.com.au (supplier directory + RFQ inbox) |
+
+Before writing anything, **read each repo's current README (if any) and top-level structure fresh** —
+don't rely solely on this summary. Suggested content per README, per Melia's requirements above:
+- One-paragraph "what this is and does."
+- Use cases, in point form, split by audience (manufacturer / supplier / builder), each including a
+  "just this one feature" angle. For this repo specifically: manufacturers self-serve onboard a product
+  (`/manufacturer/systems` → upload photos/links/documents → AI extraction → verify → publish), and the
+  AI Knowledge Layer (`/api/cards/[slug]/knowledge.jsonld`, `/api/knowledge/ask`) is a standalone
+  use-case on its own — any site with verified product data could adopt the same pattern.
+- How the three repos relate: Data Studio ingests manufacturer catalogues → AI-parses + human-verifies
+  into System Cards + a machine-readable `knowledge.jsonld` object → publishes to the shared RFQ/
+  production Supabase project → v6's `/library` renders the public System Card and sends RFQs to
+  suppliers found via the Trade Desk directory → Trade Desk is where suppliers manage their listing and
+  incoming RFQs.
+- Live links: buildquote.com.au · buildquote.com.au/library · search.buildquote.com.au ·
+  studio.buildquote.com.au.
+- Self-host/setup notes if genuinely going open source: required env vars (see the Supabase table
+  below), which Supabase project each repo needs, and flag that **a secrets audit is required before
+  flipping any repo public** (Build-Quote-v6 still is) — never commit real API keys/service-role keys
+  in the README or example env files. License choice is undecided — ask Melia before picking one.
+- This open-sourcing goal was previously noted as "heard, not acted on — needs its own secrets/
+  licensing pass" (Addendum 3, §C1 in the design plan) — that pass is exactly this task.
+
+**Migration status as of 2026-08-29 (confirmed applied by Melia):** 065 (ai_knowledge_layer), 066
+(ai_knowledge_gaps), 067, and 068 (agent_ready_signoff) are all applied. Re-run
+`node scripts/refresh_schema_reference.mjs` and diff `supabase/schema_complete.sql` at the start of the
+next session to confirm live schema matches, since this session never had live credentials to verify
+directly.
+
 ## Two Supabase projects
 
 | | Project | URL | env vars |
