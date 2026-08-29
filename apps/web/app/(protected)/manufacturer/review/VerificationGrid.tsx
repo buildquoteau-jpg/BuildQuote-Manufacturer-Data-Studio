@@ -39,7 +39,7 @@ import {
   deleteSystem,
   type FieldVerificationStatus,
 } from '@/lib/studio-manufacturer/verification-actions'
-import { SubmitForPublication } from './SubmitForPublication'
+import { AdminMessageBox } from './AdminMessageBox'
 import { type SlotAsset } from '../profile/AssetSlotControl'
 
 // ─── Category colours ─────────────────────────────────────────────────────────
@@ -3164,28 +3164,6 @@ export function VerificationGrid({
   const unverified = sorted.filter(s => s.verification_status !== 'manufacturer_verified')
   const verified   = sorted.filter(s => s.verification_status === 'manufacturer_verified')
 
-  const updateReadyCount = verified.filter(s =>
-    !!s.production_system_id && !!s.last_published_at &&
-    (!s.last_submitted_at || new Date(s.updated_at) > new Date(s.last_submitted_at))
-  ).length
-  const submittedCount = verified.filter(s => {
-    if (!s.last_submitted_at) return false
-    const updateReady = !!s.production_system_id && !!s.last_published_at &&
-      new Date(s.updated_at) > new Date(s.last_submitted_at)
-    if (updateReady) return false
-    return (
-      (!!s.production_system_id && !!s.last_published_at && new Date(s.last_submitted_at) > new Date(s.last_published_at!)) ||
-      (!s.production_system_id)
-    )
-  }).length
-  const liveCount = verified.filter(s => !!s.production_system_id && !!s.last_published_at).length
-
-  function handleSubmitted() {
-    const now = new Date().toISOString()
-    setSystems(prev => prev.map(s =>
-      s.verification_status === 'manufacturer_verified' ? { ...s, last_submitted_at: now } : s,
-    ))
-  }
 
   return (
     <>
@@ -3267,14 +3245,7 @@ export function VerificationGrid({
         />
       )}
 
-      <SubmitForPublication
-        manufacturerId={manufacturerId}
-        verifiedCount={verified.length}
-        totalCount={systems.length}
-        liveCount={liveCount}
-        updateReadyCount={updateReadyCount}
-        onSubmitted={handleSubmitted}
-      />
+      <AdminMessageBox manufacturerId={manufacturerId} />
     </>
   )
 }
