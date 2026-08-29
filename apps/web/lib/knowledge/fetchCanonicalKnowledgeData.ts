@@ -69,6 +69,21 @@ export type KnowledgeAssertionRow = {
   created_at: string
 }
 
+// system_relationships (migration 065) — the one A-class fact a
+// manufacturer actively authors for the AI layer directly (design doc §4):
+// compatibility/incompatibility/supersession the generator never had a read
+// path for until now.
+export type SystemRelationshipRow = {
+  id: string
+  relation: 'compatible_with' | 'incompatible_with' | 'supersedes' | 'superseded_by' | 'substitute_for' | 'requires_system'
+  target_staged_system_id: string | null
+  target_external: { name: string; manufacturer?: string; url?: string; kind?: string } | null
+  note: string | null
+  reason: string | null
+  epistemic_status: string
+  verified_at: string | null
+}
+
 export type AssertionEvidenceRow = {
   assertion_id: string
   source_kind: string
@@ -158,6 +173,12 @@ export type CanonicalSystemBundle = {
   knowledgeAssertions: KnowledgeAssertionRow[]
   /** assertion_id -> its evidence rows (assertion_evidence, migration 065). */
   assertionEvidence: Map<string, AssertionEvidenceRow[]>
+  /** This system's authored relationships (Relationships panel). Empty pre-065. */
+  systemRelationships: SystemRelationshipRow[]
+  /** staged_system_id -> {name, slug} for internal relationship targets, so
+   * the generator can build a resolvable @id without a second round trip
+   * per relationship. */
+  relationshipTargets: Map<string, { name: string; slug: string }>
 }
 
 export async function fetchCanonicalSystemBundle(
@@ -339,6 +360,34 @@ export async function fetchCanonicalSystemBundle(
       // pre-065 environments — knowledge_assertions table not present yet
     }
 
+    // system_relationships — isolated, separately-caught for the same
+    // pre-065-degrades-gracefully reason as everything else above.
+    let systemRelationships: SystemRelationshipRow[] = []
+    const relationshipTargets = new Map<string, { name: string; slug: string }>()
+    try {
+      const { data } = await supabase
+        .from('system_relationships')
+        .select('id, relation, target_staged_system_id, target_external, note, reason, epistemic_status, verified_at')
+        .eq('staged_system_id', systemId)
+        .order('sort_order')
+      systemRelationships = (data ?? []) as SystemRelationshipRow[]
+
+      const targetIds = Array.from(new Set(
+        systemRelationships.map((r) => r.target_staged_system_id).filter((id): id is string => !!id),
+      ))
+      if (targetIds.length > 0) {
+        const { data: targets } = await supabase
+          .from('staged_systems')
+          .select('id, name, slug')
+          .in('id', targetIds)
+        for (const t of (targets ?? []) as { id: string; name: string; slug: string | null }[]) {
+          if (t.slug) relationshipTargets.set(t.id, { name: t.name, slug: t.slug })
+        }
+      }
+    } catch {
+      // pre-065 environments — system_relationships table not present yet
+    }
+
     return {
       system: system as CanonicalSystemBundle['system'],
       manufacturer: manufacturer as CanonicalSystemBundle['manufacturer'],
@@ -353,6 +402,8 @@ export async function fetchCanonicalSystemBundle(
       documentSummaries,
       knowledgeAssertions,
       assertionEvidence,
+      systemRelationships,
+      relationshipTargets,
     }
   } catch {
     return null // missing env/tables — caller 404s rather than crashing

@@ -12,6 +12,7 @@ import {
   buildFactsForCanonicalSystem,
   buildApplicationFacts,
   buildCoverage,
+  buildRelationships,
   SYSTEM_FIELD_DESCRIPTORS,
   NOT_YET_EXTRACTED_COVERAGE,
 } from '@/lib/knowledge/buildSystemKnowledge'
@@ -119,7 +120,7 @@ export default async function SystemWorkspacePage({
         isCompanyLevel: f.isCompanyLevel,
       } satisfies FactViewModel))
       allFacts = [...allFacts, ...applicationFacts]
-      coverage = buildCoverage(atomicAssertions)
+      coverage = buildCoverage(atomicAssertions, buildRelationships(bundle))
     }
   }
 

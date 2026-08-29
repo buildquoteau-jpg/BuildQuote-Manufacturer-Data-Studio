@@ -113,12 +113,17 @@ const COVERAGE_CLAIM_TYPES: Partial<Record<keyof typeof NOT_YET_EXTRACTED_COVERA
   environmentalConstraints: ['environmental_constraint'],
 }
 
-export function buildCoverage(atomics: AtomicAssertion[]): Record<string, string> {
+export function buildCoverage(
+  atomics: AtomicAssertion[],
+  relationships?: Record<string, Record<string, unknown>[]>,
+): Record<string, string> {
   const present = new Set(atomics.map((a) => a['bq:claimType']))
   const coverage: Record<string, string> = {}
   for (const [key, note] of Object.entries(NOT_YET_EXTRACTED_COVERAGE)) {
     const claimTypes = COVERAGE_CLAIM_TYPES[key as keyof typeof NOT_YET_EXTRACTED_COVERAGE]
-    const nowCovered = claimTypes?.some((ct) => present.has(ct)) ?? false
+    let nowCovered = claimTypes?.some((ct) => present.has(ct)) ?? false
+    if (!nowCovered && key === 'compatibility') nowCovered = (relationships?.['bq:compatibleWith']?.length ?? 0) > 0
+    if (!nowCovered && key === 'incompatibility') nowCovered = (relationships?.['bq:incompatibleWith']?.length ?? 0) > 0
     if (!nowCovered) coverage[key] = note
   }
   return coverage
@@ -446,6 +451,65 @@ export function buildApplicationFacts(bundle: CanonicalSystemBundle): Applicatio
   })
 }
 
+// ─── Relationships — system_relationships → bq:ProductRelationship ─────────
+// The one A-class fact a manufacturer actively authors for the AI layer
+// directly (design doc §4) — compatibility/incompatibility/supersession the
+// generator never had a read path for. Grouped by relation into the six
+// top-level arrays the design doc's §2 example shows (bq:compatibleWith,
+// bq:incompatibleWith, bq:supersedes, bq:supersededBy, bq:substituteFor,
+// bq:requiresSystem) rather than folded into the generic assertions list —
+// relationships point at another entity, not a literal value, and read
+// naturally as their own named arrays.
+
+const RELATION_KEYS: Record<string, string> = {
+  compatible_with: 'bq:compatibleWith',
+  incompatible_with: 'bq:incompatibleWith',
+  supersedes: 'bq:supersedes',
+  superseded_by: 'bq:supersededBy',
+  substitute_for: 'bq:substituteFor',
+  requires_system: 'bq:requiresSystem',
+}
+
+export function buildRelationships(bundle: CanonicalSystemBundle): Record<string, Record<string, unknown>[]> {
+  const out: Record<string, Record<string, unknown>[]> = {}
+
+  for (const r of bundle.systemRelationships) {
+    const key = RELATION_KEYS[r.relation]
+    if (!key) continue
+
+    let target: Record<string, unknown>
+    if (r.target_staged_system_id) {
+      const t = bundle.relationshipTargets.get(r.target_staged_system_id)
+      target = t
+        ? { '@id': `${STUDIO_ORIGIN}/cards/${bundle.manufacturer.slug}/${t.slug}`, name: t.name }
+        : { name: '(system no longer available)' }
+    } else if (r.target_external) {
+      target = {
+        '@type': 'Product',
+        name: r.target_external.name,
+        ...(r.target_external.manufacturer ? { manufacturer: r.target_external.manufacturer } : {}),
+        ...(r.target_external.url ? { url: r.target_external.url } : {}),
+        'bq:targetKind': r.target_external.kind ?? 'product',
+      }
+    } else {
+      continue
+    }
+
+    const node: Record<string, unknown> = {
+      '@type': 'bq:ProductRelationship',
+      'bq:target': target,
+      ...(r.note ? { 'bq:note': r.note } : {}),
+      ...(r.reason ? { 'bq:reason': r.reason } : {}),
+      'bq:epistemicStatus': r.epistemic_status,
+      ...(r.verified_at ? { 'bq:verifiedAt': r.verified_at } : {}),
+    }
+
+    ;(out[key] ?? (out[key] = [])).push(node)
+  }
+
+  return out
+}
+
 // ─── Documents ──────────────────────────────────────────────────────────────
 
 function buildDocumentedBy(bundle: CanonicalSystemBundle): Record<string, unknown>[] {
@@ -660,6 +724,7 @@ export function buildFromCanonical(bundle: CanonicalSystemBundle): KnowledgeObje
     systemUrl, manufacturerUrl, compactAssertions, atomicAssertions,
     retrievalDocuments, queryTerms, knowledgeGaps,
   } = buildFactsForCanonicalSystem(bundle)
+  const relationships = buildRelationships(bundle)
 
   return {
     '@context': KNOWLEDGE_CONTEXT,
@@ -721,8 +786,9 @@ export function buildFromCanonical(bundle: CanonicalSystemBundle): KnowledgeObje
       ...(c.sku_suffix ? { sku: c.sku_suffix } : {}),
       'bq:isStocked': c.is_stocked ?? true,
     })),
+    ...relationships,
     'bq:documentedBy': buildDocumentedBy(bundle),
-    'bq:coverage': buildCoverage(atomicAssertions),
+    'bq:coverage': buildCoverage(atomicAssertions, relationships),
     'bq:knowledgeGaps': knowledgeGaps,
     'bq:assertions': compactAssertions,
     'bq:knowledge': {

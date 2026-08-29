@@ -58,6 +58,25 @@ export function renderKnowledgeMarkdown(obj: KnowledgeObject): string {
     lines.push('')
   }
 
+  const relationHeadings: [string, string][] = [
+    ['bq:compatibleWith', 'Compatible with'],
+    ['bq:incompatibleWith', 'Not compatible with'],
+    ['bq:supersedes', 'Supersedes'],
+    ['bq:supersededBy', 'Superseded by'],
+    ['bq:substituteFor', 'Substitute for'],
+    ['bq:requiresSystem', 'Requires'],
+  ]
+  for (const [key, heading] of relationHeadings) {
+    const rels = (obj[key] as { 'bq:target'?: { name?: string }; 'bq:note'?: string; 'bq:reason'?: string }[] | undefined) ?? []
+    if (rels.length === 0) continue
+    lines.push(h(2, heading))
+    for (const r of rels) {
+      const detail = r['bq:reason'] ?? r['bq:note']
+      lines.push(`- **${r['bq:target']?.name ?? 'Unknown'}**${detail ? ` — ${detail}` : ''}`)
+    }
+    lines.push('')
+  }
+
   // Facts, grouped by claim type — the same atomic assertions the JSON-LD
   // panel shows, read as prose instead of raw objects.
   const knowledge = obj['bq:knowledge'] as { 'bq:atomicAssertions'?: AtomicAssertion[] } | undefined
