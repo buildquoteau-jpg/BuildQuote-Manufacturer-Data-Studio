@@ -120,7 +120,7 @@ export function SystemsTable({
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') addSystem() }}
-            placeholder="+ Add a system (e.g. Axon Cladding)"
+            placeholder="+ Add a system (e.g. CladMax Dual Tone Composite Cladding)"
             disabled={pending}
             style={nameInputStyle}
           />

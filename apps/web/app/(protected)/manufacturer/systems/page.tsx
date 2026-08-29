@@ -98,10 +98,9 @@ export default async function SystemsListPage() {
       <div style={{ marginBottom: '0.5rem' }}>
         <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Systems</h1>
         <p style={{ fontSize: '0.875rem', color: 'var(--ds-text-muted)', margin: '0.5rem 0 0', lineHeight: 1.65, maxWidth: 640 }}>
-          List every building product you want turned into a System Card. Add
-          a system, then click into it to upload photos, links and source
-          documents — one system at a time, so the setup for each one stays
-          quick and focused.
+          List every building product you want turned into a System Card.
+          Step 1. Add a System Name. Step 2. Open System to add source
+          documents, photos and links.
         </p>
       </div>
 
