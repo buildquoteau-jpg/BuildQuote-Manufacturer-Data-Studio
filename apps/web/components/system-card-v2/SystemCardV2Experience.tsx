@@ -27,6 +27,9 @@ import { AttributesInfoReveal, hasAttributesContent } from './AttributesInfoReve
 import { GuidesResourcesReveal } from './GuidesResourcesReveal'
 import { ComponentsAccessoriesReveal } from './ComponentsAccessoriesReveal'
 import { StockistsReveal } from './StockistsReveal'
+import { AskAboutProductReveal } from './AskAboutProductReveal'
+import { MaterialsListBar } from './MaterialsListBar'
+import type { ShoppingListItem } from './useMaterialsListRows'
 import { shareSystemCard } from './shareCard'
 import styles from './RevealsBody.module.css'
 
@@ -43,49 +46,21 @@ function ShareIcon() {
   )
 }
 
-// One-line live previews shown on each closed bar — turns "five identical
-// black slabs" into an at-a-glance menu of what's actually inside. Real
-// data only: a section with nothing to summarise just shows no subtitle
-// (and is usually `disabled` anyway).
-function chooseSubtitle(system: SystemCardSystem): string | undefined {
-  const parts: string[] = []
-  if (system.system_colours.length > 0) parts.push(`${system.system_colours.length} colour${system.system_colours.length !== 1 ? 's' : ''}`)
-  if (system.system_profiles.length > 0) parts.push(`${system.system_profiles.length} profile${system.system_profiles.length !== 1 ? 's' : ''}`)
-  return parts.length > 0 ? parts.join(' · ') : undefined
-}
-function attributesSubtitle(system: SystemCardSystem): string | undefined {
-  const parts: string[] = []
-  if (system.moisture_resistant) parts.push('Moisture resistant')
-  if (system.bal_rating) parts.push(`BAL ${system.bal_rating}`)
-  if (system.fire_rating) parts.push(`Fire ${system.fire_rating}`)
-  if (system.australian_made) parts.push('Australian made')
-  return parts.length > 0 ? parts.slice(0, 2).join(' · ') : undefined
-}
-function guidesSubtitle(system: SystemCardSystem): string | undefined {
-  const count = (system.install_guide_urls?.length ?? 0) + (system.design_guide_url ? 1 : 0) +
-    (system.tech_data_url ? 1 : 0) + (system.custom_document_links?.length ?? 0) + (system.website_url ? 1 : 0)
-  return count > 0 ? `${count} resource${count !== 1 ? 's' : ''}` : undefined
-}
-function componentsSubtitle(system: SystemCardSystem): string | undefined {
-  const count = system.system_components.length
-  if (count === 0) return undefined
-  const categories = new Set(system.system_components.map(c => c.components?.category ?? c.role ?? 'Component'))
-  return `${count} item${count !== 1 ? 's' : ''} · ${categories.size} categor${categories.size !== 1 ? 'ies' : 'y'}`
-}
-function stockistsSubtitle(stockists: SystemCardStockist[]): string | undefined {
-  return stockists.length > 0 ? `${stockists.length} local stockist${stockists.length !== 1 ? 's' : ''}` : undefined
-}
-
-const SECTION_IDS = ['choose', 'attributes', 'guides', 'components', 'stockists'] as const
+const SECTION_IDS = ['choose', 'attributes', 'ask', 'guides', 'components', 'stockists'] as const
 type SectionId = typeof SECTION_IDS[number]
 
-export function SystemCardV2Experience({ manufacturer, system, stockists = [], showExperimentBanner = true }: {
+export function SystemCardV2Experience({ manufacturer, system, stockists = [], onAddToList, showExperimentBanner = true }: {
   // Only manufacturer.name is used anywhere in this tree — narrower than
   // the full SystemCardManufacturerPage type, which exists for the v6-style
   // manufacturer landing page this experiment doesn't have.
   manufacturer: { name: string }
   system: SystemCardSystem
   stockists?: SystemCardStockist[]
+  // Omit entirely for a read-only preview (e.g. the manufacturer-review
+  // grid) — the "Add to shopping list" button only renders when this is
+  // provided. When provided, wire it to the caller's own local
+  // ShoppingListProvider.addItems — never a BuildQuote API.
+  onAddToList?: (items: ShoppingListItem[]) => void
   showExperimentBanner?: boolean
 }) {
   // A Set of open section ids, not one currentStep — several sections must
@@ -141,7 +116,6 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], s
               <SystemCardSection
                 id="choose"
                 title="Colours. Profiles. Finishes."
-                subtitle={chooseSubtitle(system)}
                 open={openSections.has('choose')}
                 onToggle={() => toggleSection('choose')}
                 disabled={noProfiles}
@@ -152,7 +126,6 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], s
               <SystemCardSection
                 id="attributes"
                 title="Attributes and Information"
-                subtitle={attributesSubtitle(system)}
                 open={openSections.has('attributes')}
                 onToggle={() => toggleSection('attributes')}
                 disabled={!hasAttributesContent(system)}
@@ -160,10 +133,20 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], s
                 <AttributesInfoReveal system={system} />
               </SystemCardSection>
 
+              {system.manufacturer?.slug && (
+                <SystemCardSection
+                  id="ask"
+                  title="Ask about this product"
+                  open={openSections.has('ask')}
+                  onToggle={() => toggleSection('ask')}
+                >
+                  <AskAboutProductReveal manufacturerSlug={system.manufacturer.slug} systemSlug={system.slug} />
+                </SystemCardSection>
+              )}
+
               <SystemCardSection
                 id="guides"
                 title="Guides and Resources"
-                subtitle={guidesSubtitle(system)}
                 open={openSections.has('guides')}
                 onToggle={() => toggleSection('guides')}
               >
@@ -173,7 +156,6 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], s
               <SystemCardSection
                 id="components"
                 title="Components and Accessories"
-                subtitle={componentsSubtitle(system)}
                 open={openSections.has('components')}
                 onToggle={() => toggleSection('components')}
                 disabled={noComponents}
@@ -184,12 +166,13 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], s
               <SystemCardSection
                 id="stockists"
                 title="Stockists"
-                subtitle={stockistsSubtitle(stockists)}
                 open={openSections.has('stockists')}
                 onToggle={() => toggleSection('stockists')}
               >
-                <StockistsReveal system={system} stockists={stockists} />
+                <StockistsReveal stockists={stockists} />
               </SystemCardSection>
+
+              <MaterialsListBar system={system} onAddToList={onAddToList} />
 
               <div className={styles.cardClose}>
                 <button type="button" className={styles.barNext} onClick={handleShare}>

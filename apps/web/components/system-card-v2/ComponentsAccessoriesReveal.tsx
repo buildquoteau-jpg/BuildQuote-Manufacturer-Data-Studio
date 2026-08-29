@@ -2,19 +2,19 @@
 
 // Components and Accessories screen. Placed after the product and its
 // specification are understood, so it lands as "oh — it's not just decking,
-// it's a whole system." The 3 real categories and their real items are the
+// it's a whole system." The real categories and their real items are the
 // only structure shown — no invented required/compatible/optional taxonomy.
 //
-// Each category group is a real column table — name/description, specs,
-// part no, UOM, select — matching the RFQ / shopping-list convention Melia
-// specified directly (the same columns used on Choose and the Stockists
-// materials list). Components have no dimensions in the data model (that's
-// profile-specific), so Specs reads "—" for every row here, honestly, not
-// hidden — the column stays for consistency across the card. Part No is
-// the real `sku` field, currently null for every Apex PLUS component, also
-// shown honestly rather than fabricated. Selection is independent per item
-// (a builder may want several), shared via SelectionContext so Stockists
-// reflects what was picked here too.
+// Each category group is a stacked item list (name/description, specs, part
+// no, UOM, select) — not an HTML table, so values wrap at phone width
+// instead of forcing horizontal scroll; matches the same itemList/itemRow
+// idiom used on the Choose screen's profile list. Components have no
+// dimensions in the data model (that's profile-specific), so Specs reads
+// "—" for every row here, honestly, not hidden — the field stays for
+// consistency across the card. Part No is the real `sku` field, shown
+// honestly rather than fabricated when absent. Selection is independent per
+// item (a builder may want several), shared via SelectionContext so
+// Stockists reflects what was picked here too.
 
 import type { SystemCardSystem } from '@/components/system-card-renderer/types'
 import { useSelection } from './SelectionContext'
@@ -94,45 +94,41 @@ export function ComponentsAccessoriesReveal({ system }: { system: SystemCardSyst
             <span className={styles.systemGroupIcon}>{glyphFor(category)}</span>
             <p className={styles.systemGroupLabel}>{category}</p>
           </div>
-          <div className={styles.specTableScroll}>
-            <table className={styles.specTable}>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Specs</th>
-                  <th>Part no</th>
-                  <th>UOM</th>
-                  <th>Select</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byCategory[category].map(c => {
-                  const pressed = componentIds.includes(c.id)
-                  return (
-                    <tr key={c.id}>
-                      <td className={styles.specTableName}>
-                        {c.components?.name}
-                        {c.components?.description && <span className={styles.specTableSub}>{c.components.description}</span>}
-                      </td>
-                      <td>—</td>
-                      <td>{c.components?.sku ?? '—'}</td>
-                      <td>{c.components?.uom ?? '—'}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className={styles.tableCheck}
-                          aria-pressed={pressed}
-                          aria-label={`Select ${c.components?.name ?? 'item'}`}
-                          onClick={() => toggleComponentId(c.id)}
-                        >
-                          <CheckIcon />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className={styles.itemList}>
+            {byCategory[category].map(c => {
+              const pressed = componentIds.includes(c.id)
+              return (
+                <div className={styles.itemRow} data-selected={pressed} key={c.id}>
+                  <div className={styles.itemRowText}>
+                    <span className={styles.itemRowName}>{c.components?.name}</span>
+                    {c.components?.description && <span className={styles.itemRowSub}>{c.components.description}</span>}
+                    <div className={styles.itemMetaRow}>
+                      <span className={styles.itemMetaField}>
+                        <span className={styles.itemMetaLabel}>Specs</span>
+                        <span className={styles.itemMetaValue}>—</span>
+                      </span>
+                      <span className={styles.itemMetaField}>
+                        <span className={styles.itemMetaLabel}>Part no</span>
+                        <span className={styles.itemMetaValue}>{c.components?.sku ?? '—'}</span>
+                      </span>
+                      <span className={styles.itemMetaField}>
+                        <span className={styles.itemMetaLabel}>UOM</span>
+                        <span className={styles.itemMetaValue}>{c.components?.uom ?? '—'}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.tableCheck}
+                    aria-pressed={pressed}
+                    aria-label={`Select ${c.components?.name ?? 'item'}`}
+                    onClick={() => toggleComponentId(c.id)}
+                  >
+                    <CheckIcon />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       ))}

@@ -254,6 +254,11 @@
   }
 }
 
+.materialsListBar {
+  padding: 0.65rem 1.25rem 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
 .cardClose {
   padding: 1.5rem 1.25rem 2rem;
   text-align: center;
@@ -366,6 +371,28 @@
   line-height: 1.25;
 }
 
+.swatchPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1.5px solid var(--line-strong);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.swatchPill[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
 .profileRole {
   display: block;
   font-size: 0.66rem;
@@ -378,34 +405,95 @@
 
 /* ── Attributes and Information ───────────────────────────────────────── */
 
-/* Key-fact pills — moved here from the Cover per Melia's direction: badges
-   belong with the attributes they summarise, not competing with the hero
-   photography. Tuned for the light paper background (Cover's version is
-   tuned for the dark photo background and lives in Cover.module.css). */
-.badgeRow {
+/* Every attribute as one pill, each fact its own soft hue -- solid pastel
+   fills (not a tinted/alpha wash) so they read as clearly coloured rather
+   than faded, with a same-hue solid border instead of a translucent one. */
+.attributePillRow {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin-bottom: 1.75rem;
 }
 
-.badge {
+.attributePill {
   display: inline-block;
-  font-size: 0.66rem;
+  font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   border-radius: 999px;
   padding: 0.3rem 0.7rem;
+  border: 1px solid transparent;
 }
 
-.badge[data-tone='performance'] {
-  background: var(--accent);
-  color: #ffffff;
+.attributePill[data-tone='moisture'] {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
 }
 
-.badge[data-tone='neutral'] {
-  background: var(--ink-soft);
-  color: #ffffff;
+.attributePill[data-tone='bal'] {
+  background: #ffedd5;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+.attributePill[data-tone='fire'] {
+  background: #fce7f3;
+  color: #be185d;
+  border-color: #fbcfe8;
+}
+
+.attributePill[data-tone='acoustic'] {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border-color: #e9d5ff;
+}
+
+.attributePill[data-tone='structural'] {
+  background: #fef9c3;
+  color: #a16207;
+  border-color: #fde68a;
+}
+
+.attributePill[data-tone='australian'] {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.attributePill[data-tone='colourways'] {
+  background: #ccfbf1;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
+.attributePill[data-tone='custom0'] {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+
+.attributePill[data-tone='custom1'] {
+  background: #cffafe;
+  color: #0e7490;
+  border-color: #a5f3fc;
+}
+
+.attributePill[data-tone='custom2'] {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.attributePill[data-tone='custom3'] {
+  background: #ffe4e6;
+  color: #be123c;
+  border-color: #fecdd3;
+}
+
+.attributePill[data-tone='custom4'] {
+  background: #ecfccb;
+  color: #4d7c0f;
+  border-color: #d9f99d;
 }
 
 .specGroup {
@@ -444,29 +532,6 @@
 
 .specBox + .specBox {
   margin-top: 0.7rem;
-}
-
-.specRow {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.85rem;
-}
-
-.specRow:last-child {
-  border-bottom: none;
-}
-
-.specRowLabel {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.specRowValue {
-  color: var(--ink-soft);
-  text-align: right;
 }
 
 /* Profiles table — the RFQ / shopping-list convention: real columns for
@@ -691,6 +756,86 @@
   outline-offset: 2px;
 }
 
+/* Stacked rows instead of a fixed-column table, so long specs/part-no/UOM
+   values wrap onto their own line instead of forcing horizontal scroll at
+   phone widths. Used by both Choose's profile list and Components and
+   Accessories' per-category lists. */
+
+.itemList {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--raised);
+}
+
+.itemRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--line);
+  transition: background-color 0.12s ease;
+}
+
+.itemRow:last-child {
+  border-bottom: none;
+}
+
+/* Whole row lights up on selection — the shopping-list "you picked this"
+   feedback the pale accent fill on a selected row gives. */
+.itemRow[data-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.itemRowText {
+  min-width: 0;
+  flex: 1;
+}
+
+.itemRowName {
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.itemRowSub {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--ink-faint);
+  line-height: 1.4;
+  margin-top: 0.15rem;
+}
+
+.itemMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1rem;
+  row-gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.itemMetaField {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+.itemMetaLabel {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.itemMetaValue {
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
 /* ── Stockists ─────────────────────────────────────────────────────────── */
 
 .emptyState {
@@ -720,4 +865,41 @@
   font-size: 0.76rem;
   margin-top: 0.15rem;
   white-space: normal;
+}
+
+.addToListBtn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.8rem 1rem;
+  min-height: 44px;
+  background: var(--accent);
+  color: var(--paper);
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  margin-top: 0.85rem;
+}
+
+.addToListBtn:disabled {
+  background: #f1f5f9;
+  border-color: var(--line);
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.addToListBtn[data-state='success'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.addToListBtn:hover:not(:disabled) {
+  opacity: 0.88;
 }

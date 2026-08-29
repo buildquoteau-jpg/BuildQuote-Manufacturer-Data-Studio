@@ -15,7 +15,7 @@
 // in the preview.
 
 import { useState } from 'react'
-import { ShoppingListProvider } from './ShoppingListProvider'
+import { ShoppingListProvider, useShoppingList } from './ShoppingListProvider'
 import { ShoppingListDrawer } from './ShoppingListDrawer'
 import { SystemCardV2Experience } from '@/components/system-card-v2/SystemCardV2Experience'
 import { SystemCardTile } from './SystemCardTile'
@@ -133,6 +133,7 @@ function SystemPageView({ manufacturer, system, stockists, onBack }: {
   stockists: SystemCardStockist[]
   onBack: () => void
 }) {
+  const { addItems } = useShoppingList()
   const backLink = (
     <>
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -161,7 +162,7 @@ function SystemPageView({ manufacturer, system, stockists, onBack }: {
 
       {/* Card */}
       <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px 80px' }}>
-        <SystemCardV2Experience manufacturer={{ name: manufacturer.name }} system={system} stockists={stockists} showExperimentBanner={false} />
+        <SystemCardV2Experience manufacturer={{ name: manufacturer.name }} system={system} stockists={stockists} onAddToList={addItems} showExperimentBanner={false} />
 
         {/* Back link */}
         <div style={{ marginTop: '24px', textAlign: 'center' }}>

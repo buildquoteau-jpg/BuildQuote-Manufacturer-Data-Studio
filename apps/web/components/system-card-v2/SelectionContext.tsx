@@ -22,6 +22,9 @@ type SelectionContextValue = {
   toggleProfileName: (name: string) => void
   componentIds: string[]
   toggleComponentId: (id: string) => void
+  // Added for v6/MFP's real "Add to shopping list" action (the Data Studio
+  // sandbox never had a persisted cart to clear after committing to).
+  clearSelection: () => void
 }
 
 const SelectionContext = createContext<SelectionContextValue | null>(null)
@@ -39,8 +42,13 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     setComponentIds(prev => prev.includes(id) ? prev.filter(n => n !== id) : [...prev, id])
   }
 
+  function clearSelection() {
+    setProfileNames([])
+    setComponentIds([])
+  }
+
   return (
-    <SelectionContext.Provider value={{ colourName, setColourName, profileNames, toggleProfileName, componentIds, toggleComponentId }}>
+    <SelectionContext.Provider value={{ colourName, setColourName, profileNames, toggleProfileName, componentIds, toggleComponentId, clearSelection }}>
       {children}
     </SelectionContext.Provider>
   )
