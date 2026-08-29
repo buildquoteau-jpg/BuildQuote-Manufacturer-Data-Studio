@@ -3,7 +3,6 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import {
   resolveWorkspaceContextFromRequest,
   getManufacturerInfo,
-  getManufacturerDocuments,
   getManufacturerVerificationData,
   getOpenAiQuestionsCount,
 } from '@/lib/studio-manufacturer/workspace'
@@ -11,11 +10,16 @@ import { StudioShell } from '@/components/studio/StudioShell'
 
 export const dynamic = 'force-dynamic'
 
-// The new front door (design doc addendum §B3): a manufacturer's brand
-// identity at the top, then a numbered guided flow through the rest of the
-// workspace — instead of landing on a flat 14-item nav with no order. Every
-// number/link here reads from data that already exists elsewhere; this page
-// adds no new tables and no new server actions, only a guided view over them.
+// The front door (design doc addendum §B3, steps updated for addendum 3's
+// system-by-system self-serve workflow — the four steps here must always
+// match the four "doing work" items in StudioShell's nav: Brand profile,
+// Systems, Verify systems, Publish. The original addendum-2 version of this
+// page had a step 2 "Upload documents" pointing at the flat manufacturer-
+// wide Documents page — that page is now unlinked from the nav (addendum 3
+// §C1: noise until the per-system workflow is nailed), and per-system
+// document upload lives inside each system's own setup flow instead. Keep
+// these two four-item lists in sync by hand; there is no shared source of
+// truth between StudioShell.tsx's MFR_NAV and this file's `steps` array.
 
 export default async function StartHerePage() {
   const session = await getStudioSession()
@@ -33,9 +37,8 @@ export default async function StartHerePage() {
     )
   }
 
-  const [infoResult, docsResult, verificationResult, aiQuestionsCount] = await Promise.all([
+  const [infoResult, verificationResult, aiQuestionsCount] = await Promise.all([
     getManufacturerInfo(ctx.manufacturerId),
-    getManufacturerDocuments(ctx.manufacturerId),
     getManufacturerVerificationData(ctx.manufacturerId),
     getOpenAiQuestionsCount(ctx.manufacturerId),
   ])
@@ -49,17 +52,21 @@ export default async function StartHerePage() {
   }
 
   const manufacturer = infoResult.manufacturer
-  const documentCount = docsResult.ok ? docsResult.documents.length : 0
   const systems = verificationResult.ok ? verificationResult.systems : []
 
   const brandComplete = Boolean(manufacturer.description && manufacturer.websiteUrl && manufacturer.heroImageUrl)
+  // "Not started" mirrors the Systems list's own setup-status heuristic
+  // (page.tsx there) — a system with no photos, no links and no documents.
+  const notStartedCount = systems.filter((s) =>
+    (s.gallery_images?.length ?? 0) === 0 && (s.custom_document_links?.length ?? 0) === 0,
+  ).length
   const needsReviewCount = systems.filter((s) => s.verification_status !== 'manufacturer_verified').length
   const readyToPublishCount = systems.filter((s) => s.publish_status === 'draft' || s.publish_status === null).length
   const publishedCount = systems.filter((s) => s.publish_status === 'published' || s.publish_status === 'published_with_changes').length
 
   const firstNeedsReview = systems.find((s) => s.verification_status !== 'manufacturer_verified')
-  const reviewHref = firstNeedsReview ? `/manufacturer/workspace/${firstNeedsReview.id}` : '/manufacturer/cms'
-  const knowledgeTabHref = systems[0] ? `/manufacturer/workspace/${systems[0].id}` : '/manufacturer/cms'
+  const reviewHref = firstNeedsReview ? `/manufacturer/workspace/${firstNeedsReview.id}` : '/manufacturer/systems'
+  const knowledgeTabHref = systems[0] ? `/manufacturer/workspace/${systems[0].id}` : '/manufacturer/systems'
 
   const steps = [
     {
@@ -72,19 +79,19 @@ export default async function StartHerePage() {
     },
     {
       n: 2,
-      title: 'Upload documents',
-      done: documentCount > 0,
-      count: `${documentCount} uploaded`,
-      href: '/manufacturer/documents',
-      body: 'Catalogues, install guides and technical data sheets — the evidence every extracted fact traces back to.',
+      title: 'Systems',
+      done: systems.length > 0 && notStartedCount === 0,
+      count: systems.length === 0 ? 'No systems yet' : `${systems.length} system${systems.length === 1 ? '' : 's'}${notStartedCount > 0 ? ` · ${notStartedCount} not started` : ''}`,
+      href: '/manufacturer/systems',
+      body: 'List every product you want turned into a System Card, then click into each one to upload photos, links and source documents and set up its System Card.',
     },
     {
       n: 3,
-      title: 'Review & verify products',
+      title: 'Verify systems',
       done: systems.length > 0 && needsReviewCount === 0,
       count: systems.length === 0 ? 'No products yet' : `${needsReviewCount} need${needsReviewCount === 1 ? 's' : ''} you`,
       href: reviewHref,
-      body: 'Work each product start to finish in the System Workspace — identity, images, variants, colours, components, attributes and applications, one page per product.',
+      body: 'Confirm what the AI found in the System Workspace — identity, images, variants, colours, components, attributes and applications, one page per product.',
     },
     {
       n: 4,
