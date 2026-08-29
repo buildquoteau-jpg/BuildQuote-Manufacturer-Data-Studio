@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { SystemCardRenderer } from '@/components/system-card-renderer/SystemCardRenderer'
+import { SystemCardV2Experience } from '@/components/system-card-v2/SystemCardV2Experience'
 import type { SystemCardSystem } from '@/components/system-card-renderer/types'
 import type { SlotAsset } from '@/app/(protected)/manufacturer/profile/AssetSlotControl'
 import type {
@@ -238,7 +238,7 @@ export function SystemWorkspaceShell({
 
           {tab === 'card' ? (
             <div style={{ border: '1px solid var(--ds-border, #e5e7eb)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-              <SystemCardRenderer system={previewSystem} />
+              <SystemCardV2Experience manufacturer={{ name: manufacturerName }} system={previewSystem} showExperimentBanner={false} />
             </div>
           ) : (
             <div style={{ border: '1px solid var(--ds-border, #e5e7eb)', borderRadius: 10, background: '#fff', padding: '0.9rem 1rem' }}>

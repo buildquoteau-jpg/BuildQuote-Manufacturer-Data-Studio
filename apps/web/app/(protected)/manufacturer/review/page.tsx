@@ -142,6 +142,7 @@ export default async function ManufacturerReviewPage() {
       <VerificationGrid
         manufacturerId={ctx.manufacturerId}
         manufacturerName={manufacturer.name}
+        manufacturerSlug={manufacturer.slug}
         systems={systems}
         assets={assets}
         linkLibrary={linkLibrary}

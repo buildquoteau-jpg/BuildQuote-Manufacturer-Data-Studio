@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useTransition, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { SystemCard } from '@/components/system-card/SystemCard'
-import type { SystemCardData } from '@/components/system-card/SystemCard'
+import { SystemCardV2Experience } from '@/components/system-card-v2/SystemCardV2Experience'
+import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
 import type { VerificationSystem, VerificationSystemProfile, VerificationSystemColour, VerificationSystemComponent } from '@/lib/studio-manufacturer/workspace'
 import type { ManufacturerAsset } from '@/lib/studio-manufacturer/assets'
 import type { LinkLibraryEntry } from '@/lib/studio-manufacturer/link-library'
@@ -2312,6 +2312,7 @@ function ExpandedCardView({
   system: initialSystem,
   manufacturerId,
   manufacturerName,
+  manufacturerSlug,
   assets,
   linkLibrary,
   onLibraryAdd,
@@ -2323,6 +2324,7 @@ function ExpandedCardView({
   system: VerificationSystem
   manufacturerId: string
   manufacturerName: string
+  manufacturerSlug: string
   assets: ManufacturerAsset[]
   linkLibrary: LinkLibraryEntry[]
   onLibraryAdd: (entry: LinkLibraryEntry) => void
@@ -2519,46 +2521,15 @@ function ExpandedCardView({
     : null
   const cropPreviewUrl = linkedHeroAsset?.displayUrl ?? linkedHeroAsset?.publicUrl ?? system.hero_image_url
 
-  // Build SystemCardData
-  const cardData: SystemCardData = {
-    name:               system.name,
-    manufacturer_name:  manufacturerName,
-    category:           system.category,
-    subcategory:        system.subcategory,
-    description:        system.description,
-    hero_image_url:     cropPreviewUrl,
-    hero_image_position_x: system.hero_image_position_x ?? 50,
-    hero_image_position_y: system.hero_image_position_y ?? 50,
-    hero_image_zoom: system.hero_image_zoom ?? 1,
-    bal_rating:         system.bal_rating,
-    fire_rating:        system.fire_rating,
-    moisture_resistant: system.moisture_resistant,
-    acoustic_rating:    system.acoustic_rating,
-    structural_grade:   system.structural_grade,
-    australian_made:    system.australian_made,
-    notes:              system.notes,
-    source_url:         system.source_url,
-    install_guide_urls: system.install_guide_urls,
-    design_guide_url:   system.design_guide_url,
-    tech_data_url:      system.tech_data_url,
-    custom_document_links: system.custom_document_links ?? null,
-    custom_technical_attributes: system.custom_technical_attributes ?? null,
-    profiles: system.profiles.map(p => ({
-      product_code: p.product_code, profile_name: p.profile_name,
-      dimensions: p.dimensions, length_mm: p.length_mm,
-      height_mm: p.height_mm, width_mm: p.width_mm, thickness_mm: p.thickness_mm,
-      uom: p.uom, supplier_pack_qty: p.supplier_pack_qty,
-      supplier_pack_uom: p.supplier_pack_uom, sort_order: p.sort_order,
-    })),
-    components: system.components.map(c => ({
-      sku: c.sku, name: c.name, description: c.description, category: c.category,
-      uom: c.uom, supplier_pack_qty: c.supplier_pack_qty,
-      supplier_pack_uom: c.supplier_pack_uom, sort_order: c.sort_order,
-      procurement_route: c.procurement_route,
-    })),
-    colours: system.colours.map(c => ({
-      colour_name: c.colour_name, sku_suffix: c.sku_suffix, is_stocked: c.is_stocked,
-    })),
+  // Same adapter the public knowledge.jsonld route and the new System
+  // Workspace preview use — one adapter, one shape, never a second
+  // hand-copied field list that can silently drift from it. Overrides
+  // hero_image_url with the linked asset's live display URL afterward,
+  // same reason the old cardData block did: hero_image_url itself can hold
+  // an expired presigned R2 link.
+  const cardData = {
+    ...adaptStagedSystem(system, { id: manufacturerId, name: manufacturerName, slug: manufacturerSlug, status: 'active', description: null, websiteUrl: null, heroImageUrl: null }),
+    hero_image_url: cropPreviewUrl,
   }
 
   const fieldRowProps = (label: string, fieldName: string, opts?: { isUrl?: boolean }) => ({
@@ -2637,7 +2608,7 @@ function ExpandedCardView({
             <div style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
               Final card preview
             </div>
-            <SystemCard data={cardData} />
+            <SystemCardV2Experience manufacturer={{ name: manufacturerName }} system={cardData} showExperimentBanner={false} />
           </div>
 
           {/* Drag handle */}
@@ -3068,12 +3039,14 @@ function ExpandedCardView({
 export function VerificationGrid({
   manufacturerId,
   manufacturerName,
+  manufacturerSlug,
   systems: initialSystems,
   assets,
   linkLibrary: initialLinkLibrary,
 }: {
   manufacturerId: string
   manufacturerName: string
+  manufacturerSlug: string
   systems: VerificationSystem[]
   assets: ManufacturerAsset[]
   linkLibrary: LinkLibraryEntry[]
@@ -3235,6 +3208,7 @@ export function VerificationGrid({
           system={expandedSystem}
           manufacturerId={manufacturerId}
           manufacturerName={manufacturerName}
+          manufacturerSlug={manufacturerSlug}
           assets={assets}
           linkLibrary={linkLibrary}
           onLibraryAdd={(entry) => setLinkLibrary(prev => [entry, ...prev])}
