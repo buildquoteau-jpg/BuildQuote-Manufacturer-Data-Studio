@@ -26,6 +26,7 @@ import { ImagesSection } from './ImagesSection'
 import { RelationshipsSection } from './RelationshipsSection'
 import { ApplicationsSection } from './ApplicationsSection'
 import { EvidenceGroupBulkVerify } from './EvidenceGroupBulkVerify'
+import { UnknownsSummary } from './UnknownsSummary'
 import { LinksSection } from './LinksSection'
 import type { FactViewModel } from './factViewModel'
 import type { CustomDocumentLink } from '@/lib/studio-manufacturer/verification-actions'
@@ -50,6 +51,7 @@ export function SystemWorkspaceShell({
   previewSystem,
   identityFacts,
   attributeFacts,
+  applicationFacts,
   allFacts,
   coverage,
   customAttributes,
@@ -74,6 +76,7 @@ export function SystemWorkspaceShell({
   previewSystem: SystemCardSystem
   identityFacts: FactViewModel[]
   attributeFacts: FactViewModel[]
+  applicationFacts: FactViewModel[]
   allFacts: FactViewModel[]
   coverage: Record<string, string>
   customAttributes: { label: string; value: string }[]
@@ -148,6 +151,7 @@ export function SystemWorkspaceShell({
         {/* Left — accordion sections */}
         <div>
           <EvidenceGroupBulkVerify facts={allFacts} systemId={systemId} manufacturerId={manufacturerId} />
+          <UnknownsSummary facts={allFacts} />
 
           <WorkspaceSection title="Identity & description" status={identityStatus}
             statusLabel={identityNeeds > 0 ? `${identityNeeds} need${identityNeeds === 1 ? 's' : ''} you` : 'confirmed'} defaultOpen>
@@ -206,12 +210,21 @@ export function SystemWorkspaceShell({
             <RelationshipsSection systemId={systemId} manufacturerId={manufacturerId} ownSystems={ownSystems} />
           </WorkspaceSection>
 
-          <WorkspaceSection title="Applications & installation" statusLabel={sourceDocumentId ? 'not yet extracted' : 'no source document linked'}>
+          <WorkspaceSection
+            title="Applications & installation"
+            status={applicationFacts.length > 0 ? (needsCountFor(applicationFacts) > 0 ? 'warn' : 'ok') : 'empty'}
+            statusLabel={
+              applicationFacts.length > 0
+                ? `${applicationFacts.length} fact${applicationFacts.length === 1 ? '' : 's'}`
+                : sourceDocumentId ? 'not yet extracted' : 'no source document linked'
+            }
+          >
             <ApplicationsSection
               manufacturerId={manufacturerId}
               manufacturerName={manufacturerName}
               stagedSystemId={systemId}
               sourceDocumentId={sourceDocumentId}
+              facts={applicationFacts}
             />
           </WorkspaceSection>
         </div>

@@ -46,6 +46,39 @@ export type SourceDocumentRow = {
   public_url: string | null
 }
 
+// knowledge_assertions (migration 065) — the keystone table the knowledge
+// parser, system-identity parser and Company Knowledge panel all write to,
+// but which nothing read back into the generator until now (design doc
+// addendum 3 follow-up: "the write side shipped, the read side didn't").
+export type KnowledgeAssertionRow = {
+  id: string
+  staged_system_id: string | null // NULL = company-wide, inherited onto every system (§9.2)
+  subject_kind: string
+  subject_local_id: string | null
+  predicate: string
+  object_kind: string
+  object_value: unknown
+  claim_type: string
+  origin: string
+  epistemic_status: string
+  answer_policy: string | null
+  confidence: number | null
+  verified_by: string | null
+  verified_at: string | null
+  reviewer_notes: string | null
+  created_at: string
+}
+
+export type AssertionEvidenceRow = {
+  assertion_id: string
+  source_kind: string
+  source_document_id: string | null
+  page_start: number | null
+  page_end: number | null
+  locator: string | null
+  quote: string | null
+}
+
 export type CanonicalProfile = {
   id: string
   profile_name: string | null
@@ -116,6 +149,15 @@ export type CanonicalSystemBundle = {
    * design doc addendum 3 §C6 "per-document-type JSON-LD summaries"). Empty
    * pre-067 or before the knowledge parser has run for a document. */
   documentSummaries: Map<string, { summary: string; generatedAt: string | null }>
+  /** This system's own assertions PLUS this manufacturer's company-wide
+   * ones (staged_system_id IS NULL) — everything the knowledge parser,
+   * system-identity parser and Company Knowledge panel have written that
+   * belongs on this card. Excludes 'superseded' rows (historical, not
+   * current — reachable only via supersedes_assertion_id, not as a live
+   * fact). Empty pre-065. */
+  knowledgeAssertions: KnowledgeAssertionRow[]
+  /** assertion_id -> its evidence rows (assertion_evidence, migration 065). */
+  assertionEvidence: Map<string, AssertionEvidenceRow[]>
 }
 
 export async function fetchCanonicalSystemBundle(
@@ -250,6 +292,53 @@ export async function fetchCanonicalSystemBundle(
       // pre-067 environments — ai_summary column not present yet
     }
 
+    // Isolated, separately-caught (not the shared Promise.all) so a pre-065
+    // environment — knowledge_assertions doesn't exist yet — degrades to
+    // "no assertions" rather than failing the whole bundle fetch.
+    let knowledgeAssertions: KnowledgeAssertionRow[] = []
+    const assertionEvidence = new Map<string, AssertionEvidenceRow[]>()
+    try {
+      const { data } = await supabase
+        .from('knowledge_assertions')
+        .select(
+          `id, staged_system_id, subject_kind, subject_local_id, predicate, object_kind,
+           object_value, claim_type, origin, epistemic_status, answer_policy, confidence,
+           verified_by, verified_at, reviewer_notes, created_at`,
+        )
+        .or(`staged_system_id.eq.${systemId},and(staged_system_id.is.null,manufacturer_id.eq.${manufacturer.id})`)
+        .neq('epistemic_status', 'superseded')
+        .order('sort_order', { ascending: true })
+      knowledgeAssertions = (data ?? []) as KnowledgeAssertionRow[]
+
+      if (knowledgeAssertions.length > 0) {
+        const assertionIds = knowledgeAssertions.map((a) => a.id)
+        const { data: evidenceRows } = await supabase
+          .from('assertion_evidence')
+          .select('assertion_id, source_kind, source_document_id, page_start, page_end, locator, quote')
+          .in('assertion_id', assertionIds)
+        const rows = (evidenceRows ?? []) as AssertionEvidenceRow[]
+        for (const e of rows) {
+          const list = assertionEvidence.get(e.assertion_id) ?? []
+          list.push(e)
+          assertionEvidence.set(e.assertion_id, list)
+        }
+        // assertion_evidence can reference documents system_sources/
+        // parser_field_evidence didn't already pull in above.
+        const newDocIds = Array.from(new Set(
+          rows.map((e) => e.source_document_id).filter((id): id is string => !!id && !sourceDocuments.has(id)),
+        ))
+        if (newDocIds.length > 0) {
+          const { data: moreDocs } = await supabase
+            .from('source_documents')
+            .select('id, document_name, document_type, document_date, public_url')
+            .in('id', newDocIds)
+          for (const d of (moreDocs ?? []) as SourceDocumentRow[]) sourceDocuments.set(d.id, d)
+        }
+      }
+    } catch {
+      // pre-065 environments — knowledge_assertions table not present yet
+    }
+
     return {
       system: system as CanonicalSystemBundle['system'],
       manufacturer: manufacturer as CanonicalSystemBundle['manufacturer'],
@@ -262,6 +351,8 @@ export async function fetchCanonicalSystemBundle(
       systemSources,
       sourceDocuments,
       documentSummaries,
+      knowledgeAssertions,
+      assertionEvidence,
     }
   } catch {
     return null // missing env/tables — caller 404s rather than crashing

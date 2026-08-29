@@ -19,6 +19,8 @@ import {
   queryTermFor,
   resolveAnswerPolicy,
   trustLevelFor,
+  SUPPRESSED_FROM_READING_SURFACE,
+  type AnswerPolicy,
   type AssertionOrigin,
   type ClaimType,
   type EpistemicStatus,
@@ -26,6 +28,7 @@ import {
 import type {
   AtomicAssertion,
   Assertion,
+  EvidenceReference,
   KnowledgeGap,
   KnowledgeObject,
   RetrievalDocument,
@@ -43,7 +46,7 @@ const STUDIO_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildq
 // become facts, and what kind of fact each one is. Extend this array as new
 // columns come online; never synthesize a fact for a column not listed here.
 
-export type WorkspaceUiSection = 'identity' | 'attributes' | 'documents'
+export type WorkspaceUiSection = 'identity' | 'attributes' | 'documents' | 'applications'
 
 export type FieldDescriptor = {
   fieldName: string
@@ -93,6 +96,32 @@ export const NOT_YET_EXTRACTED_COVERAGE: Record<string, string> = {
   certification: 'not_yet_captured — no certification data model yet',
   standards: 'not_yet_captured — no standards data model yet',
   environmentalConstraints: 'not_yet_captured — no environmental-envelope data model yet',
+}
+
+// Which NOT_YET_EXTRACTED_COVERAGE key becomes actually-covered once at
+// least one knowledge_assertions row of the matching claim_type exists for
+// this system. compatibility/incompatibility are deliberately absent —
+// those come from system_relationships (the Relationships panel), a
+// separate table this generator doesn't read yet; they stay unconditionally
+// "not yet captured" until that's wired too.
+const COVERAGE_CLAIM_TYPES: Partial<Record<keyof typeof NOT_YET_EXTRACTED_COVERAGE, ClaimType[]>> = {
+  installationMethods: ['installation_method'],
+  fixingRequirements: ['installation_requirement'],
+  applications: ['application'],
+  certification: ['certification'],
+  standards: ['regulatory_relationship'],
+  environmentalConstraints: ['environmental_constraint'],
+}
+
+export function buildCoverage(atomics: AtomicAssertion[]): Record<string, string> {
+  const present = new Set(atomics.map((a) => a['bq:claimType']))
+  const coverage: Record<string, string> = {}
+  for (const [key, note] of Object.entries(NOT_YET_EXTRACTED_COVERAGE)) {
+    const claimTypes = COVERAGE_CLAIM_TYPES[key as keyof typeof NOT_YET_EXTRACTED_COVERAGE]
+    const nowCovered = claimTypes?.some((ct) => present.has(ct)) ?? false
+    if (!nowCovered) coverage[key] = note
+  }
+  return coverage
 }
 
 // ─── Status resolution ──────────────────────────────────────────────────────
@@ -235,6 +264,186 @@ function buildDescriptorFact(
   }
 
   return { compact, atomic }
+}
+
+// ─── knowledge_assertions → facts ───────────────────────────────────────────
+// The read side the knowledge parser, system-identity parser and Company
+// Knowledge panel never had: everything those write into knowledge_assertions
+// (installation methods, fixing requirements, applications, performance
+// claims, company-wide policy answers…) turned into the same compact/atomic
+// fact pairs buildDescriptorFact produces for typed staged_systems columns.
+// A company-level row (staged_system_id NULL) is inherited onto every one of
+// the manufacturer's cards — its subject is the manufacturer, not this system,
+// same as design doc §9.2's "verify once, verified everywhere".
+//
+// No filtering by epistemic_status here: 'disputed'/'unknown' rows still get
+// a compact+atomic pair (matching buildDescriptorFact's own behaviour) —
+// SUPPRESSED_FROM_READING_SURFACE governs render-time value display, not
+// whether a fact is present in these provenance arrays; every atomic fact
+// carries its own status and answerPolicy alongside, never a bare value.
+
+export function humanizePredicate(predicate: string): string {
+  return predicate
+    .replace(/^bq:/, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .replace(/^./, (c) => c.toUpperCase())
+}
+
+function buildKnowledgeAssertionFacts(bundle: CanonicalSystemBundle, inputs: FactInputs): BuiltFact[] {
+  const out: BuiltFact[] = []
+
+  for (const row of bundle.knowledgeAssertions) {
+    const factId = nextFactId(bundle, inputs.factCounter)
+    const status = row.epistemic_status as EpistemicStatus
+    const trustLevel = trustLevelFor(status)
+    const claimType = row.claim_type as ClaimType
+    const answerPolicy = (row.answer_policy as AnswerPolicy | null) ?? resolveAnswerPolicy(status, claimType)
+    const isCompanyLevel = row.staged_system_id === null
+
+    const objectValue = row.object_value
+    const valuePart = objectValue && typeof objectValue === 'object' && 'value' in (objectValue as Record<string, unknown>)
+      ? (objectValue as Record<string, unknown>).value
+      : objectValue
+    const condition = objectValue && typeof objectValue === 'object' && 'condition' in (objectValue as Record<string, unknown>)
+      ? ((objectValue as Record<string, unknown>).condition as string | null)
+      : null
+    const valueText = valuePart == null ? '' : String(valuePart)
+
+    const evidenceRows = bundle.assertionEvidence.get(row.id) ?? []
+    const primaryEvidence = evidenceRows[0]
+    const sourceDoc = primaryEvidence?.source_document_id ? bundle.sourceDocuments.get(primaryEvidence.source_document_id) : undefined
+
+    const label = humanizePredicate(row.predicate)
+    const isVerified = status === 'manufacturer_verified' || status === 'manufacturer_corrected'
+
+    const evidence: EvidenceReference[] = evidenceRows.length
+      ? evidenceRows.map((e) => ({
+          '@type': 'bq:EvidenceReference' as const,
+          ...(e.source_document_id && bundle.sourceDocuments.has(e.source_document_id)
+            ? { 'bq:document': { '@id': `#doc-${e.source_document_id}` } } : {}),
+          ...(e.page_start != null ? { 'bq:pageStart': e.page_start } : {}),
+          ...(e.page_end != null ? { 'bq:pageEnd': e.page_end } : {}),
+          ...(e.locator ? { 'bq:locator': e.locator } : {}),
+          ...(e.quote ? { 'bq:quote': e.quote } : {}),
+        }))
+      : isVerified
+        ? [{ '@type': 'bq:EvidenceReference' as const, 'bq:sourceKind': 'manufacturer_statement' as const }]
+        : []
+
+    const compact: Assertion = {
+      '@id': factId,
+      '@type': ['bq:Assertion', 'prov:Entity'],
+      'bq:subject': { '@id': isCompanyLevel ? inputs.manufacturerUrl : inputs.systemUrl },
+      'bq:predicate': row.predicate,
+      'bq:objectValue': objectValue,
+      'bq:origin': (row.origin as AssertionOrigin) ?? 'document_extracted',
+      'bq:epistemicStatus': status,
+      'bq:trustLevel': trustLevel,
+      ...(row.confidence != null ? { 'bq:confidence': row.confidence } : {}),
+      'bq:assertedAt': row.created_at,
+      ...(row.verified_at ? { 'bq:verifiedAt': row.verified_at } : {}),
+      ...(isVerified ? { 'bq:verifiedBy': { name: bundle.manufacturer.name } } : {}),
+      ...(evidence.length ? { 'bq:evidence': evidence } : {}),
+    }
+
+    const retrievalText =
+      `${inputs.subjectName} (${bundle.manufacturer.name}). ` +
+      (isCompanyLevel ? 'Company-wide policy — ' : '') +
+      `${label}: ${valueText}.` +
+      (condition ? ` ${condition}` : '') +
+      (isVerified ? ' Manufacturer verified.'
+        : status === 'buildquote_checked' ? ' Checked by BuildQuote against the source document.'
+        : SUPPRESSED_FROM_READING_SURFACE.has(status) ? ''
+        : ' Extracted by BuildQuote; not yet reviewed — cite as an extraction, not a manufacturer statement.') +
+      (sourceDoc ? ` Source: ${sourceDoc.document_name}${primaryEvidence?.page_start ? `, page ${primaryEvidence.page_start}` : ''}.` : '')
+
+    const atomic: AtomicAssertion = {
+      '@id': `${STUDIO_ORIGIN}/id/assertion/${bundle.system.slug}-${String(inputs.factCounter.n).padStart(3, '0')}`,
+      '@type': 'bq:AtomicAssertion',
+      'bq:system': { '@id': inputs.systemUrl },
+      'bq:manufacturer': { '@id': inputs.manufacturerUrl },
+      'bq:subject': inputs.subjectName,
+      'bq:claim': `${label}: ${valueText}.${condition ? ` ${condition}` : ''}`,
+      'bq:claimType': claimType,
+      'bq:value': objectValue,
+      'bq:epistemicStatus': status,
+      'bq:trustLevel': trustLevel,
+      'bq:answerPolicy': answerPolicy,
+      ...(condition ? { 'bq:conditions': [condition] } : {}),
+      ...(isCompanyLevel ? { 'bq:appliesTo': { scope: 'company-wide, inherited from manufacturer policy' } } : {}),
+      ...(sourceDoc || row.verified_at
+        ? {
+            'bq:sourceSummary': {
+              documentName: sourceDoc?.document_name ?? 'Manufacturer statement',
+              page: primaryEvidence?.page_start ?? null,
+              verifiedBy: isVerified ? bundle.manufacturer.name : null,
+              verifiedAt: row.verified_at,
+            },
+          }
+        : {}),
+      'bq:retrievalText': retrievalText,
+      'bq:canonicalAssertion': { '@id': factId },
+    }
+
+    out.push({ compact, atomic })
+  }
+
+  return out
+}
+
+// ─── knowledge_assertions → workspace view models ──────────────────────────
+// The System Workspace's Applications & installation section (§7.3) needs a
+// plain view model, not full JSON-LD — this is the same data
+// buildKnowledgeAssertionFacts() turns into JSON-LD facts, mapped instead
+// into the FactViewModel shape the workspace's FactRow component already
+// renders for identity/attribute facts (components/workspace/factViewModel.ts,
+// kept import-free of this server-only module by design — the page loader
+// does the actual shaping into that shared type).
+
+export type ApplicationFactSource = {
+  predicate: string
+  claimType: ClaimType
+  label: string
+  value: string
+  rawValue: unknown
+  origin: AssertionOrigin
+  epistemicStatus: EpistemicStatus
+  sourceDocumentId: string | null
+  sourcePageNumber: number | null
+  sourceLine: string | null
+  isCompanyLevel: boolean
+}
+
+export function buildApplicationFacts(bundle: CanonicalSystemBundle): ApplicationFactSource[] {
+  return bundle.knowledgeAssertions.map((row) => {
+    const evidenceRows = bundle.assertionEvidence.get(row.id) ?? []
+    const primary = evidenceRows[0]
+    const sourceDoc = primary?.source_document_id ? bundle.sourceDocuments.get(primary.source_document_id) : undefined
+    const objectValue = row.object_value
+    const valuePart = objectValue && typeof objectValue === 'object' && 'value' in (objectValue as Record<string, unknown>)
+      ? (objectValue as Record<string, unknown>).value
+      : objectValue
+    const value = valuePart == null ? '' : String(valuePart)
+
+    return {
+      predicate: row.predicate,
+      claimType: row.claim_type as ClaimType,
+      label: humanizePredicate(row.predicate),
+      value,
+      rawValue: objectValue,
+      origin: (row.origin as AssertionOrigin) ?? 'document_extracted',
+      epistemicStatus: row.epistemic_status as EpistemicStatus,
+      sourceDocumentId: primary?.source_document_id ?? null,
+      sourcePageNumber: primary?.page_start ?? null,
+      sourceLine: sourceDoc
+        ? `${sourceDoc.document_name}${primary?.page_start ? `, page ${primary.page_start}` : ''}`
+        : row.staged_system_id === null
+          ? 'Company knowledge — manufacturer-supplied'
+          : null,
+      isCompanyLevel: row.staged_system_id === null,
+    }
+  })
 }
 
 // ─── Documents ──────────────────────────────────────────────────────────────
@@ -416,6 +625,14 @@ export function buildFactsForCanonicalSystem(bundle: CanonicalSystemBundle): Sys
     })
   }
 
+  // knowledge_assertions — installation/application/performance facts from
+  // the knowledge parser + system-identity parser, and company-wide answers
+  // from the Company Knowledge panel, inherited onto this system.
+  for (const built of buildKnowledgeAssertionFacts(bundle, inputs)) {
+    compactAssertions.push(built.compact)
+    atomicAssertions.push(built.atomic)
+  }
+
   const retrievalDocuments = [
     ...buildRetrievalDocuments(bundle.system.slug, bundle.system.name, bundle.manufacturer.name, atomicAssertions),
     ...buildDocumentSummaryRetrievalDocuments(bundle, bundle.system.slug, bundle.system.name, bundle.manufacturer.name),
@@ -505,7 +722,7 @@ export function buildFromCanonical(bundle: CanonicalSystemBundle): KnowledgeObje
       'bq:isStocked': c.is_stocked ?? true,
     })),
     'bq:documentedBy': buildDocumentedBy(bundle),
-    'bq:coverage': NOT_YET_EXTRACTED_COVERAGE,
+    'bq:coverage': buildCoverage(atomicAssertions),
     'bq:knowledgeGaps': knowledgeGaps,
     'bq:assertions': compactAssertions,
     'bq:knowledge': {

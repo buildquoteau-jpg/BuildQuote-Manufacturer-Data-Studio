@@ -10,6 +10,8 @@ import { WORKSPACE_REDESIGN_ENABLED } from '@/lib/workspaceRedesignFlag'
 import { fetchCanonicalSystemBundle } from '@/lib/knowledge/fetchCanonicalKnowledgeData'
 import {
   buildFactsForCanonicalSystem,
+  buildApplicationFacts,
+  buildCoverage,
   SYSTEM_FIELD_DESCRIPTORS,
   NOT_YET_EXTRACTED_COVERAGE,
 } from '@/lib/knowledge/buildSystemKnowledge'
@@ -67,10 +69,12 @@ export default async function SystemWorkspacePage({
   // yet, or an environment where the canonical bundle can't be assembled,
   // just shows an empty facts list rather than breaking the page.
   let allFacts: FactViewModel[] = []
+  let applicationFacts: FactViewModel[] = []
+  let coverage: Record<string, string> = NOT_YET_EXTRACTED_COVERAGE
   if (system.slug) {
     const bundle = await fetchCanonicalSystemBundle(result.manufacturer.slug, system.slug)
     if (bundle) {
-      const { compactAssertions } = buildFactsForCanonicalSystem(bundle)
+      const { compactAssertions, atomicAssertions } = buildFactsForCanonicalSystem(bundle)
       const byPredicate = new Map(compactAssertions.map((a) => [a['bq:predicate'], a]))
       allFacts = SYSTEM_FIELD_DESCRIPTORS
         .map((d) => {
@@ -96,6 +100,26 @@ export default async function SystemWorkspacePage({
           } satisfies FactViewModel
         })
         .filter((f): f is FactViewModel => f !== null)
+
+      // knowledge_assertions facts (installation/application/performance +
+      // inherited company-wide answers) — the read side the knowledge
+      // parser and Company Knowledge panel never had until now.
+      applicationFacts = buildApplicationFacts(bundle).map((f) => ({
+        predicate: f.predicate,
+        claimType: f.claimType,
+        uiSection: 'applications',
+        label: f.label,
+        value: f.value,
+        rawValue: f.rawValue,
+        origin: f.origin,
+        epistemicStatus: f.epistemicStatus,
+        sourceLine: f.sourceLine,
+        sourceDocumentId: f.sourceDocumentId,
+        sourcePageNumber: f.sourcePageNumber,
+        isCompanyLevel: f.isCompanyLevel,
+      } satisfies FactViewModel))
+      allFacts = [...allFacts, ...applicationFacts]
+      coverage = buildCoverage(atomicAssertions)
     }
   }
 
@@ -117,8 +141,9 @@ export default async function SystemWorkspacePage({
         previewSystem={previewSystem}
         identityFacts={identityFacts}
         attributeFacts={attributeFacts}
+        applicationFacts={applicationFacts}
         allFacts={allFacts}
-        coverage={NOT_YET_EXTRACTED_COVERAGE}
+        coverage={coverage}
         customAttributes={system.custom_technical_attributes ?? []}
         profiles={system.profiles}
         colours={system.colours}
