@@ -10,6 +10,7 @@
 
 import { useRef, useState } from 'react'
 import { requestDocumentUploadUrl, recordDocumentUpload, type SystemSourceRole } from '@/lib/studio-manufacturer/document-actions'
+import { CsvImportPanel } from './CsvImportPanel'
 
 export type LinkedDocument = {
   documentId: string
@@ -32,6 +33,7 @@ const ACCEPTED_MIME = new Set([
   'text/csv',
 ])
 const ACCEPT_ATTR = '.pdf,.xlsx,.xls,.csv'
+const ACCEPTED_LABEL = 'PDF, Excel (.xlsx/.xls) or CSV'
 const MAX_BYTES = 50 * 1024 * 1024
 
 export function DocumentsStep({
@@ -107,11 +109,15 @@ export function DocumentsStep({
 
   return (
     <div>
-      <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.7rem', lineHeight: 1.55 }}>
-        Upload this system&apos;s source documents — install guides, design
-        guides, technical data sheets, sustainability credentials. This is
-        what the AI pass reads to build the System Card and its
-        machine-readable knowledge object.
+      <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.4rem', lineHeight: 1.55 }}>
+        This is the information that will be reflected in the final System Card — include everything
+        relevant: profiles, variants, specs, UOM, pack sizes, components, accessories, colours,
+        finishes, technical attributes, sustainability credentials, applications, non-compatibility
+        warnings, BAL rating, acoustic ratings, slip ratings, moisture ratings, span tables and
+        anything else that describes this system.
+      </p>
+      <p style={{ fontSize: '0.74rem', color: 'var(--ds-text-faint)', margin: '0 0 0.7rem' }}>
+        Files accepted: {ACCEPTED_LABEL} — up to 50 MB each.
       </p>
 
       <div style={{ marginBottom: '0.6rem' }}>
@@ -178,6 +184,8 @@ export function DocumentsStep({
           ))}
         </div>
       )}
+
+      <CsvImportPanel systemId={systemId} manufacturerId={manufacturerId} />
     </div>
   )
 }

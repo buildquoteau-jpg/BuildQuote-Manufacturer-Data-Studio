@@ -4,9 +4,11 @@ import { getStudioSession } from '@/lib/studio-auth/session'
 import { resolveWorkspaceContextFromRequest, getManufacturerVerificationData } from '@/lib/studio-manufacturer/workspace'
 import { getManufacturerLinkLibrary } from '@/lib/studio-manufacturer/link-library'
 import { listSystemDocuments } from '@/lib/studio-manufacturer/document-actions'
+import { getManufacturerAssets } from '@/lib/studio-manufacturer/assets'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { SetupFlowClient } from './SetupFlowClient'
 import type { LinkedDocument } from './DocumentsStep'
+import type { SlotAsset } from '@/app/(protected)/manufacturer/profile/AssetSlotControl'
 
 // The guided setup flow (design doc addendum 3 §C5) — where a manufacturer
 // lands right after adding a system on the Systems list. Distinct from
@@ -55,6 +57,14 @@ export default async function SystemSetupPage({
         .map((d) => ({ documentId: d.documentId ?? d.systemSourceId, role: d.role, label: d.label, documentName: d.documentName }))
     : []
 
+  const assetsResult = await getManufacturerAssets(ctx.manufacturerId)
+  const pickerAssets: SlotAsset[] = assetsResult.ok
+    ? assetsResult.assets.map((a) => ({
+        id: a.id, assetType: a.assetType, title: a.title,
+        displayUrl: a.displayUrl, publicUrl: a.publicUrl, approvedForPublication: a.approvedForPublication,
+      }))
+    : []
+
   return (
     <StudioShell role="manufacturer" subtitle={`${result.manufacturer.name} · System setup`}>
       <div style={{ marginBottom: '1.2rem' }}>
@@ -74,6 +84,8 @@ export default async function SystemSetupPage({
           systemName={system.name}
           manufacturerId={ctx.manufacturerId}
           initialGallery={system.gallery_images ?? []}
+          initialColours={system.colours}
+          pickerAssets={pickerAssets}
           initialCustomDocumentLinks={system.custom_document_links ?? []}
           linkLibrary={linkLibrary}
           initialDocuments={initialDocuments}

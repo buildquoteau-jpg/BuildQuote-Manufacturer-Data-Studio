@@ -1,19 +1,23 @@
 'use client'
 
-// The guided setup flow itself (design doc addendum 3 §C5) — four stacked
-// steps (photos, links, documents, "set up my System Card"), each showing
-// done/not-done, ending in a congratulations state that hands off to Verify
-// systems. No jargon: a manufacturer never sees "assertion", "chunk", or
-// "auto_chain" here — those are what's happening underneath.
+// The guided setup flow itself (design doc addendum 3 §C5). Five stacked
+// steps (photos, colour swatches, links, source documents, "set up my
+// System Card"), each showing done/not-done, ending in a congratulations
+// state that hands off to Verify systems. No jargon: a manufacturer never
+// sees "assertion", "chunk", or "auto_chain" here — those are what's
+// happening underneath.
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { upsertFieldVerification } from '@/lib/studio-manufacturer/verification-actions'
 import { PhotosStep, type GalleryPhoto } from './PhotosStep'
 import { LinksSection } from '@/components/workspace/LinksSection'
+import { ColoursSection } from '@/components/workspace/ColoursSection'
 import { DocumentsStep, type LinkedDocument } from './DocumentsStep'
 import type { CustomDocumentLink } from '@/lib/studio-manufacturer/verification-actions'
 import type { LinkLibraryEntry } from '@/lib/studio-manufacturer/link-library'
+import type { VerificationSystemColour } from '@/lib/studio-manufacturer/workspace'
+import type { SlotAsset } from '@/app/(protected)/manufacturer/profile/AssetSlotControl'
 
 type ExtractionState = 'idle' | 'starting' | 'running' | 'done' | 'error'
 
@@ -51,6 +55,8 @@ export function SetupFlowClient({
   systemName,
   manufacturerId,
   initialGallery,
+  initialColours,
+  pickerAssets,
   initialCustomDocumentLinks,
   linkLibrary,
   initialDocuments,
@@ -59,12 +65,15 @@ export function SetupFlowClient({
   systemName: string
   manufacturerId: string
   initialGallery: GalleryPhoto[]
+  initialColours: VerificationSystemColour[]
+  pickerAssets: SlotAsset[]
   initialCustomDocumentLinks: CustomDocumentLink[]
   linkLibrary: LinkLibraryEntry[]
   initialDocuments: LinkedDocument[]
 }) {
   const [name, setName] = useState(systemName)
   const [photosCount, setPhotosCount] = useState(initialGallery.length)
+  const [coloursCount, setColoursCount] = useState(initialColours.length)
   const [linksCount, setLinksCount] = useState(initialCustomDocumentLinks.length)
   const [documentsCount, setDocumentsCount] = useState(initialDocuments.length)
 
@@ -143,7 +152,7 @@ export function SetupFlowClient({
         <div style={{ fontSize: '1.6rem', marginBottom: '0.4rem' }}>🎉</div>
         <h2 style={{ fontSize: '1.05rem', margin: '0 0 0.4rem', color: '#166534' }}>Congratulations!</h2>
         <p style={{ fontSize: '0.85rem', color: '#166534', margin: '0 0 1rem', lineHeight: 1.6 }}>
-          Your photos, links and System Card for <strong>{name}</strong> are loaded. The AI has read
+          Your photos, colours, links and System Card for <strong>{name}</strong> are loaded. The AI has read
           your documents and filled in what it could find — take a look and confirm it in Verify systems.
         </p>
         <Link href={`/manufacturer/workspace/${systemId}`} style={{
@@ -176,11 +185,32 @@ export function SetupFlowClient({
         />
       </div>
 
-      <StepShell n={1} title="Photos" done={photosCount > 0} doneLabel={`${photosCount} photo${photosCount === 1 ? '' : 's'}`}>
+      <StepShell n={1} title="Upload photos" done={photosCount > 0} doneLabel={`${photosCount} photo${photosCount === 1 ? '' : 's'}`}>
         <PhotosStep systemId={systemId} manufacturerId={manufacturerId} initialGallery={initialGallery} onChanged={setPhotosCount} />
       </StepShell>
 
-      <StepShell n={2} title="Links & resources" done={linksCount > 0} doneLabel={`${linksCount} link${linksCount === 1 ? '' : 's'}`}>
+      <StepShell
+        n={2}
+        title="Upload colour swatches"
+        done={coloursCount > 0}
+        doneLabel={coloursCount > 0 ? `${coloursCount} colour${coloursCount === 1 ? '' : 's'}` : 'skip if not applicable'}
+      >
+        <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.7rem', lineHeight: 1.55 }}>
+          Add a swatch image for each colour or finish this system comes in — skip this step if it
+          doesn&apos;t apply to this product.
+        </p>
+        <ColoursSection
+          systemId={systemId} manufacturerId={manufacturerId}
+          initialColours={initialColours} pickerAssets={pickerAssets}
+          onChanged={setColoursCount}
+        />
+      </StepShell>
+
+      <StepShell n={3} title="Links & resources" done={linksCount > 0} doneLabel={`${linksCount} link${linksCount === 1 ? '' : 's'}`}>
+        <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-faint)', margin: '0 0 0.6rem' }}>
+          Recommended: 1–5 links per system. Choose the information most important to communicate
+          to the end user — your own product page and a couple of the best web guides, not everything.
+        </p>
         <LinksSection
           systemId={systemId} manufacturerId={manufacturerId}
           initialLinks={initialCustomDocumentLinks} linkLibrary={linkLibrary}
@@ -188,20 +218,20 @@ export function SetupFlowClient({
         />
       </StepShell>
 
-      <StepShell n={3} title="Source documents" done={documentsCount > 0} doneLabel={`${documentsCount} document${documentsCount === 1 ? '' : 's'}`}>
+      <StepShell n={4} title="Upload system source documents" done={documentsCount > 0} doneLabel={`${documentsCount} document${documentsCount === 1 ? '' : 's'}`}>
         <DocumentsStep systemId={systemId} manufacturerId={manufacturerId} initialDocuments={initialDocuments} onChanged={setDocumentsCount} />
       </StepShell>
 
       <StepShell
-        n={4}
-        title="Set up my System Card"
+        n={5}
+        title="Create System Card"
         done={false}
         doneLabel={documentsCount === 0 ? 'upload a document first' : 'ready'}
       >
         <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.8rem', lineHeight: 1.55 }}>
-          We&apos;ll read the documents you uploaded and fill in the System Card fields and the
-          machine-readable knowledge object for {name || 'this system'} — automatically, no admin needed.
-          You&apos;ll confirm everything afterwards in Verify systems.
+          We&apos;ll initiate the pipeline and read the system source documents you uploaded for{' '}
+          {name || 'this system'}. Once complete, you&apos;ll be prompted to verify all extracted
+          information in Verify systems.
         </p>
         <button
           type="button"
@@ -214,7 +244,7 @@ export function SetupFlowClient({
             cursor: canExtract ? 'pointer' : 'default',
           }}
         >
-          {extraction === 'starting' ? 'Starting…' : extraction === 'running' ? 'Working…' : 'Set up my System Card'}
+          {extraction === 'starting' ? 'Starting…' : extraction === 'running' ? 'Working…' : 'Create System Card'}
         </button>
 
         {extraction === 'running' && (

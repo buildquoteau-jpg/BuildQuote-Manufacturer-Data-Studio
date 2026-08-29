@@ -15,12 +15,13 @@ import { AssetSlotControl, type SlotAsset, type SlotPick } from '@/app/(protecte
 import type { VerificationSystemColour } from '@/lib/studio-manufacturer/workspace'
 
 export function ColoursSection({
-  systemId, manufacturerId, initialColours, pickerAssets,
+  systemId, manufacturerId, initialColours, pickerAssets, onChanged,
 }: {
   systemId: string
   manufacturerId: string
   initialColours: VerificationSystemColour[]
   pickerAssets: SlotAsset[]
+  onChanged?: (count: number) => void
 }) {
   const [colours, setColours] = useState(initialColours)
   const [pending, startTransition] = useTransition()
@@ -53,7 +54,11 @@ export function ColoursSection({
   }
 
   function remove(id: string) {
-    setColours((prev) => prev.filter((c) => c.id !== id))
+    setColours((prev) => {
+      const next = prev.filter((c) => c.id !== id)
+      onChanged?.(next.length)
+      return next
+    })
     startTransition(async () => {
       const res = await removeColour(id, systemId, manufacturerId)
       if (!res.ok) setError(res.error)
@@ -65,7 +70,11 @@ export function ColoursSection({
     startTransition(async () => {
       const res = await addMissingColour(systemId, manufacturerId, { colour_name: newName.trim() })
       if (!res.ok) { setError(res.error); return }
-      setColours((prev) => [...prev, { id: res.id, colour_name: newName.trim(), sku_suffix: null, image_url: null, image_asset_id: null, is_stocked: true }])
+      setColours((prev) => {
+        const next = [...prev, { id: res.id, colour_name: newName.trim(), sku_suffix: null, image_url: null, image_asset_id: null, is_stocked: true }]
+        onChanged?.(next.length)
+        return next
+      })
       setNewName('')
       setAdding(false)
     })

@@ -4,9 +4,9 @@
 // 10 photos, uploaded directly (not picked from the flat asset pool), each
 // one scoped to this system from the moment it's uploaded
 // (manufacturer_assets.staged_system_id / asset_role='gallery' — migration
-// 065). Deliberately simple: add/remove only. Reordering and focal-point
-// crop already exist in the richer Images section of the Verify-systems
-// Workspace — this step's job is just getting the photos in quickly.
+// 065). Each photo gets the same left/right + zoom position editor the hero
+// image has (CmsEditor.tsx's CropAdjuster) — full drag-and-drop reordering
+// stays a later follow-up.
 
 import { useRef, useState } from 'react'
 import {
@@ -15,12 +15,20 @@ import {
 } from '@/lib/studio-manufacturer/asset-actions'
 import { setGalleryImages } from '@/lib/studio-manufacturer/verification-actions'
 
-export type GalleryPhoto = { asset_id?: string | null; url: string; alt: string }
+export type GalleryPhoto = {
+  asset_id?: string | null
+  url: string
+  alt: string
+  position_x?: number | null
+  position_y?: number | null
+  zoom?: number | null
+}
 
 const ACCEPTED_IMAGE_MIME = new Set([
   'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif',
 ])
 const ACCEPT_ATTR = '.png,.jpg,.jpeg,.webp,.gif,.avif'
+const ACCEPTED_LABEL = 'PNG, JPG, WebP, GIF or AVIF'
 const MAX_BYTES = 25 * 1024 * 1024
 const MAX_PHOTOS = 10
 
@@ -39,6 +47,7 @@ export function PhotosStep({
   const [busyMsg, setBusyMsg] = useState('')
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const remaining = MAX_PHOTOS - gallery.length
@@ -80,7 +89,7 @@ export function PhotosStep({
         })
         if (!record.ok) { errors.push(`${file.name}: ${record.error}`); continue }
 
-        next.push({ asset_id: record.assetId, url: record.publicUrl ?? record.displayUrl ?? '', alt: title })
+        next.push({ asset_id: record.assetId, url: record.publicUrl ?? record.displayUrl ?? '', alt: title, position_x: 50, position_y: 50, zoom: 1 })
       } catch (err) {
         errors.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`)
       }
@@ -104,15 +113,29 @@ export function PhotosStep({
     const next = gallery.filter((_, j) => j !== i)
     setGallery(next)
     onChanged?.(next.length)
+    if (editingIndex === i) setEditingIndex(null)
     setGalleryImages(systemId, manufacturerId, next).then((res) => {
+      if (!res.ok) setError(res.error)
+    })
+  }
+
+  function updatePosition(i: number, x: number, y: number, zoom: number) {
+    setGallery((prev) => prev.map((g, j) => (j === i ? { ...g, position_x: x, position_y: y, zoom } : g)))
+  }
+
+  function savePosition(i: number) {
+    setGalleryImages(systemId, manufacturerId, gallery).then((res) => {
       if (!res.ok) setError(res.error)
     })
   }
 
   return (
     <div>
-      <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.7rem', lineHeight: 1.55 }}>
+      <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.3rem', lineHeight: 1.55 }}>
         Upload your best {MAX_PHOTOS} photos of this system — product shots, in-situ installs, close-ups of finishes.
+      </p>
+      <p style={{ fontSize: '0.74rem', color: 'var(--ds-text-faint)', margin: '0 0 0.7rem' }}>
+        Files accepted: {ACCEPTED_LABEL} — up to 25 MB each.
       </p>
 
       <div
@@ -154,7 +177,27 @@ export function PhotosStep({
           {gallery.map((g, i) => (
             <div key={i} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1 / 1', background: '#f1f5f9' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={g.url} alt={g.alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <img
+                src={g.url} alt={g.alt}
+                style={{
+                  width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                  objectPosition: `${g.position_x ?? 50}% ${g.position_y ?? 50}%`,
+                  transform: (g.zoom ?? 1) > 1 ? `scale(${g.zoom})` : undefined,
+                  transformOrigin: `${g.position_x ?? 50}% ${g.position_y ?? 50}%`,
+                }}
+              />
+              <button
+                type="button"
+                aria-label="Adjust position and zoom"
+                onClick={() => setEditingIndex(editingIndex === i ? null : i)}
+                style={{
+                  position: 'absolute', bottom: 4, left: 4, width: 22, height: 22, borderRadius: '50%',
+                  border: 'none', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '0.75rem',
+                  cursor: 'pointer', lineHeight: 1,
+                }}
+              >
+                ⤢
+              </button>
               <button
                 type="button"
                 aria-label="Remove photo"
@@ -171,6 +214,85 @@ export function PhotosStep({
           ))}
         </div>
       )}
+
+      {editingIndex != null && gallery[editingIndex] && (
+        <PositionEditor
+          photo={gallery[editingIndex]}
+          onChange={(x, y, zoom) => updatePosition(editingIndex, x, y, zoom)}
+          onSave={() => savePosition(editingIndex)}
+          onClose={() => setEditingIndex(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function PositionEditor({
+  photo, onChange, onSave, onClose,
+}: {
+  photo: GalleryPhoto
+  onChange: (x: number, y: number, zoom: number) => void
+  onSave: () => void
+  onClose: () => void
+}) {
+  const x = photo.position_x ?? 50
+  const y = photo.position_y ?? 50
+  const zoom = photo.zoom ?? 1
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function handleSave() {
+    setSaving(true)
+    await onSave()
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1500)
+  }
+
+  return (
+    <div style={{ borderRadius: 8, border: '1px solid var(--ds-border)', padding: '10px 12px', marginTop: '0.8rem' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Position and zoom</span>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button
+            type="button" onClick={handleSave} disabled={saving}
+            style={{
+              fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              background: saved ? '#16a34a' : '#185D7A', color: '#fff',
+            }}
+          >
+            {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
+          </button>
+          <button type="button" onClick={onClose} style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '4px', border: '1px solid var(--ds-border)', background: 'transparent', cursor: 'pointer' }}>
+            Close
+          </button>
+        </div>
+      </div>
+      <div style={{ width: '100%', maxWidth: '360px', height: '180px', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px', background: '#f0f4f8' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo.url} alt="crop preview" style={{
+          width: '100%', height: '100%', objectFit: 'cover',
+          objectPosition: `${x}% ${y}%`, display: 'block',
+          transform: zoom > 1 ? `scale(${zoom})` : undefined,
+          transformOrigin: `${x}% ${y}%`,
+        }} />
+      </div>
+      <label style={{ display: 'block', fontSize: '11px', color: 'var(--ds-text-muted)', marginBottom: '6px' }}>
+        Horizontal — {x === 50 ? 'centre' : x < 50 ? `left ${x}%` : `right ${x}%`}
+        <input type="range" min={0} max={100} value={x} onChange={(e) => onChange(Number(e.target.value), y, zoom)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
+      <label style={{ display: 'block', fontSize: '11px', color: 'var(--ds-text-muted)', marginBottom: '6px' }}>
+        Vertical — {y === 50 ? 'centre' : y < 50 ? `top ${y}%` : `bottom ${y}%`}
+        <input type="range" min={0} max={100} value={y} onChange={(e) => onChange(x, Number(e.target.value), zoom)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
+      <label style={{ display: 'block', fontSize: '11px', color: 'var(--ds-text-muted)' }}>
+        Zoom — {zoom <= 1 ? 'fit (100%)' : `${Math.round(zoom * 100)}%`}
+        <input type="range" min={100} max={300} step={5} value={Math.round(zoom * 100)}
+          onChange={(e) => onChange(x, y, Number(e.target.value) / 100)}
+          style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: '#185D7A' }} />
+      </label>
     </div>
   )
 }

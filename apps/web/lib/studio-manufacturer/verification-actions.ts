@@ -254,10 +254,11 @@ export async function setGalleryImages(
   images: {
     asset_id?: string | null; url: string; og_jpg_url?: string | null; alt: string; caption?: string | null
     // Focal-point position as a percentage (0-100), same semantics as the
-    // hero's hero_image_position_x/y — a click-to-set anchor point, not a
-    // full crop tool (design doc addendum 3 §C5 step 1 / §C6). Stored
-    // in-array since gallery_images is jsonb — no migration needed.
-    position_x?: number | null; position_y?: number | null
+    // hero's hero_image_position_x/y, plus an optional zoom (1.0-3.0, same
+    // semantics as hero_image_zoom) — the "left/right and zoom editor" per
+    // design doc addendum 3 §C5 step 1 / §C6. Stored in-array since
+    // gallery_images is jsonb — no migration needed.
+    position_x?: number | null; position_y?: number | null; zoom?: number | null
   }[],
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
