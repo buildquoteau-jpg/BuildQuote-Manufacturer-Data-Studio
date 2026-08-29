@@ -16,6 +16,7 @@ export type SystemRow = {
   id: string
   name: string
   photosCount: number
+  linksCount: number
   documentsCount: number
   setupStatus: 'not_started' | 'in_progress' | 'ready_to_verify'
 }
@@ -71,6 +72,7 @@ export function SystemsTable({
         <div style={rowGridStyle('header')}>
           <div style={headerCellStyle}>System name</div>
           <div style={headerCellStyle}>Photos</div>
+          <div style={headerCellStyle}>Links</div>
           <div style={headerCellStyle}>Documents</div>
           <div style={headerCellStyle}>Setup status</div>
           <div style={headerCellStyle} />
@@ -94,6 +96,7 @@ export function SystemsTable({
                 style={nameInputStyle}
               />
               <div style={cellStyle}>{r.photosCount}</div>
+              <div style={cellStyle}>{r.linksCount}</div>
               <div style={cellStyle}>{r.documentsCount}</div>
               <div style={cellStyle}>
                 <span style={{
@@ -124,6 +127,7 @@ export function SystemsTable({
           <div style={cellStyle} />
           <div style={cellStyle} />
           <div style={cellStyle} />
+          <div style={cellStyle} />
           <div style={{ ...cellStyle, justifyContent: 'flex-end' }}>
             <button
               type="button"
@@ -148,7 +152,7 @@ export function SystemsTable({
 function rowGridStyle(kind: 'header' | 'body'): React.CSSProperties {
   return {
     display: 'grid',
-    gridTemplateColumns: 'minmax(160px, 2fr) 90px 110px 160px 100px',
+    gridTemplateColumns: 'minmax(160px, 2fr) 80px 80px 110px 160px 100px',
     alignItems: 'center',
     gap: '0.6rem',
     padding: kind === 'header' ? '0.55rem 0.9rem' : '0.4rem 0.9rem',

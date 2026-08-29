@@ -18,10 +18,11 @@ export const dynamic = 'force-dynamic'
 
 function setupStatus(s: {
   photosCount: number
+  linksCount: number
   documentsCount: number
   hasStructuredData: boolean
 }): SystemRow['setupStatus'] {
-  if (s.photosCount === 0 && s.documentsCount === 0) return 'not_started'
+  if (s.photosCount === 0 && s.linksCount === 0 && s.documentsCount === 0) return 'not_started'
   if (s.hasStructuredData) return 'ready_to_verify'
   return 'in_progress'
 }
@@ -77,6 +78,7 @@ export default async function SystemsListPage() {
 
   const rows: SystemRow[] = systems.map((s) => {
     const photosCount = s.gallery_images?.length ?? 0
+    const linksCount = s.custom_document_links?.length ?? 0
     const documentsCount = documentCounts.get(s.id) ?? 0
     const hasStructuredData =
       s.profiles.length > 0 || s.colours.length > 0 || s.components.length > 0 ||
@@ -85,8 +87,9 @@ export default async function SystemsListPage() {
       id: s.id,
       name: s.name,
       photosCount,
+      linksCount,
       documentsCount,
-      setupStatus: setupStatus({ photosCount, documentsCount, hasStructuredData }),
+      setupStatus: setupStatus({ photosCount, linksCount, documentsCount, hasStructuredData }),
     }
   })
 
