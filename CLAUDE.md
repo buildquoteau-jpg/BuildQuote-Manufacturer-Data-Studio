@@ -116,3 +116,31 @@ Step-by-step guides for common pipeline tasks live in `docs/skills/`:
 - Parser inserts go through the `insert_parser_output_plan_v1` RPC (service role only) — see migrations 012/057/058
 - Every pipeline script run (worker-spawned or manual terminal) reports to `pipeline_jobs` via `scripts/lib/pipeline_report.py`; the app's Pipeline page (Funnel tab) shows live progress, stalled jobs, and failures
 - The parser saves its plan to `.local/parser-dry-run/plan_*.json` BEFORE inserting; a failed insert is retried with `--from-plan` (no re-extraction)
+
+## Known Gaps / Next Work
+
+- **The self-serve pipeline is not actually self-serve yet — the worker has no persistent home.**
+  Confirmed 2026-08-30. `/manufacturer/systems/[id]/setup` → "Set up my System Card" →
+  `POST /api/manufacturer/systems/[systemId]/initiate-extraction` all run fine on the deployed
+  site and correctly write rows to `pipeline_jobs` (Docling, then — via the `auto_chain` flag —
+  the identity parser and knowledge parser once chunks exist). **But nothing ever consumes those
+  jobs unless `scripts/worker/pipeline_worker.py` is manually running.** That script is a
+  standalone Python polling loop (`python scripts/worker/pipeline_worker.py`, reads real creds
+  from `.env.local`) — it cannot live inside the Vercel deployment (serverless functions are
+  request/response and time-limited, not long-lived pollers). No `render.yaml`/`fly.toml`/
+  `Procfile`/systemd unit exists anywhere in this repo — the only way a job has ever been
+  processed is Melia manually starting the worker on her own machine.
+  **Practical effect:** a real manufacturer using the website today can submit a system for
+  extraction, and it will sit at `pending` in `pipeline_jobs` indefinitely unless Melia's local
+  worker happens to be running at that moment. Self-serve submission works; self-serve
+  *completion* does not, until the worker has a persistent host.
+  **The fix is infrastructure, not code:** deploy `pipeline_worker.py` to something always-on —
+  a small VM, a Render/Railway/Fly.io background worker, or a systemd service — polling
+  continuously with the same script, no rewrite needed. Check the Pipeline page (Funnel tab)
+  for jobs stuck at "pending"/"stalled" as the symptom of this gap.
+  **Also unverified, flagged not silently assumed:** the new `run_system_identity_parser.py`
+  (System Card field extraction from uploaded documents) has never been run against a real
+  document in this sandbox (no live credentials) — its "never inserts a new system row, only
+  updates the known `staged_system_id`" safety property was verified by reading the code, not
+  by watching it execute. Treat the first real test run as exactly that, and check the result
+  carefully.
