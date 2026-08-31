@@ -309,6 +309,7 @@ markdown underneath.
       "sku": "BQCM-VJB-3000",
       "description": "Factory-grooved PVC jointing batten — sets the 8mm shadow-line joint.",
       "category": "Jointing",
+      "bq:sellUnit": "lm",
       "bq:componentRole": "required"
     },
     {
@@ -321,6 +322,7 @@ markdown underneath.
       "sku": "BQCM-ST-3000",
       "description": "Base-of-wall aluminium starter track — sets the first board level and provides the required drainage gap.",
       "category": "Trim",
+      "bq:sellUnit": "lm",
       "bq:componentRole": "required"
     }
   ],

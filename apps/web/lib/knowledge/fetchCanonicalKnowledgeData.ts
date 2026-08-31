@@ -118,6 +118,7 @@ export type CanonicalComponent = {
   sku: string | null
   description: string | null
   category: string | null
+  uom: string | null
 }
 
 export type CanonicalColour = {
@@ -224,7 +225,7 @@ export async function fetchCanonicalSystemBundle(
         .order('sort_order'),
       supabase
         .from('staged_system_components')
-        .select('role, staged_components(id, name, sku, description, category)')
+        .select('role, staged_components(id, name, sku, description, category, uom)')
         .eq('staged_system_id', systemId),
       supabase
         .from('field_verifications')

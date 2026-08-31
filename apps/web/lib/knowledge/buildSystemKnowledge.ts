@@ -770,6 +770,7 @@ export function buildFromCanonical(bundle: CanonicalSystemBundle): KnowledgeObje
           ...(c.sku ? { sku: c.sku } : {}),
           ...(c.description ? { description: c.description } : {}),
           ...(c.category ? { category: c.category } : {}),
+          ...(c.uom ? { 'bq:sellUnit': c.uom } : {}),
           'bq:componentRole': c.role,
         }
         ;(byRole[c.role] ?? (byRole[c.role] = [])).push(node)
