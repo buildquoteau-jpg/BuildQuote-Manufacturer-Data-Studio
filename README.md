@@ -339,6 +339,24 @@ guides: [`docs/skills/`](docs/skills/), starting with
 
 ---
 
+## A note for developers using this GitHub repository
+
+In this current build, the ingestion pipeline — Docling extraction, then the
+AI parser — is started manually, by running
+[`scripts/worker/pipeline_worker.py`](scripts/worker/pipeline_worker.py) on
+my own home PC. It's a standalone Python polling loop, not a deployed
+service: a manufacturer can submit a system through the self-serve UI at any
+time, but nothing processes that submission unless this GitHub repository's
+worker script happens to be running.
+
+If you're adapting this GitHub repository for a single manufacturer's own
+use, it's worth giving that worker an always-on host rather than relying on
+a manually-started local process — for example a background worker on
+**Fly.io**, Render, or Railway, or a plain systemd service on a small VM. No
+rewrite is needed; the same script just needs somewhere permanent to run.
+
+---
+
 ## Open source status
 
 - **License:** not yet chosen — **TODO**. Until a `LICENSE` file with a real
