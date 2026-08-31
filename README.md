@@ -25,6 +25,17 @@ AI-assisted pipeline that turns manufacturer PDFs, brochures, and spec sheets in
 
 ---
 
+## About the creator
+
+This was built solo by **Melia Knapp**, after seeing — from inside a local
+hardware supply store — how scattered building-product information is for
+everyone who needs it, manufacturers included. The full story of why this
+exists and why it's open source is in the
+[Build-Quote-Library-and-Request-for-Quotation README](https://github.com/buildquoteau-jpg/Build-Quote-Library-and-Request-for-Quotation#about-the-creator).
+Questions or feedback: [meliagrace@gmail.com](mailto:meliagrace@gmail.com).
+
+---
+
 ## Who this is for
 
 ### Manufacturers — self-serve onboarding
