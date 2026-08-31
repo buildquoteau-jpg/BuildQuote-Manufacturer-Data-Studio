@@ -1,0 +1,10 @@
+# Dependencies for scripts/worker/pipeline_worker.py running the lightweight
+# job types only (parser, knowledge_parser) -- NOT the docling job type,
+# which needs the separate, much heavier .venv-docling environment
+# documented in docs/skills/catalogue-parser-pipeline.md and is expected to
+# keep running locally for now. See CLAUDE.md "Known Gaps / Next Work" for
+# the full context.
+requests>=2.31
+python-dotenv>=1.0
+boto3>=1.34
+anthropic>=0.40
