@@ -66,7 +66,7 @@ Run this once in PowerShell to create a scheduled task:
 $action = New-ScheduledTaskAction `
     -Execute "python" `
     -Argument "scripts\backup\backup_supabase.py" `
-    -WorkingDirectory "C:\Users\melia\OneDrive\Desktop\BuildQuote repositries\buildquote-data-studio"
+    -WorkingDirectory "C:\path\to\buildquote-data-studio"
 
 $trigger = New-ScheduledTaskTrigger -Daily -At "02:00"
 
