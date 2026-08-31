@@ -361,9 +361,10 @@ use and want to sort out that deployment together, feel free to reach out —
 
 ## Open source status
 
-- **License:** not yet chosen — **TODO**. Until a `LICENSE` file with a real
-  license is added, standard copyright applies (no reuse rights are granted). See
-  [`LICENSE`](LICENSE).
+- **License:** [MIT](LICENSE) — free to use, modify, and redistribute, no
+  restrictions. If you do use any part of this, a heads-up to
+  [meliagrace@gmail.com](mailto:meliagrace@gmail.com) is genuinely
+  appreciated (not required — see [`LICENSE`](LICENSE)).
 - **Secrets:** `.env.example` in this repo is placeholder-only (checked before
   writing this README). A full manual secrets audit across git history is still
   recommended before treating any repo as safe for public forks to build from —
