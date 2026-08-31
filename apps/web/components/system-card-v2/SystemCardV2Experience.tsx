@@ -27,7 +27,8 @@ import { AttributesInfoReveal, hasAttributesContent } from './AttributesInfoReve
 import { GuidesResourcesReveal } from './GuidesResourcesReveal'
 import { ComponentsAccessoriesReveal } from './ComponentsAccessoriesReveal'
 import { StockistsReveal } from './StockistsReveal'
-import { AskAboutProductReveal } from './AskAboutProductReveal'
+// AskAboutProductReveal: unused while the "Ask about this product" section
+// below is commented out — see the note at the top of AskAboutProductReveal.tsx.
 import { MaterialsListBar } from './MaterialsListBar'
 import type { ShoppingListItem } from './useMaterialsListRows'
 import { shareSystemCard } from './shareCard'
@@ -125,7 +126,7 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], o
 
               <SystemCardSection
                 id="attributes"
-                title="Attributes and Information"
+                title="Applications"
                 open={openSections.has('attributes')}
                 onToggle={() => toggleSection('attributes')}
                 disabled={!hasAttributesContent(system)}
@@ -133,6 +134,9 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], o
                 <AttributesInfoReveal system={system} />
               </SystemCardSection>
 
+              {/* "Ask about this product" hidden from the card by request
+                  (2026-08-31) — see the note at the top of
+                  AskAboutProductReveal.tsx. Uncomment to bring it back.
               {system.manufacturer?.slug && (
                 <SystemCardSection
                   id="ask"
@@ -143,6 +147,7 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], o
                   <AskAboutProductReveal manufacturerSlug={system.manufacturer.slug} systemSlug={system.slug} />
                 </SystemCardSection>
               )}
+              */}
 
               <SystemCardSection
                 id="guides"

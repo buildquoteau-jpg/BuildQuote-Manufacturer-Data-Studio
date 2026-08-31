@@ -13,6 +13,13 @@
 // ask route actually found — each button only appears when its URL is real.
 // The gap-logged note says a knowledge gap was recorded, never that the AI
 // was "trained" on this question.
+//
+// NOT CURRENTLY WIRED IN: hidden from the card by request (2026-08-31) — the
+// "Ask about this product" section is commented out at its call site in
+// SystemCardV2Experience.tsx (both here and the byte-for-byte copy in
+// BuildQuote v6). This component and its /api/knowledge/ask route are
+// untouched and fully functional; a future developer can re-add the section
+// by uncommenting the <SystemCardSection id="ask"> block there.
 
 import { useState } from 'react'
 import styles from './RevealsBody.module.css'

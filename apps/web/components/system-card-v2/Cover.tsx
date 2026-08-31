@@ -239,11 +239,20 @@ export function Cover({ manufacturer, system }: {
               const realIndex = i + 1
               const isLastCell = i === smallImages.length - 1
               const showPill = isLastCell && images.length > 5
+              // The grid has 4 small cells (2 cols x 2 rows) sized for a
+              // full 5-photo set. With fewer small photos than that, default
+              // row-major auto-placement leaves the bottom row (or a whole
+              // column) empty -- a visible gap in the collage. Stretch the
+              // photos we do have to fill the space instead: 2 small photos
+              // each take a full-height column; with 3, the first takes a
+              // full-height column and the remaining two stack normally.
+              const spanFullHeight = smallImages.length === 2 || (smallImages.length === 3 && i === 0)
               return (
                 <button
                   key={img.url}
                   type="button"
                   className={styles.heroGridSmall}
+                  style={spanFullHeight ? { gridRow: '1 / 3' } : undefined}
                   onClick={() => openLightbox(showPill ? 0 : realIndex)}
                   aria-label={showPill ? 'Show all photos' : `Open ${img.alt} full screen`}
                 >
