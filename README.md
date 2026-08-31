@@ -1,5 +1,12 @@
 # BuildQuote Data Studio
 
+![Next.js](https://img.shields.io/badge/Next.js-black?logo=next.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres-3ECF8E?logo=supabase&logoColor=white)
+![Cloudflare R2](https://img.shields.io/badge/Cloudflare_R2-storage-F38020?logo=cloudflare&logoColor=white)
+![Anthropic Claude](https://img.shields.io/badge/Anthropic_Claude-AI_parser-191919?logo=anthropic&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
+
 AI-assisted pipeline that turns manufacturer PDFs, brochures, and spec sheets into
 **verified, structured, machine-readable product data** — published as public
 "System Cards" and a `knowledge.jsonld` object any site or agent can consume.
@@ -40,7 +47,8 @@ Questions or feedback: [meliagrace@gmail.com](mailto:meliagrace@gmail.com).
 
 ### Manufacturers — self-serve onboarding
 - Upload a product guide/PDF/brochure/photos and get an AI-drafted System Card back
-  for review instead of manual data entry (`/manufacturer/systems`).
+  for review instead of manual data entry
+  ([`/manufacturer/systems`](https://studio.buildquote.com.au/manufacturer/systems)).
 - Verify AI-suggested fields against the source before anything goes live —
   nothing publishes without human sign-off.
 - **Just this piece:** run the ingestion pipeline standalone to turn your own PDF
@@ -58,8 +66,10 @@ Questions or feedback: [meliagrace@gmail.com](mailto:meliagrace@gmail.com).
 
 ### Suppliers / builders — indirect beneficiaries
 - Don't interact with this repo directly. What gets verified and published here is
-  what shows up as the public System Card on buildquote.com.au/library and what
-  suppliers list against in the Trade Desk.
+  what shows up as the public System Card on
+  [buildquote.com.au/library](https://buildquote.com.au/library) and what
+  suppliers list against in the
+  [Trade Desk](https://search.buildquote.com.au).
 
 ---
 
