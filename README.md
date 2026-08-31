@@ -349,11 +349,13 @@ service: a manufacturer can submit a system through the self-serve UI at any
 time, but nothing processes that submission unless this GitHub repository's
 worker script happens to be running.
 
-If you're adapting this GitHub repository for a single manufacturer's own
-use, it's worth giving that worker an always-on host rather than relying on
-a manually-started local process — for example a background worker on
-**Fly.io**, Render, or Railway, or a plain systemd service on a small VM. No
-rewrite is needed; the same script just needs somewhere permanent to run.
+The plan is to run it as its own always-on service container on
+**Railway**, rather than relying on a manually-started local process — I
+just haven't set that integration up yet. It's a genuinely easy change (no
+rewrite needed, the same script just needs somewhere permanent to run), so
+if you're adapting this GitHub repository for a single manufacturer's own
+use and want to sort out that deployment together, feel free to reach out —
+[meliagrace@gmail.com](mailto:meliagrace@gmail.com).
 
 ---
 
