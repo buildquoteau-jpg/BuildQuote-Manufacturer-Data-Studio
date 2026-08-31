@@ -14,6 +14,8 @@ AI-assisted pipeline that turns manufacturer PDFs, brochures, and spec sheets in
 > **Core principle:** AI can suggest manufacturer data, but only human-verified data
 > gets published.
 
+<img src="docs/screenshots/system-card-collage.png" alt="A published System Card — photo collage, colours/profiles picker, and materials list — this is what human-verified Data Studio output looks like once it reaches buildquote.com.au/library" width="900">
+
 ---
 
 ## Why fork this
@@ -168,6 +170,8 @@ app (the **Agent Ready** tab), this shows as two panels: the JSON-LD itself
 as a collapsible "layered reveal" tree — top level open, deeper nesting
 folded away until clicked — and the same data again as human-readable
 markdown underneath.
+
+<img src="docs/screenshots/agent-ready-signoff.png" alt="The Agent Ready tab — the JSON-LD blob and its human-readable markdown twin, side by side, with a manufacturer sign-off box underneath" width="900">
 
 <details>
 <summary><strong>JSON-LD (the actual blob)</strong> — layered reveal</summary>
