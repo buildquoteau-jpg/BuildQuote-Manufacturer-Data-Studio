@@ -24,6 +24,9 @@ out/
 build/
 *.tsbuildinfo
 
+# Test output
+coverage/
+
 # OS
 .DS_Store
 Thumbs.db
