@@ -33,13 +33,18 @@ export type CardEventInsert = {
   device_hash?: string | null
 }
 
-/** Insert an event; swallows every error (missing migration, bad env…). */
+/**
+ * Insert an event. Never throws (missing migration, bad env…) — analytics must
+ * never break a card — but failures are logged, since silently empty analytics
+ * are indistinguishable from "nobody viewed the card".
+ */
 export async function recordCardEvent(event: CardEventInsert): Promise<void> {
   try {
     const supabase = createStudioServiceClient()
-    await supabase.from('card_events').insert(event)
-  } catch {
-    // fail silent — analytics must never break a card
+    const { error } = await supabase.from('card_events').insert(event)
+    if (error) console.error(`[recordCardEvent] ${event.event_type} for ${event.card_slug} not recorded:`, error.message)
+  } catch (err) {
+    console.error(`[recordCardEvent] ${event.event_type} for ${event.card_slug} not recorded:`, err)
   }
 }
 
@@ -50,21 +55,29 @@ export async function resolveCardBySlugs(
 ): Promise<{ manufacturerId: string; cardId: string | null } | null> {
   try {
     const supabase = createStudioServiceClient()
-    const { data: manufacturer } = await supabase
+    const { data: manufacturer, error: mfrError } = await supabase
       .from('data_studio_manufacturers')
       .select('id')
       .eq('slug', manufacturerSlug)
-      .single()
+      .maybeSingle()
+    if (mfrError) {
+      console.error(`[resolveCardBySlugs] manufacturer "${manufacturerSlug}" lookup failed:`, mfrError.message)
+      return null
+    }
     if (!manufacturer) return null
-    const { data: card } = await supabase
+    const { data: card, error: cardError } = await supabase
       .from('staged_systems')
       .select('id')
       .eq('manufacturer_id', manufacturer.id)
       .eq('slug', cardSlug)
       .limit(1)
       .maybeSingle()
+    if (cardError) {
+      console.error(`[resolveCardBySlugs] card "${cardSlug}" lookup failed:`, cardError.message)
+    }
     return { manufacturerId: manufacturer.id, cardId: card?.id ?? null }
-  } catch {
+  } catch (err) {
+    console.error(`[resolveCardBySlugs] lookup failed for ${manufacturerSlug}/${cardSlug}:`, err)
     return null
   }
 }

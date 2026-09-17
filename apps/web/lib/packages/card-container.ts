@@ -134,14 +134,18 @@ export async function buildCardContainers(
   // Gather included sources for all cards in one query. Fails soft.
   let sourceRows: SourceRow[] = []
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('system_sources')
       .select('staged_system_id, role, label, url, source_document_id, sort_order')
       .in('staged_system_id', cardIds)
       .eq('include_in_container', true)
       .order('sort_order', { ascending: true })
+    // Fails soft — but a container published without its sources should be
+    // traceable to the query that failed, not look like "no sources ingested".
+    if (error) console.error('[buildCardContainers] could not load system_sources:', error.message)
     sourceRows = (data ?? []) as SourceRow[]
-  } catch {
+  } catch (err) {
+    console.error('[buildCardContainers] could not load system_sources:', err)
     sourceRows = []
   }
 
@@ -152,18 +156,20 @@ export async function buildCardContainers(
   const chunksByDoc = new Map<string, ChunkRow[]>()
   if (docIds.length > 0) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('document_chunks')
         .select('source_document_id, chunk_index, page_number, raw_text, docling_json')
         .in('source_document_id', docIds)
         .order('chunk_index', { ascending: true })
+      // No chunks — sources still listed in the manifest, just no text.
+      if (error) console.error('[buildCardContainers] could not load document_chunks:', error.message)
       for (const row of (data ?? []) as ChunkRow[]) {
         const list = chunksByDoc.get(row.source_document_id) ?? []
         list.push(row)
         chunksByDoc.set(row.source_document_id, list)
       }
-    } catch {
-      /* no chunks — sources still listed in the manifest, just no text */
+    } catch (err) {
+      console.error('[buildCardContainers] could not load document_chunks:', err)
     }
   }
 

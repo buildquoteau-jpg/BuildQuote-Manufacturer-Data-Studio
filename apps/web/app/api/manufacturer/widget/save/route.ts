@@ -27,11 +27,18 @@ export async function POST(req: NextRequest) {
     // Validate systems against staged_systems and collect production IDs in order
     let productionSystemIds: string[] = []
     if (system_ids.length > 0) {
-      const { data: systems } = await sb
+      const { data: systems, error: systemsErr } = await sb
         .from('staged_systems')
         .select('id, verification_status, production_system_id')
         .eq('manufacturer_id', manufacturer_id)
         .in('id', system_ids)
+
+      // Without this list every system looks unapproved below, which would
+      // report a validation failure for what is really a database error.
+      if (systemsErr) {
+        console.error('Widget save: could not load staged systems:', systemsErr)
+        return NextResponse.json({ error: 'Could not verify the selected systems' }, { status: 500 })
+      }
 
       const rows = (systems ?? []) as { id: string; verification_status: string | null; production_system_id: string | null }[]
 
@@ -53,22 +60,30 @@ export async function POST(req: NextRequest) {
 
     if (!resolvedWidgetId) {
       // Bridge data-studio manufacturer → production manufacturer via slug
-      const { data: mfrRow } = await sb
+      const { data: mfrRow, error: mfrErr } = await sb
         .from('data_studio_manufacturers')
         .select('slug')
         .eq('id', manufacturer_id)
-        .single()
+        .maybeSingle()
 
+      if (mfrErr) {
+        console.error('Widget save: could not load manufacturer:', mfrErr)
+        return NextResponse.json({ error: 'Could not load the manufacturer' }, { status: 500 })
+      }
       if (!mfrRow?.slug) {
         return NextResponse.json({ error: 'Manufacturer not found' }, { status: 404 })
       }
 
-      const { data: prodMfr } = await prod
+      const { data: prodMfr, error: prodMfrErr } = await prod
         .from('manufacturers')
         .select('id')
         .eq('slug', (mfrRow as any).slug)
-        .single()
+        .maybeSingle()
 
+      if (prodMfrErr) {
+        console.error('Widget save: could not load production manufacturer:', prodMfrErr)
+        return NextResponse.json({ error: 'Could not load the manufacturer' }, { status: 500 })
+      }
       if (!prodMfr) {
         return NextResponse.json({ error: 'Manufacturer not yet published to production' }, { status: 400 })
       }
@@ -85,17 +100,29 @@ export async function POST(req: NextRequest) {
       }
       resolvedWidgetId = (newWidget as any).id
     } else if (button_config && typeof button_config === 'object') {
-      await prod
+      const { error: configErr } = await prod
         .from('embed_widgets')
         .update({ widget_button_config: button_config })
         .eq('id', resolvedWidgetId)
+
+      if (configErr) {
+        console.error('Widget button config update error:', configErr)
+        return NextResponse.json({ error: 'Failed to save the widget button settings' }, { status: 500 })
+      }
     }
 
-    // Replace widget systems: delete existing, insert new with production system IDs
-    await prod
+    // Replace widget systems: delete existing, insert new with production
+    // system IDs. A failed delete followed by the insert below would leave the
+    // widget with both the old and the new set.
+    const { error: clearErr } = await prod
       .from('embed_widget_systems')
       .delete()
       .eq('embed_widget_id', resolvedWidgetId)
+
+    if (clearErr) {
+      console.error('Widget systems clear error:', clearErr)
+      return NextResponse.json({ error: 'Failed to save systems' }, { status: 500 })
+    }
 
     if (productionSystemIds.length > 0) {
       const { error: insertErr } = await prod
