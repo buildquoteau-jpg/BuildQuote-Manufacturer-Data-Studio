@@ -5,8 +5,34 @@ import { createProductionServiceClient } from '@/lib/supabase/production'
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? 'rfq@buildquote.com.au'
 
+const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;.]+(?:\.[^\s@<>,;.]+)+$/
+const MAX_SELECTED_ITEMS = 200
+
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY)
+}
+
+// Everything below is public, unauthenticated input rendered into HTML emails.
+// Escape before interpolation so a submission can't inject markup or links.
+function esc(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function escItems(items: SelectedItem[]): SelectedItem[] {
+  return items.map((item) => ({
+    ...item,
+    label: esc(item.label),
+    dims: esc(item.dims),
+    uom: esc(item.uom),
+    product_code: item.product_code == null ? null : esc(item.product_code),
+    details: esc(item.details),
+    quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 1,
+  }))
 }
 
 function formatDate(date: Date = new Date()): string {
@@ -50,10 +76,19 @@ function buildManufacturerEmailHtml(opts: {
   message: string | null
   items: SelectedItem[]
 }): string {
-  const { manufacturerName, systemName, customerName, customerEmail, customerPhone, postcode, projectType, timeline, message, items } = opts
+  const manufacturerName = esc(opts.manufacturerName)
+  const systemName       = esc(opts.systemName)
+  const customerName     = esc(opts.customerName)
+  const customerEmail    = esc(opts.customerEmail)
+  const customerPhone    = opts.customerPhone ? esc(opts.customerPhone) : null
+  const postcode         = opts.postcode ? esc(opts.postcode) : null
+  const projectType      = opts.projectType ? esc(opts.projectType) : null
+  const timeline         = opts.timeline ? esc(opts.timeline) : null
+  const message          = opts.message ? esc(opts.message) : null
+  const items            = escItems(opts.items)
 
   const dateStr   = formatDate()
-  const shortRef  = `QR-${dateStr}-${customerName.replace(/\s+/g, '').slice(0, 6).toUpperCase()}`
+  const shortRef  = `QR-${dateStr}-${opts.customerName.replace(/[^a-z0-9]/gi, '').slice(0, 6).toUpperCase()}`
   const mfrShort  = manufacturerName.substring(0, 42)
 
   const itemRows = items.map((item, i) => {
@@ -228,7 +263,11 @@ function buildCustomerConfirmationHtml(opts: {
   systemName: string
   items: SelectedItem[]
 }): string {
-  const { customerName, manufacturerName, manufacturerEmail, systemName, items } = opts
+  const customerName      = esc(opts.customerName)
+  const manufacturerName  = esc(opts.manufacturerName)
+  const manufacturerEmail = opts.manufacturerEmail ? esc(opts.manufacturerEmail) : null
+  const systemName        = esc(opts.systemName)
+  const items             = escItems(opts.items)
   const dateStr = formatDate()
 
   const itemRows = items.map((item, i) => {
@@ -344,6 +383,18 @@ export async function POST(req: NextRequest) {
 
     if (!token || !name || !email || !system_id) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // The customer address becomes the manufacturer email's Reply-To, so it has
+    // to be a single, well-formed address — no header-injecting whitespace.
+    if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
+      return NextResponse.json({ error: 'A valid email address is required' }, { status: 400 })
+    }
+    if (typeof name !== 'string' || name.trim().length === 0 || name.length > 200) {
+      return NextResponse.json({ error: 'A valid name is required' }, { status: 400 })
+    }
+    if (Array.isArray(selected_items) && selected_items.length > MAX_SELECTED_ITEMS) {
+      return NextResponse.json({ error: 'Too many selected items' }, { status: 400 })
     }
 
     const prod   = createProductionServiceClient()

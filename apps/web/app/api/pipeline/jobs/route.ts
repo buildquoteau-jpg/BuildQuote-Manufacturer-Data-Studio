@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Live feed for the pipeline funnel (2026-07-18 audit): one endpoint that
 // returns every recent pipeline_jobs row for a manufacturer — worker jobs AND
 // manual terminal runs reported via scripts/lib/pipeline_report.py (those may
@@ -15,8 +17,10 @@ export async function GET(req: NextRequest) {
   }
 
   const manufacturerId = req.nextUrl.searchParams.get('manufacturerId')
-  if (!manufacturerId) {
-    return NextResponse.json({ error: 'manufacturerId required' }, { status: 400 })
+  // Interpolated into a PostgREST `or` filter below — must be a plain UUID so
+  // it can never inject extra filter terms.
+  if (!manufacturerId || !UUID_RE.test(manufacturerId)) {
+    return NextResponse.json({ error: 'manufacturerId must be a UUID' }, { status: 400 })
   }
 
   const supabase = createStudioServiceClient()

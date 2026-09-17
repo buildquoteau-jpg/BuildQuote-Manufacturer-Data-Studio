@@ -88,10 +88,14 @@ const ROLE_OPTIONS: { value: WorkspaceLoginRole; label: string }[] = [
 
 function generatePassword(): string {
   // Readable temporary password: 3 lowercase + 4 digits + 3 lowercase, no ambiguous chars.
+  // Uses the CSPRNG — Math.random() is predictable and this value is a credential.
   const letters = 'abcdefghijkmnpqrstuvwxyz'
   const digits = '23456789'
-  const pick = (set: string, n: number) =>
-    Array.from({ length: n }, () => set[Math.floor(Math.random() * set.length)]).join('')
+  const pick = (set: string, n: number) => {
+    const bytes = new Uint32Array(n)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, (b) => set[b % set.length]).join('')
+  }
   return `${pick(letters, 3)}-${pick(digits, 4)}-${pick(letters, 3)}`
 }
 
