@@ -59,16 +59,20 @@ Currently the two main Australian building materials retailers in Australia are 
 I see building products as systems, comprised of a main profile, it's variants, colours, finishes, specifications, installation components, accessories and required installation tools.
 
 My Data Studio schema has been designed with Australian building materials, including the essential RELATIONSHIPS between components of a system, at its core.
-This schema enables identification of relationships across many thousands of building products. I'm super proud of it.
+This schema enables identification of relationships across many thousands of building products. I'm super proud of it. 
+In addition, I have added 6th drawer to the System Card. This drawer is invisible to the human, but full of rich data, ready for any agent to consume.
+
 If you read nothing else of this repository, please read this.
 https://github.com/buildquoteau-jpg/BuildQuote-Manufacturer-Data-Studio/blob/main/supabase/data_studio_schema.md
 
-buildquote.com.au/library — open to everyone, no account needed. Browse the demo product library and build a shopping list.
-buildquote.com.au/register — free, open self-serve signup for a Builder account. Sign up yourself to walk the full RFQ flow — upload a list, get it parsed, and send a real RFQ.
-search.buildquote.com.au (Trade Desk) https://search.buildquote.com.au/supplier/demo-supplier Email: buildquoteau@gmail.com Password: demo2026
-studio.buildquote.com.au (Data Studio) Email: demo@buildquote.com.au Password: demo2026 Sign in at /login https://studio.buildquote.com.au/login
-meliagrace@gmail.com for a demo login, or fork the repo and run it on your own infrastructure to try the full thing yourself.
-
+- [buildquote.com.au/library](https://buildquote.com.au/) — open to everyone, no account needed. Browse the demo product library and build a shopping list.
+- [[buildquote.com.au/register](https://buildquote.com.au/register)) — free, open self-serve signup for a Builder account. Sign up yourself to walk the full RFQ flow — upload a list, get it parsed, and send a real RFQ.
+- [[search.buildquote.com.au](https://search.buildquote.com.au/supplier/login)) (Trade Desk) https://search.buildquote.com.au/supplier/demo-supplier Email: buildquoteau@gmail.com Password: demo2026
+- [[studio.buildquote.com.au](https://studio.buildquote.com.au/login)) Data Studio Email: demo@buildquote.com.au Password: demo2026 Sign in at /login https://studio.buildquote.com.au/login
+- meliagrace@gmail.com for a demo or a chat
+- Fork the repo and run it on your own infrastructure to try the full thing yourself.
+- Please be quick to share this repository and my other two repositories with those that will understand its contents. I don't have the funds to keep it alive for long and I would love this work to be useful to someone somewhere, before it lives and dies on my own P.C.
+  
 
 ---
 
