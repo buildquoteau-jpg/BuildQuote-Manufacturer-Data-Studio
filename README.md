@@ -53,11 +53,13 @@ If you do put any part of this to use, I'd welcome hearing about it — feedback
 
 Try it live
 This isn't run as an open public service — it's a showcase of what's possible, built so other people and companies can see it, fork it, and run it themselves.
+
 What I've done differently...
 Currently the two main Australian building materials retailers in Australia are selling building products as individual product sku's. 
 I see building products as systems, comprised of a main profile, it's variants, colours, finishes, specifications, installation components, accessories and required installation tools.
-This schema has been designed with Australian building materials, including the essential RELATIONSHIPS at its core.
-This schema identifies relationships across many thousands of building products. I'm super proud of it.
+
+My Data Studio schema has been designed with Australian building materials, including the essential RELATIONSHIPS between components of a system, at its core.
+This schema enables identification of relationships across many thousands of building products. I'm super proud of it.
 If you read nothing else of this repository, please read this.
 https://github.com/buildquoteau-jpg/BuildQuote-Manufacturer-Data-Studio/blob/main/supabase/data_studio_schema.md
 
