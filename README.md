@@ -36,7 +36,6 @@ AI-assisted pipeline that turns manufacturer PDFs, brochures, and spec sheets in
 
 ## About the creator
 
-About the creator
 I spent a year working in administration at a local hardware supply store. Answering a customer enquiry — by phone, email, or in person — often meant drawing on several separate sources for the same product: a printed catalogue, the manufacturer's website, our point-of-sale system. Each held part of the picture.
 
 Australian building materials manufacturers reach the market through a wide mix of channels — websites, printed brochures, product packaging, QR codes, flyers, take-cards, sample boards, printed PDFs, and staff training. Each does its job well for its own purpose. What Data Studio aims to do is take that same information — wherever it currently lives — and format it into one consistent, human-readable and machine-readable structure that works across many categories of Australian building products.
