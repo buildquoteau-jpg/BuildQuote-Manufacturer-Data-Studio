@@ -36,19 +36,30 @@ AI-assisted pipeline that turns manufacturer PDFs, brochures, and spec sheets in
 
 ## About the creator
 
-This was built solo by **Melia Knapp**, after seeing — from inside a local
-hardware supply store — how scattered building-product information is for
-everyone who needs it, manufacturers included. The full story of why this
-exists and why it's open source is in the
-[Build-Quote-Library-and-Request-for-Quotation README](https://github.com/buildquoteau-jpg/Build-Quote-Library-and-Request-for-Quotation#about-the-creator).
-Questions or feedback: [meliagrace@gmail.com](mailto:meliagrace@gmail.com).
+About the creator
+I spent a year working in administration at a local hardware supply store. Answering a customer enquiry — by phone, email, or in person — often meant drawing on several separate sources for the same product: a printed catalogue, the manufacturer's website, our point-of-sale system. Each held part of the picture.
 
-**Want to try it live?** [studio.buildquote.com.au](https://studio.buildquote.com.au)
-isn't open self-serve — manufacturer accounts are created manually to keep a
-lid on the AI/processing costs the extraction pipeline can trigger if left
-open to the public. Email [meliagrace@gmail.com](mailto:meliagrace@gmail.com)
-for a demo login, or fork the repo and run it on your own infrastructure to
-try the full thing yourself.
+Australian building materials manufacturers reach the market through a wide mix of channels — websites, printed brochures, product packaging, QR codes, flyers, take-cards, sample boards, printed PDFs, and staff training. Each does its job well for its own purpose. What Data Studio aims to do is take that same information — wherever it currently lives — and format it into one consistent, human-readable and machine-readable structure that works across many categories of Australian building products.
+
+The result is a perfect mini-data unit. Verified by the manufacturer. Ready to be consumed across multiple channels, websites, social media, LLM's, AI agents. Ready for the new way in which product discovery will happen in 2027.
+
+The Data Studio platform is where manufacturers retain control of verifying their own data, the resulting data container is modular and portable, and — particularly with the machine-readable layer I've added most recently — AI agents can directly access verified, structured product data at scale.
+
+I'm releasing this openly so it can reach the people it was built for — manufacturers, suppliers, builders, and system developers working in related digital spaces. An individual business may adopt the full system or select the components of the code and architecture that align with, and enhance, the digital direction their own company is heading.
+
+If you do put any part of this to use, I'd welcome hearing about it — feedback from real-world use would be genuinely valuable.
+
+— Melia Knapp · meliagrace@gmail.com
+
+Try it live
+This isn't run as an open public service — it's a showcase of what's possible, built so other people and companies can see it, fork it, and run it themselves.
+
+buildquote.com.au/library — open to everyone, no account needed. Browse the demo product library and build a shopping list.
+buildquote.com.au/register — free, open self-serve signup for a Builder account. Sign up yourself to walk the full RFQ flow — upload a list, get it parsed, and send a real RFQ.
+search.buildquote.com.au (Trade Desk) https://search.buildquote.com.au/supplier/demo-supplier Email: buildquoteau@gmail.com Password: demo2026
+studio.buildquote.com.au (Data Studio) Email: demo@buildquote.com.au Password: demo2026 Sign in at /login https://studio.buildquote.com.au/login
+meliagrace@gmail.com for a demo login, or fork the repo and run it on your own infrastructure to try the full thing yourself.
+
 
 ---
 
