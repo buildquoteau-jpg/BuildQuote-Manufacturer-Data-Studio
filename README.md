@@ -73,11 +73,10 @@ https://github.com/buildquoteau-jpg/BuildQuote-Manufacturer-Data-Studio/blob/mai
 - Please be quick to share this repository and my other two repositories with those that will understand its contents. I don't have the funds to keep it alive for long and I would love this work to be useful to someone somewhere, before it lives and dies on my own P.C.
 - [[https://github.com/buildquoteau-jpg/BuildQuote-Supplier-Trade-Desk](https://github.com/buildquoteau-jpg/Build-Quote-Library-and-Request-for-Quotation))
 - [[(https://github.com/buildquoteau-jpg/BuildQuote-Supplier-Trade-Desk)](https://github.com/buildquoteau-jpg/BuildQuote-Supplier-Trade-Desk
-))
-  
-Cheers,
-Melia Knapp,
-Quedjinup, West Australia
+)) 
+- Cheers
+- Melia Knapp
+- Quedjinup, West Australia  
 ---
 
 ## Who this is for
