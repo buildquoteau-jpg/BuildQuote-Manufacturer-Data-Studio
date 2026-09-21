@@ -1,5 +1,8 @@
 # pipelines
 
+The old pipeline ran only on my P.C. using desktop Docling and my terminal to trigger the worker. In order to create the pipeline to run independently or cloud based I need to make some changes. You can see the SCRIPTS folder for more detail. The Pipeline needs some extra work should anyone actually ever want to use it to ingest manufacturer data on cloud run system.
+
+
 Extraction and processing pipeline modules for BuildQuote Data Studio.
 
 Each sub-folder represents a stage in the pipeline:
