@@ -108,6 +108,30 @@ https://github.com/buildquoteau-jpg/BuildQuote-Manufacturer-Data-Studio/blob/mai
   [Trade Desk](https://search.buildquote.com.au).
 
 ---
+### Under the Hood: 
+-The Relational Ingestion EngineUnlike standard PIMs that dump product text into unsearchable description fields, BuildQuote's database architecture is built from the ground up as a deterministic truth engine. Our shared Supabase backend breaks manufacturer information down into three strict layers: 
+- ┌─────────────────────────┐
+  │     staged_systems      │ ◄── Core product metadata (Name, Category, Brand)
+  └────────────┬────────────┘
+               │
+       ┌───────┴───────┐
+       ▼               ▼
+┌──────────────┐┌──────────────┐
+│  knowledge_  ││    system_   │
+│  assertions  ││relationships │
+└──────┬───────┘└──────┬───────┘
+       │               │
+       │ (Claims map)  │ (Ecosystem map)
+       ▼               ▼
+┌──────────────┐┌──────────────┐
+│  assertion_  ││  staged_     │ ◄── Essential components & required
+│   evidence   ││  components  │     installation accessories
+└──────────────┘└──────────────┘
+- How We Guarantee Agent Safety & Zero Hallucinations:
+- Explicit Claims Mapping (knowledge_assertions): We break installation guides down into atomic facts (e.g., subject: JH-Linea, predicate: bq:compatibleWith, object: Class3_Fastener).
+- Immutable Proof Traceability (assertion_evidence): Every single assertion is bound to its physical source context using fields for document_chunk_id, page_start, quote, and locator. If an AI agent recommends a product, it can cite the exact line and page of the manufacturer manual in real time.
+- Deterministic System Interceptors (system_relationships): We map how individual products interact within an assembly. The database natively tracks explicit relation types and links them to target_staged_system_id or target_external rules, allowing application logic to intercept cross-selling errors before they hit store shelves.
+- Epistemic Guardrails (epistemic_status & answer_policy): If an assertion's confidence score drops or its human verification status is pending, the API layer triggers an immediate safe-abstain policy, preventing an LLM from guessing critical compliance details.
 
 ## How the three BuildQuote repos fit together
 
