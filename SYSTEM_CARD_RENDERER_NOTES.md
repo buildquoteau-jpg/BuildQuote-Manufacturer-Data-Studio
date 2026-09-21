@@ -4,6 +4,8 @@ The approved BuildQuote v6 public rendering experience, ported into Data Studio
 as the single reusable "master" renderer. The manufacturer approves in Studio
 exactly what the public will later see.
 
+There has been a more recent component added and that is the agent ready knowledge layer. This sits within the system card renderer but is invisible to the human eye.
+
 ## Where it lives
 
 ```
