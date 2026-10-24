@@ -22,10 +22,6 @@ function makeR2Client(): S3Client {
   const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID
   const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID
   const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY
-  console.log('[r2] accountId:', accountId ?? 'MISSING')
-  console.log('[r2] accessKeyId:', accessKeyId ? accessKeyId.slice(0, 6) + '...' : 'MISSING')
-  console.log('[r2] secretKey:', secretAccessKey ? secretAccessKey.slice(0, 4) + '...' : 'MISSING')
-  console.log('[r2] bucket:', process.env.CLOUDFLARE_R2_BUCKET_NAME ?? 'MISSING')
   if (!accountId || !accessKeyId || !secretAccessKey) {
     throw new Error('Cloudflare R2 credentials not configured')
   }

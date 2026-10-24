@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { createStudioServiceClient } from '@/lib/supabase/service'
+import { isPrivateHost } from '@/lib/net/url-guard'
 
 export const runtime = 'nodejs'
 
@@ -80,6 +81,10 @@ export async function POST(req: NextRequest) {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return NextResponse.json({ error: 'URL must start with http:// or https://.' }, { status: 400 })
+  }
+  // The worker fetches this URL server-side — keep it off internal networks.
+  if (isPrivateHost(parsed.hostname)) {
+    return NextResponse.json({ error: 'URL must point at a public host.' }, { status: 400 })
   }
 
   // Role is required only when attaching to a specific system.

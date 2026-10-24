@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createProductionServiceClient } from '@/lib/supabase/production'
 import { getRfqServerClient } from '@/lib/supabase/rfq-server'
 
+const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;.]+(?:\.[^\s@<>,;.]+)+$/
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -9,6 +11,12 @@ export async function POST(req: NextRequest) {
 
     if (!token || !name || !email) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+    if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
+      return NextResponse.json({ error: 'A valid email address is required' }, { status: 400 })
+    }
+    if (typeof name !== 'string' || name.trim().length === 0 || name.length > 200) {
+      return NextResponse.json({ error: 'A valid name is required' }, { status: 400 })
     }
 
     const prod = createProductionServiceClient()
