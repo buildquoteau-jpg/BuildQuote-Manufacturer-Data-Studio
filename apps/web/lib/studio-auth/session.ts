@@ -160,11 +160,17 @@ export const getStudioSession = cache(async (): Promise<StudioSession> => {
   let memberships: StudioManufacturerMembership[] = []
 
   if (profile.globalRole === 'manufacturer_user') {
-    const { data: memberRows } = await supabase
+    const { data: memberRows, error: memberError } = await supabase
       .from('manufacturer_users')
       .select('id, manufacturer_id, role, status')
       .eq('user_profile_id', profile.id)
       .eq('status', 'active')
+
+    // An unread membership list is indistinguishable from "no workspaces" to
+    // every caller, so it silently locks the user out of their own workspace.
+    if (memberError) {
+      console.error(`[getStudioSession] could not load memberships for profile ${profile.id}:`, memberError.message)
+    }
 
     memberships = (memberRows ?? []).map((row) => ({
       id: row.id as string,

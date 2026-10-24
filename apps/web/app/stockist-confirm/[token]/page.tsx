@@ -8,6 +8,7 @@
 // Service client (public page, RLS bypass, token IS the credential).
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { createStudioServiceClient } from '@/lib/supabase/service'
 
 export const dynamic = 'force-dynamic'
@@ -70,14 +71,14 @@ export default async function StockistConfirmPage({
   searchParams,
 }: {
   params: { token: string }
-  searchParams: { done?: string }
+  searchParams: { done?: string; error?: string }
 }) {
   const { stockist, manufacturerName, error } = await lookupStockist(params.token)
 
   async function confirmSupply() {
     'use server'
     const supabase = createStudioServiceClient()
-    await supabase
+    const { error: updateError } = await supabase
       .from('manufacturer_stockists')
       .update({
         confirm_status: 'confirmed',
@@ -86,6 +87,12 @@ export default async function StockistConfirmPage({
       })
       .eq('confirm_token', params.token)
       .eq('confirm_status', 'unconfirmed')
+    // Without this the page just re-renders the same button, leaving the
+    // stockist to click Yes again on a confirmation that never saved.
+    if (updateError) {
+      console.error(`[stockist-confirm] could not confirm token ${params.token}:`, updateError.message)
+      redirect(`/stockist-confirm/${params.token}?error=save`)
+    }
     revalidatePath(`/stockist-confirm/${params.token}`)
   }
 
@@ -137,6 +144,12 @@ export default async function StockistConfirmPage({
               <strong>{stockist.business_name}</strong> as a local stockist on their product
               System Cards. One click confirms it — no login or account needed.
             </p>
+            {searchParams.error === 'save' && (
+              <p style={{ fontSize: '0.85rem', color: '#b91c1c', margin: '0 0 1rem', lineHeight: 1.5 }}>
+                Sorry — we could not record your confirmation just then. Please try again, or
+                reply to the manufacturer&rsquo;s email if it keeps failing.
+              </p>
+            )}
             <form action={confirmSupply}>
               <button
                 type="submit"
