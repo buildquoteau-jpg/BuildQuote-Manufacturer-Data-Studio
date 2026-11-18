@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useTransition, useCallback, useRef } from 'react'
+import { DECK_TYPES, DECK_TYPE_LABELS, isDeckType, suggestDeckType, type DeckType } from '@/lib/deck/deckTypes'
+import { presetsFor } from '@/lib/deck/deckAttributes'
 import Link from 'next/link'
 import { SystemCardV2Experience } from '@/components/system-card-v2/SystemCardV2Experience'
 import { adaptStagedSystem } from '@/components/system-card-renderer/adaptStagedSystem'
@@ -32,6 +34,7 @@ import {
   setInstallGuideUrls,
   setCustomDocumentLinks,
   setCustomAttributes,
+  setDeckType,
   createBlankSystem,
   linkSourceDocument,
   getManufacturerSourceDocuments,
@@ -48,6 +51,9 @@ const CATEGORY_COLOURS: Record<string, { bg: string; color: string }> = {
   'Cladding':                      { bg: '#dbeafe', color: '#1e40af' },
   'Flooring':                      { bg: '#d1fae5', color: '#065f46' },
   'Decking':                       { bg: '#d1fae5', color: '#065f46' },
+  'Subfloor':                      { bg: '#e7e5e4', color: '#44403c' },
+  'Care & Maintenance':            { bg: '#ecfccb', color: '#3f6212' },
+  'Outdoor Living':                { bg: '#fef3c7', color: '#92400e' },
   'Waterproofing':                 { bg: '#e0f2fe', color: '#0369a1' },
   'Interior Linings':              { bg: '#ede9fe', color: '#5b21b6' },
   'Soffit & Eaves':                { bg: '#fce7f3', color: '#9d174d' },
@@ -1070,17 +1076,71 @@ function CustomDocumentsEditor({
   )
 }
 
+// ─── Deck type picker ─────────────────────────────────────────────────────────
+// Human-confirmed "what kind of deck product is this?" (migration 069). Shows a suggestion from
+// the product's own wording that the reviewer accepts with one click — never auto-applied.
+
+function DeckTypeRow({
+  value, systemId, manufacturerId, manufacturerName, system, onUpdated,
+}: {
+  value: string | null
+  systemId: string
+  manufacturerId: string
+  manufacturerName: string
+  system: { name: string; category: string | null; subcategory: string | null; description: string | null }
+  onUpdated: (v: DeckType | null) => void
+}) {
+  const [pending, startTransition] = useTransition()
+  const [err, setErr] = useState<string | null>(null)
+  const current = isDeckType(value) ? value : null
+  const suggestion = current ? null : suggestDeckType({ ...system, manufacturerName })
+
+  function save(next: DeckType | null) {
+    setErr(null)
+    startTransition(async () => {
+      const res = await setDeckType(systemId, manufacturerId, next)
+      if (!res.ok) { setErr(res.error); return }
+      onUpdated(next)
+    })
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155', minWidth: '90px' }}>Deck type</span>
+        <select value={current ?? ''} disabled={pending}
+          onChange={e => save(e.target.value === '' ? null : (e.target.value as DeckType))}
+          style={{ flex: 1, minWidth: 0, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit', background: '#fff' }}>
+          <option value="">Not set</option>
+          {DECK_TYPES.map(t => <option key={t} value={t}>{DECK_TYPE_LABELS[t]}</option>)}
+        </select>
+      </div>
+      {suggestion && (
+        <div style={{ marginTop: '4px', fontSize: '11px', color: '#475569' }}>
+          Suggested from the product wording:{' '}
+          <button type="button" disabled={pending} onClick={() => save(suggestion)}
+            style={{ background: '#eef6fa', border: '1px solid #185D7A', borderRadius: '999px', padding: '1px 9px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
+            Use “{DECK_TYPE_LABELS[suggestion]}”
+          </button>
+        </div>
+      )}
+      {err && <div style={{ marginTop: '4px', fontSize: '11px', color: '#dc2626' }}>{err}</div>}
+    </div>
+  )
+}
+
 // ─── Custom technical attributes editor ───────────────────────────────────────
 // Freeform label/value pairs for spec facts with no dedicated field
 // (e.g. warranty period, R-value, weathering rating).
 
 function CustomAttributesEditor({
-  attributes, systemId, manufacturerId, onUpdated,
+  attributes, systemId, manufacturerId, onUpdated, deckType = null,
 }: {
   attributes: { label: string; value: string }[]
   systemId: string
   manufacturerId: string
   onUpdated: (attributes: { label: string; value: string }[]) => void
+  deckType?: DeckType | null
 }) {
   const [pending, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
@@ -1122,6 +1182,10 @@ function CustomAttributesEditor({
     persist(attributes.map((att, idx) => idx === i ? { label, value } : att))
   }
 
+  // Standard deck attributes still missing from this card — one click starts adding one.
+  const suggested = presetsFor(deckType, attributes.map(a => a.label)).slice(0, 8)
+  const [valueHint, setValueHint] = useState('e.g. 25 years')
+
   return (
     <div>
       {attributes.map((a, i) => (
@@ -1142,7 +1206,7 @@ function CustomAttributesEditor({
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: attributes.length > 0 ? '8px' : 0 }}>
           <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Attribute, e.g. Warranty"
             style={{ width: '160px', flexShrink: 0, padding: '5px 7px', border: '1px solid #185D7A', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }} autoFocus />
-          <input value={newValue} onChange={e => setNewValue(e.target.value)} placeholder="Value, e.g. 25 years"
+          <input value={newValue} onChange={e => setNewValue(e.target.value)} placeholder={valueHint}
             style={{ flex: 1, minWidth: 0, padding: '5px 7px', border: '1px solid #185D7A', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}
             onKeyDown={e => { if (e.key === 'Enter') handleAdd() }} />
           <button type="button" onClick={handleAdd} disabled={pending || !newLabel.trim() || !newValue.trim()}
@@ -1155,10 +1219,24 @@ function CustomAttributesEditor({
           </button>
         </div>
       ) : (
+        <>
+          {suggested.length > 0 && (
+            <div style={{ marginTop: attributes.length > 0 ? '8px' : 0, marginBottom: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Deck facts to add:</span>
+              {suggested.map(p => (
+                <button key={p.label} type="button" title={p.hint}
+                  onClick={() => { setNewLabel(p.label); setValueHint(p.hint); setAdding(true) }}
+                  style={{ padding: '2px 8px', borderRadius: '999px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#334155', fontSize: '11px', cursor: 'pointer' }}>
+                  + {p.label}
+                </button>
+              ))}
+            </div>
+          )}
         <button type="button" onClick={() => setAdding(true)}
           style={{ marginTop: attributes.length > 0 ? '8px' : 0, background: '#eef6fa', border: '1.5px solid #185D7A', borderRadius: '6px', padding: '4px 12px', fontSize: '11px', fontWeight: 700, color: '#185D7A', cursor: 'pointer' }}>
           + Add custom attribute
         </button>
+        </>
       )}
       {err && <div style={{ marginTop: '6px', fontSize: '11px', color: '#dc2626' }}>{err}</div>}
     </div>
@@ -2675,6 +2753,14 @@ function ExpandedCardView({
             <FieldSection label="Product identity">
               <FieldRow {...fieldRowProps('System name', 'name')} />
               <FieldRow {...fieldRowProps('Category', 'category')} />
+              <DeckTypeRow
+                value={system.deck_type ?? null}
+                systemId={system.id}
+                manufacturerId={manufacturerId}
+                manufacturerName={manufacturerName}
+                system={{ name: system.name, category: system.category, subcategory: system.subcategory, description: system.description }}
+                onUpdated={(v) => setSystem(prev => ({ ...prev, deck_type: v }))}
+              />
               {system.subcategory && <FieldRow {...fieldRowProps('Subcategory', 'subcategory')} />}
               {system.product_code && <FieldRow {...fieldRowProps('Product code', 'product_code')} />}
               <DescriptionEditor
@@ -2855,6 +2941,7 @@ function ExpandedCardView({
                 attributes={Array.isArray(system.custom_technical_attributes) ? system.custom_technical_attributes : []}
                 systemId={system.id}
                 manufacturerId={manufacturerId}
+                deckType={isDeckType(system.deck_type) ? system.deck_type : null}
                 onUpdated={(attrs) => setSystem(prev => ({ ...prev, custom_technical_attributes: attrs.length > 0 ? attrs : null }))}
               />
             </FieldSection>

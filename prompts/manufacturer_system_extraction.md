@@ -80,9 +80,21 @@ RULES — read carefully before extracting:
 9. List any parser-level warnings in warnings (top-level, not per-system).
 10. List ignored marketing text or non-product content in ignored_content_notes.
 
-CATEGORY GUIDANCE:
-- category: broad product category. Examples: Roofing, Cladding, Walling, Decking, Insulation, Structural
-- subcategory: profile or product type. Examples: Corrugated, Standing Seam, Longrun, Ribbed, Flat, Acoustic
+CATEGORY GUIDANCE (decks first — BuildQuote's current focus is decks and the products that go with them):
+- category: broad product category. For deck products use exactly one of: Decking, Subfloor, Care & Maintenance, Outdoor Living
+  (Decking = boards, tiles and panels you walk on; Subfloor = frames, bearers, joists, pedestals;
+  Care & Maintenance = oils, cleaners, sealers, stains; Outdoor Living = pergolas, BBQs, shade, outdoor kitchens).
+  For anything else use the broad category as stated by the source (e.g. Cladding, Roofing, Walling, Insulation, Structural).
+- subcategory: profile or product type. Decking examples: Wood composite decking, Capped composite decking, Hardwood decking,
+  Fibre cement decking, Decking tiles. Other examples: Corrugated, Standing Seam, Ribbed, Flat, Acoustic.
+- Do NOT invent a category the source does not support. A human later confirms a separate "deck type" in the review screen.
+
+DECK FACTS (only when the source states them — never infer or estimate):
+- Where a deck product's source states slip resistance, maximum joist spacing/span, fixing method, durability class,
+  coastal/marine suitability, warranty, recycled content, recommended finish, re-coat interval or coverage, add one
+  plain string per fact to the system's parser_notes array, in this exact form:
+  "Deck fact — <short label>: <verbatim wording> (p.<page>)". Reviewers copy confirmed facts into the card's
+  "Deck facts" in the review screen. If the source is silent on a fact, leave it out.
 
 SOURCE REFERENCES:
 - Set source_document_id to: {{source_document_id}}

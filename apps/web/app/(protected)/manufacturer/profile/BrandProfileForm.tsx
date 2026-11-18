@@ -476,7 +476,7 @@ export function BrandProfileForm({
             onChange={set('description')}
             onFocus={onFocus} onBlur={onBlur}
             rows={4}
-            placeholder="We manufacture premium fibre cement cladding and weatherboard products for residential and commercial construction across Australia."
+            placeholder="We make composite decking boards, fixings and finishing products for Australian homes, built to suit local conditions."
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.55 }}
           />
           {fields.description && (

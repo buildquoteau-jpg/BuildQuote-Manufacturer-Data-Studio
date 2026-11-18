@@ -31,8 +31,8 @@ not extract facts about anything other than the named product.
 ```json
 {
   "description": "verbatim product description, or null if this chunk doesn't contain one",
-  "category": "e.g. Cladding, or null",
-  "subcategory": "e.g. Fibre cement weatherboard, or null",
+  "category": "for deck products exactly one of Decking | Subfloor | Care & Maintenance | Outdoor Living; otherwise the source's own broad category (e.g. Cladding), or null",
+  "subcategory": "e.g. Wood composite decking / Hardwood decking / Fibre cement weatherboard, or null",
   "profiles": [
     {
       "profile_name": "e.g. 180mm Weatherboard 3600mm",

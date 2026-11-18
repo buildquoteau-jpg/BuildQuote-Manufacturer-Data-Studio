@@ -392,7 +392,7 @@ function AssetCard({ asset, manufacturerId }: { asset: AssetView; manufacturerId
             <label style={{ fontSize: '0.74rem', fontWeight: 600 }}>
               Alt text (describes the image for accessibility)
               <input style={{ ...inputStyle, marginTop: 2 }} value={altText} onChange={(e) => setAltText(e.target.value)}
-                placeholder="e.g. Grey cladding panels on a coastal home" />
+                placeholder="e.g. Spotted gum deck at a coastal home" />
             </label>
             <label style={{ fontSize: '0.74rem', fontWeight: 600 }}>
               Caption / credit (optional)

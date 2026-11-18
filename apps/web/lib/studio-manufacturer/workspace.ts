@@ -629,6 +629,8 @@ export type VerificationSystem = {
   // Optional — degrades to null pre-migration-055 (column absent).
   custom_document_links?: { label: string; url: string }[] | null
   custom_technical_attributes?: { label: string; value: string }[] | null
+  // Controlled deck product type (migration 069). Optional — null/absent until applied or classified.
+  deck_type?: string | null
   notes: string | null
   verification_status: string
   reviewer_notes: string | null
@@ -864,8 +866,20 @@ export async function getManufacturerVerificationData(
     }
   }
 
+  // Deck type (migration 069) is read separately and best-effort, so an environment that hasn't
+  // applied 069 yet still loads every system exactly as before (error is simply ignored).
+  const deckTypeById = new Map<string, string | null>()
+  {
+    const { data: dt, error: dtErr } = await c.supabase
+      .from('staged_systems')
+      .select('id, deck_type')
+      .in('id', systemIds)
+    if (!dtErr) for (const r of (dt ?? []) as { id: string; deck_type: string | null }[]) deckTypeById.set(r.id, r.deck_type)
+  }
+
   const systems: VerificationSystem[] = systemRows.map((s) => ({
     ...s,
+    deck_type: deckTypeById.get(s.id) ?? null,
     gallery_images: s.gallery_images ?? null,
     publish_status: s.publish_status ?? null,
     published_version: s.published_version ?? null,

@@ -82,7 +82,7 @@ export default async function StartHerePage() {
       done: systems.length > 0 && notStartedCount === 0,
       count: systems.length === 0 ? 'No systems yet' : `${systems.length} system${systems.length === 1 ? '' : 's'}${notStartedCount > 0 ? ` · ${notStartedCount} not started` : ''}`,
       href: '/manufacturer/systems',
-      body: 'List every product you want turned into a System Card, then click into each one to upload photos, links and source documents and set up its System Card.',
+      body: 'List every deck product you want turned into a System Card — each decking range, oil or sealer, subfloor part or pergola kit — then click into each one to upload photos, links and source documents and set up its System Card.',
     },
     {
       n: 3,
@@ -90,7 +90,7 @@ export default async function StartHerePage() {
       done: systems.length > 0 && needsReviewCount === 0,
       count: systems.length === 0 ? 'No products yet' : `${needsReviewCount} need${needsReviewCount === 1 ? 's' : ''} you`,
       href: reviewHref,
-      body: 'Confirm what the AI found in the System Workspace — identity, images, variants, colours, components, attributes and applications, one page per product.',
+      body: 'Confirm what the AI found in the System Workspace — identity, deck type, images, variants, colours, components, deck facts (slip rating, joist spacing, warranty…) and applications, one page per product.',
     },
     {
       n: 4,

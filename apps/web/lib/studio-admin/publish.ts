@@ -345,6 +345,10 @@ export async function publishSystem(
     .eq('id', systemId)
     .single()
 
+  // deck_type (migration 069) is read separately so an un-migrated Data Studio still publishes.
+  const { data: deckRow } = await ds.from('staged_systems').select('deck_type').eq('id', systemId).maybeSingle()
+  const deckType: string | null = (deckRow as { deck_type?: string | null } | null)?.deck_type ?? null
+
   if (sysErr || !sys) {
     return blankResult(systemId, `Could not load system: ${sysErr?.message ?? 'not found'}`)
   }
@@ -422,6 +426,17 @@ export async function publishSystem(
       productionSystemId = created.id
       systemAction = 'created'
       await ds.from('staged_systems').update({ production_system_id: created.id }).eq('id', systemId)
+    }
+
+    // Best-effort, same reasoning as knowledge_url below: production `systems.deck_type`
+    // (supabase/production-rfq/001_systems_deck_type.sql) is run separately by the owner, so a missing
+    // column must never fail a publish. Readers treat NULL as "unclassified".
+    if (!dryRun && productionSystemId && productionSystemId !== '(new)' && deckType) {
+      try {
+        await prod.from('systems').update({ deck_type: deckType }).eq('id', productionSystemId)
+      } catch {
+        // column not present yet — skip silently.
+      }
     }
 
     // Best-effort, separate from systemPayload above on purpose: knowledge_url

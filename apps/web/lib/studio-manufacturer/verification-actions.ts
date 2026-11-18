@@ -3,6 +3,7 @@
 import { createStudioServerClient } from '@/lib/supabase/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
 import { postSubmissionMessage } from './messages-actions'
+import { isDeckType } from '@/lib/deck/deckTypes'
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
 // Manufacturers can only write to their own workspace.
@@ -868,6 +869,34 @@ export async function setCustomAttributes(
   if (error) {
     if (/custom_technical_attributes|does not exist/i.test(error.message ?? '')) {
       return { ok: false, error: 'Custom technical attributes need migration 061 applied first.' }
+    }
+    return { ok: false, error: error.message }
+  }
+  await markDraftChanged(supabase, systemId)
+  return { ok: true }
+}
+
+// ─── setDeckType ──────────────────────────────────────────────────────────────
+// Human-confirmed deck product type (migration 069). null clears it.
+
+export async function setDeckType(
+  systemId: string,
+  manufacturerId: string,
+  deckType: string | null,
+): Promise<ActionResult> {
+  const auth = await assertManufacturerAccess(manufacturerId)
+  if (!auth.allowed) return { ok: false, error: auth.error }
+  if (deckType !== null && !isDeckType(deckType)) return { ok: false, error: 'Unknown deck type.' }
+
+  const supabase = createStudioServerClient()
+  const { error } = await supabase
+    .from('staged_systems')
+    .update({ deck_type: deckType, updated_at: new Date().toISOString() })
+    .eq('id', systemId)
+
+  if (error) {
+    if (/deck_type|does not exist/i.test(error.message ?? '')) {
+      return { ok: false, error: 'Deck type needs migration 069 applied first.' }
     }
     return { ok: false, error: error.message }
   }
