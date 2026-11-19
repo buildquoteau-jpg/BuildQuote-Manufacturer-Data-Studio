@@ -30,3 +30,8 @@ This note says what changed in Data Studio to support that, and what still needs
   builder + engineer against NCC / AS text instead of a manufacturer document.
 - Batch-onboard the decking brand backlog (hint file per brand: Cutek, TimberLock, Evalast, Compform…).
 - Host `scripts/worker/pipeline_worker.py` somewhere always-on (see CLAUDE.md → Known Gaps).
+
+## Update: generic subfloor cards (BuildQuote Reference Systems)
+Seven generic subfloor / site-prep cards are now defined in `scripts/reference/` and generated into
+`supabase/snippets/insert_reference_subfloor_systems.sql`. See `docs/reference-systems.md` (how to run, trust model)
+and `docs/reference-systems-images.md` (images to create).
