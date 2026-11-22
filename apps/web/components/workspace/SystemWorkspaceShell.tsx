@@ -201,7 +201,12 @@ export function SystemWorkspaceShell({
           </WorkspaceSection>
 
           <WorkspaceSection title="Variants & sizes" status={variantsStatus} statusLabel={`${profiles.length} variant${profiles.length === 1 ? '' : 's'}`}>
-            <VariantsSection systemId={systemId} manufacturerId={manufacturerId} initialProfiles={profiles} />
+            <VariantsSection
+              systemId={systemId}
+              manufacturerId={manufacturerId}
+              initialProfiles={profiles}
+              websiteUrl={previewSystem.website_url ?? customDocumentLinks[0]?.url ?? null}
+            />
           </WorkspaceSection>
 
           <WorkspaceSection title="Colours & finishes" status={coloursStatus} statusLabel={`${colours.length} colour${colours.length === 1 ? '' : 's'}`}>
@@ -209,7 +214,12 @@ export function SystemWorkspaceShell({
           </WorkspaceSection>
 
           <WorkspaceSection title="Components & accessories" status={componentsStatus} statusLabel={`${components.length} item${components.length === 1 ? '' : 's'}`}>
-            <ComponentsSection systemId={systemId} manufacturerId={manufacturerId} initialComponents={components} />
+            <ComponentsSection
+              systemId={systemId}
+              manufacturerId={manufacturerId}
+              initialComponents={components}
+              websiteUrl={previewSystem.website_url ?? customDocumentLinks[0]?.url ?? null}
+            />
           </WorkspaceSection>
 
           <WorkspaceSection title="Attributes & performance" status={attributeStatus}

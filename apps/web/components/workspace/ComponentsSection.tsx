@@ -6,7 +6,8 @@
 // components.role isn't selected there) — flat list for now, a small,
 // separate follow-up once that query is extended.
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   addMissingComponent,
   updateComponent,
@@ -18,19 +19,53 @@ import type { VerificationSystemComponent } from '@/lib/studio-manufacturer/work
 import { InlineItemImagePicker } from './InlineItemImagePicker'
 
 export function ComponentsSection({
-  systemId, manufacturerId, initialComponents,
+  systemId, manufacturerId, initialComponents, websiteUrl,
 }: {
   systemId: string
   manufacturerId: string
   initialComponents: VerificationSystemComponent[]
+  websiteUrl?: string | null
 }) {
+  const router = useRouter()
   const [components, setComponents] = useState(initialComponents)
+  useEffect(() => { setComponents(initialComponents) }, [initialComponents])
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [pullUrl, setPullUrl] = useState(websiteUrl ?? '')
+  const [pulling, setPulling] = useState(false)
+  const [pullMsg, setPullMsg] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState({ name: '', sku: '' })
   const [linking, setLinking] = useState(false)
   const [existing, setExisting] = useState<{ id: string; name: string; sku: string | null; description: string | null }[] | null>(null)
+
+  async function pullPicsFromPage() {
+    const trimmed = pullUrl.trim()
+    if (!trimmed) return
+    setPulling(true)
+    setError(null)
+    setPullMsg(null)
+    try {
+      const res = await fetch(`/api/manufacturer/systems/${systemId}/import-from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manufacturerId, url: trimmed, mode: 'item_images', autoExtract: false }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Could not pull component pics.'); return }
+      const total = (data.componentPicsAdded ?? 0) + (data.profilePicsAdded ?? 0)
+      setPullMsg(
+        total > 0
+          ? `Matched ${data.componentPicsAdded ?? 0} component pic${data.componentPicsAdded === 1 ? '' : 's'}${data.profilePicsAdded ? ` & ${data.profilePicsAdded} profile pic${data.profilePicsAdded === 1 ? '' : 's'}` : ''}.`
+          : 'No matching accessory photos were found on that page — click + Pic on any row to upload directly.',
+      )
+      if (total > 0) router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPulling(false)
+    }
+  }
 
   function rename(id: string, field: 'name' | 'sku', value: string) {
     setComponents((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)))
@@ -91,6 +126,33 @@ export function ComponentsSection({
 
   return (
     <div>
+      {components.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="url"
+            value={pullUrl}
+            onChange={(e) => setPullUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); pullPicsFromPage() } }}
+            placeholder="Product or accessories page URL to pull pics…"
+            disabled={pulling}
+            style={{ flex: 1, minWidth: 200, padding: '0.32rem 0.5rem', border: '1px solid var(--ds-border, #d1d5db)', borderRadius: 6, fontSize: '0.8rem' }}
+          />
+          <button
+            type="button"
+            onClick={pullPicsFromPage}
+            disabled={pulling || !pullUrl.trim()}
+            style={{
+              fontSize: '0.76rem', fontWeight: 700, color: '#185D7A',
+              background: 'rgba(24,93,122,0.08)', border: '1px solid rgba(24,93,122,0.35)',
+              borderRadius: 6, padding: '0.32rem 0.65rem', cursor: pulling || !pullUrl.trim() ? 'default' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {pulling ? 'Pulling pics…' : '⚡ Pull pics from page'}
+          </button>
+        </div>
+      )}
+      {pullMsg && <div style={{ fontSize: '0.76rem', color: '#16a34a', marginBottom: '0.5rem', fontWeight: 600 }}>{pullMsg}</div>}
       {components.map((c) => (
         <div key={c.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.55rem 0', borderBottom: '1px solid var(--ds-border, #e5e7eb)' }}>
           <InlineItemImagePicker

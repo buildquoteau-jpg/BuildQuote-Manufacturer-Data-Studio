@@ -27,7 +27,13 @@ const MAX_PDFS = 8
 const MAX_SWATCHES = 24
 
 type SystemSourceRole = 'install_guide' | 'design_guide' | 'tech_data' | 'source_catalogue'
-type ImportMode = 'full' | 'swatches_only' | 'photos_only'
+type ImportMode = 'full' | 'swatches_only' | 'photos_only' | 'item_images'
+
+type ExtractedItemImage = {
+  sku?: string
+  label: string
+  imageUrl: string
+}
 
 type GalleryPhoto = {
   asset_id?: string | null
@@ -268,26 +274,37 @@ function extractFromNextData(
 ): {
   galleryPhotos: { url: string; alt: string; priority: number }[]
   swatches: ExtractedSwatch[]
+  itemImages: ExtractedItemImage[]
   pdfs: { url: string; label: string }[]
 } {
   const galleryPhotos: { url: string; alt: string; priority: number }[] = []
   const swatches: ExtractedSwatch[] = []
+  const itemImages: ExtractedItemImage[] = []
   const pdfs: { url: string; label: string }[] = []
 
   const nextMatch = html.match(/<script\s+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)
-  if (!nextMatch) return { galleryPhotos, swatches, pdfs }
+  if (!nextMatch) return { galleryPhotos, swatches, itemImages, pdfs }
 
   let parsed: unknown
   try {
     parsed = JSON.parse(nextMatch[1])
   } catch {
-    return { galleryPhotos, swatches, pdfs }
+    return { galleryPhotos, swatches, itemImages, pdfs }
   }
 
   const pageProps = (parsed as { props?: { pageProps?: Record<string, unknown> } })?.props?.pageProps
-  if (!pageProps || typeof pageProps !== 'object') return { galleryPhotos, swatches, pdfs }
+  if (!pageProps || typeof pageProps !== 'object') return { galleryPhotos, swatches, itemImages, pdfs }
 
   const seenSwatchNames = new Set<string>()
+  const seenItemKeys = new Set<string>()
+  const pushItemImage = (sku: string | undefined, label: string, rawUrl: string) => {
+    const resolved = resolveUrl(rawUrl, baseUrl)
+    if (!resolved || !isImageUrl(resolved)) return
+    const key = `${(sku || '').toLowerCase()}|${label.toLowerCase()}|${resolved.split(/[?#]/)[0].toLowerCase()}`
+    if (seenItemKeys.has(key)) return
+    seenItemKeys.add(key)
+    itemImages.push({ sku: sku?.trim() || undefined, label: stripTagsAndClean(label), imageUrl: resolved })
+  }
   const pushSwatch = (rawName: string, rawUrl: string, width?: number, height?: number) => {
     const name = cleanColourName(rawName)
     if (!name) return
@@ -379,6 +396,19 @@ function extractFromNextData(
           if (swatchAsset?.url) {
             pushSwatch(rawColourLabel, swatchAsset.url, swatchAsset.width, swatchAsset.height)
           }
+          // Capture nested SKU/profile thumbnails (e.g. James Hardie TimberTech Square/Grooved board icons)
+          if (Array.isArray(fields.links)) {
+            for (const sub of fields.links) {
+              if (!sub || typeof sub !== 'object') continue
+              const sf = ((sub as Record<string, unknown>).fields ?? sub) as Record<string, unknown>
+              const subSku = typeof sf.linkText === 'string' ? sf.linkText.trim() : undefined
+              const subLabel = [rawColourLabel, sf.description, sf.subDescription].filter((x) => typeof x === 'string' && x.trim()).join(' ')
+              const subImg = extractAssetUrlFromObj(sf.icon) || extractAssetUrlFromObj(sf.image)
+              if (subImg?.url && (subSku || subLabel)) {
+                pushItemImage(subSku, subLabel, subImg.url)
+              }
+            }
+          }
         }
       }
     }
@@ -420,13 +450,14 @@ function extractFromNextData(
   // Sort photos: explicit gallery/banner slides first
   galleryPhotos.sort((a, b) => b.priority - a.priority)
 
-  return { galleryPhotos, swatches, pdfs }
+  return { galleryPhotos, swatches, itemImages, pdfs }
 }
 
 function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
   title: string
   images: { url: string; alt: string }[]
   swatches: ExtractedSwatch[]
+  itemImages: ExtractedItemImage[]
   pdfs: { url: string; label: string; role: SystemSourceRole }[]
 } {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
@@ -478,7 +509,11 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
     .replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, ' ')
 
   const swatches: ExtractedSwatch[] = [...nextExtracted.swatches]
+  const itemImages: ExtractedItemImage[] = [...nextExtracted.itemImages]
   const seenSwatchNames = new Set(swatches.map((s) => s.name.toLowerCase()))
+  const seenHtmlItemUrls = new Set(itemImages.map((i) => `${i.label.toLowerCase()}|${i.imageUrl.split(/[?#]/)[0].toLowerCase()}`))
+  const ITEM_IMG_HINT_RE =
+    /\b(grooved|square|edge|fascia|bullnose|scalloped|solid|profile|board|clip|screw|fastener|jointer|trim|starter|blade|sealant|hulk|breaker|plug|spacer|pedestal|joist|bearer|finishing|end.?cap)\b/i
 
   // Collect HTML <img> tags, separating swatch images from product photos and scoring relevance
   const scoredHtmlImgs: { url: string; alt: string; score: number }[] = []
@@ -492,6 +527,16 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
     const alt = stripTagsAndClean(altRaw || titleAttr)
     const resolved = resolveUrl(srcM[1], baseUrl)
     if (!resolved) continue
+
+    // Capture profile board & component/accessory thumbnails from HTML <img> tags
+    if (isImageUrl(resolved) && ITEM_IMG_HINT_RE.test(`${alt} ${resolved}`)) {
+      const itemLabel = alt || deriveLabel(resolved, '')
+      const ikey = `${itemLabel.toLowerCase()}|${resolved.split(/[?#]/)[0].toLowerCase()}`
+      if (itemLabel && !seenHtmlItemUrls.has(ikey) && !/logo|icon|banner|slider/i.test(`${alt} ${resolved}`)) {
+        seenHtmlItemUrls.add(ikey)
+        itemImages.push({ label: itemLabel, imageUrl: resolved })
+      }
+    }
 
     // Check if this <img> looks like a colour swatch on non-Next.js sites
     const looksSwatchTag = /\b(swatch|colour|color|finish)\b/i.test(`${classAttr} ${resolved} ${altRaw}`)
@@ -574,8 +619,65 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
     title,
     images: images.slice(0, MAX_GALLERY),
     swatches: swatches.slice(0, MAX_SWATCHES),
+    itemImages,
     pdfs: pdfs.slice(0, MAX_PDFS),
   }
+}
+
+function matchBestItemImage(
+  target: { sku?: string | null; name?: string | null; dimensions?: string | null; width_mm?: number | null },
+  candidates: ExtractedItemImage[],
+): string | null {
+  if (candidates.length === 0) return null
+  const targetSku = (target.sku || '').trim().toLowerCase()
+  const targetText = `${target.name || ''} ${target.dimensions || ''} ${target.width_mm || ''}`.toLowerCase()
+
+  // 1) Exact SKU / product code match always wins
+  if (targetSku) {
+    const exact = candidates.find((c) => c.sku && c.sku.toLowerCase() === targetSku)
+    if (exact) return exact.imageUrl
+  }
+
+  // 2) Edge profile / dimension / token match
+  const stopWords = new Set(['deck', 'decking', 'board', 'boards', 'collection', 'vintage', 'system', 'plus', 'range', 'series', 'timber', 'composite', 'with', 'from', 'the', 'and', 'for'])
+  const targetTokens = targetText
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !stopWords.has(t))
+
+  const hasGrooved = /\bgroov/i.test(targetText)
+  const hasSquare = /\bsquare\b|\bsolid\b|\bedge\b/i.test(targetText) && !hasGrooved
+  const hasFascia = /\bfascia\b|\btrim\b/i.test(targetText)
+
+  let bestUrl: string | null = null
+  let bestScore = 0
+
+  for (const c of candidates) {
+    const hay = `${c.label} ${c.imageUrl}`.toLowerCase()
+    const cGrooved = /\bgroov/i.test(hay)
+    const cSquare = /\bsquare\b|\bsolid\b/i.test(hay) && !cGrooved
+    const cFascia = /\bfascia\b|\btrim\b/i.test(hay)
+
+    // Never assign a grooved board photo to a square-edge board (or vice versa)
+    if (hasGrooved && cSquare) continue
+    if (hasSquare && cGrooved) continue
+    if (hasFascia && (cGrooved || cSquare) && !cFascia) continue
+
+    let score = 0
+    if (hasGrooved && cGrooved) score += 8
+    if (hasSquare && cSquare) score += 8
+    if (hasFascia && cFascia) score += 8
+    if (target.width_mm && hay.includes(String(target.width_mm))) score += 6
+    for (const tok of targetTokens) {
+      if (hay.includes(tok)) score += 3
+    }
+    if (score > bestScore) {
+      bestScore = score
+      bestUrl = c.imageUrl
+    }
+  }
+
+  return bestScore >= 6 ? bestUrl : null
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ systemId: string }> }) {
@@ -600,7 +702,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
   const manufacturerId = body?.manufacturerId
   const rawUrl = body?.url?.trim()
   const autoExtract = body?.autoExtract !== false
-  const mode: ImportMode = body?.mode === 'swatches_only' || body?.mode === 'photos_only' ? body.mode : 'full'
+  const mode: ImportMode =
+    body?.mode === 'swatches_only' || body?.mode === 'photos_only' || body?.mode === 'item_images'
+      ? body.mode
+      : 'full'
   const replacePhotos = Boolean(body?.replacePhotos)
 
   if (!manufacturerId || !UUID_RE.test(manufacturerId)) {
@@ -930,6 +1035,65 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     }
   }
 
+  // ── 4) Match profile & component thumbnails (full or item_images) ──────────
+  let profilePicsAdded = 0
+  let componentPicsAdded = 0
+
+  if ((mode === 'full' || mode === 'item_images') && extracted.itemImages.length > 0) {
+    const { data: profRows } = await supabase
+      .from('staged_system_profiles')
+      .select('id, profile_name, product_code, dimensions, width_mm, image_url')
+      .eq('staged_system_id', systemId)
+
+    for (const p of (profRows ?? []) as {
+      id: string
+      profile_name: string | null
+      product_code: string | null
+      dimensions: string | null
+      width_mm: number | null
+      image_url: string | null
+    }[]) {
+      if (p.image_url && !replacePhotos) continue
+      const matched = matchBestItemImage(
+        { sku: p.product_code, name: p.profile_name, dimensions: p.dimensions, width_mm: p.width_mm },
+        extracted.itemImages,
+      )
+      if (matched) {
+        const { error: pe } = await supabase
+          .from('staged_system_profiles')
+          .update({ image_url: matched })
+          .eq('id', p.id)
+        if (!pe) profilePicsAdded += 1
+      }
+    }
+
+    const { data: compLinks } = await supabase
+      .from('staged_system_components')
+      .select('staged_components(id, name, sku, image_url)')
+      .eq('staged_system_id', systemId)
+
+    const seenCompIds = new Set<string>()
+    for (const row of (compLinks ?? []) as unknown as {
+      staged_components:
+        | { id: string; name: string | null; sku: string | null; image_url: string | null }
+        | { id: string; name: string | null; sku: string | null; image_url: string | null }[]
+        | null
+    }[]) {
+      const comp = Array.isArray(row.staged_components) ? row.staged_components[0] : row.staged_components
+      if (!comp || seenCompIds.has(comp.id)) continue
+      seenCompIds.add(comp.id)
+      if (comp.image_url && !replacePhotos) continue
+      const matched = matchBestItemImage({ sku: comp.sku, name: comp.name }, extracted.itemImages)
+      if (matched) {
+        const { error: ce } = await supabase
+          .from('staged_components')
+          .update({ image_url: matched })
+          .eq('id', comp.id)
+        if (!ce) componentPicsAdded += 1
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     pageTitle: extracted.title,
@@ -938,6 +1102,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     swatchesAdded,
     totalColours,
     swatches: addedSwatches,
+    profilePicsAdded,
+    componentPicsAdded,
     linksAdded,
     pdfsQueued: addedPdfs.length,
     pdfs: addedPdfs,

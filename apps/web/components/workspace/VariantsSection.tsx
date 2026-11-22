@@ -4,7 +4,8 @@
 // replaces VerificationGrid's Profiles block. Inline add/edit/remove against
 // the existing staged_system_profiles actions — no new data layer.
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   addMissingProfile,
   updateProfile,
@@ -17,17 +18,51 @@ const cellStyle: React.CSSProperties = { padding: '0.4rem 0.5rem', fontSize: '0.
 const inputStyle: React.CSSProperties = { width: '100%', padding: '0.3rem 0.4rem', border: '1px solid var(--ds-border, #d1d5db)', borderRadius: 4, fontSize: '0.82rem' }
 
 export function VariantsSection({
-  systemId, manufacturerId, initialProfiles,
+  systemId, manufacturerId, initialProfiles, websiteUrl,
 }: {
   systemId: string
   manufacturerId: string
   initialProfiles: VerificationSystemProfile[]
+  websiteUrl?: string | null
 }) {
+  const router = useRouter()
   const [profiles, setProfiles] = useState(initialProfiles)
+  useEffect(() => { setProfiles(initialProfiles) }, [initialProfiles])
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [pullUrl, setPullUrl] = useState(websiteUrl ?? '')
+  const [pulling, setPulling] = useState(false)
+  const [pullMsg, setPullMsg] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState({ profile_name: '', product_code: '', length_mm: '', width_mm: '', thickness_mm: '', uom: '' })
+
+  async function pullPicsFromPage() {
+    const trimmed = pullUrl.trim()
+    if (!trimmed) return
+    setPulling(true)
+    setError(null)
+    setPullMsg(null)
+    try {
+      const res = await fetch(`/api/manufacturer/systems/${systemId}/import-from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manufacturerId, url: trimmed, mode: 'item_images', autoExtract: false }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Could not pull profile pics.'); return }
+      const total = (data.profilePicsAdded ?? 0) + (data.componentPicsAdded ?? 0)
+      setPullMsg(
+        total > 0
+          ? `Matched ${data.profilePicsAdded ?? 0} profile pic${data.profilePicsAdded === 1 ? '' : 's'}${data.componentPicsAdded ? ` & ${data.componentPicsAdded} component pic${data.componentPicsAdded === 1 ? '' : 's'}` : ''}.`
+          : 'No matching board profile photos were found on that page — you can upload any photo directly using the + Pic box below.',
+      )
+      if (total > 0) router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPulling(false)
+    }
+  }
 
   function patchField(id: string, field: keyof VerificationSystemProfile, value: string) {
     setProfiles((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)))
@@ -86,6 +121,33 @@ export function VariantsSection({
 
   return (
     <div>
+      {profiles.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="url"
+            value={pullUrl}
+            onChange={(e) => setPullUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); pullPicsFromPage() } }}
+            placeholder="Product page URL to pull profile board pics…"
+            disabled={pulling}
+            style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+          />
+          <button
+            type="button"
+            onClick={pullPicsFromPage}
+            disabled={pulling || !pullUrl.trim()}
+            style={{
+              fontSize: '0.76rem', fontWeight: 700, color: '#185D7A',
+              background: 'rgba(24,93,122,0.08)', border: '1px solid rgba(24,93,122,0.35)',
+              borderRadius: 6, padding: '0.32rem 0.65rem', cursor: pulling || !pullUrl.trim() ? 'default' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {pulling ? 'Pulling pics…' : '⚡ Pull profile pics from page'}
+          </button>
+        </div>
+      )}
+      {pullMsg && <div style={{ fontSize: '0.76rem', color: '#16a34a', marginBottom: '0.5rem', fontWeight: 600 }}>{pullMsg}</div>}
       {profiles.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
