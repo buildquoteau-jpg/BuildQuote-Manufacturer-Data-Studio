@@ -5,6 +5,13 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.worker"
+watchPatterns = [
+  "scripts/**",
+  "prompts/**",
+  "Dockerfile.worker",
+  "requirements-worker.txt",
+  "railway.toml",
+]
 
 [deploy]
 startCommand = "python -u scripts/worker/pipeline_worker.py"
