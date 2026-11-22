@@ -294,7 +294,6 @@ def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source
             "thickness_mm": p.get("thickness_mm"),
             "uom": p.get("uom"),
             "sort_order": i,
-            "extraction_confidence": 0.8,
             "parser_notes": json.dumps({"page_number": p.get("page_number"), "quote": p.get("quote")}),
         }
         for i, p in enumerate(merged["profiles"])
@@ -306,7 +305,6 @@ def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source
             "sku_suffix": c.get("sku_suffix"),
             "is_stocked": c.get("is_stocked"),
             "sort_order": i,
-            "extraction_confidence": 0.8,
         }
         for i, c in enumerate(merged["colours"]) if c.get("colour_name")
     ]
