@@ -4,7 +4,7 @@
 // block AND the separate trip to /manufacturer/assets to find a swatch: the
 // AssetSlotControl (upload/import/pick) lives right on each colour row.
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import {
   addMissingColour,
   updateColour,
@@ -24,6 +24,7 @@ export function ColoursSection({
   onChanged?: (count: number) => void
 }) {
   const [colours, setColours] = useState(initialColours)
+  useEffect(() => { setColours(initialColours) }, [initialColours])
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -84,7 +85,17 @@ export function ColoursSection({
     <div>
       {colours.map((c) => (
         <div key={c.id} style={{ display: 'flex', gap: '0.8rem', alignItems: 'flex-start', padding: '0.7rem 0', borderBottom: '1px solid var(--ds-border, #e5e7eb)' }}>
-          <div style={{ width: 96, flexShrink: 0 }}>
+          {(c.image_asset_id || c.image_url) && (
+            <div style={{ width: 64, height: 64, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: '1px solid var(--ds-border, #e5e7eb)', background: '#f1f5f9' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={c.image_asset_id ? `/api/assets/${c.image_asset_id}` : (c.image_url ?? '')}
+                alt={c.colour_name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            </div>
+          )}
+          <div style={{ width: 110, flexShrink: 0 }}>
             <AssetSlotControl
               manufacturerId={manufacturerId}
               uploadAssetType="thumbnail"

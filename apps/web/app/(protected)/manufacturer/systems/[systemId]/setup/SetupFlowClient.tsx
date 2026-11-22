@@ -116,9 +116,14 @@ export function SetupFlowClient({
   const router = useRouter()
   const [name, setName] = useState(systemName)
   const [quickUrl, setQuickUrl] = useState(initialWebsiteUrl)
+  const [replacePhotos, setReplacePhotos] = useState(false)
   const [quickBusy, setQuickBusy] = useState(false)
   const [quickMsg, setQuickMsg] = useState<string | null>(null)
   const [quickErr, setQuickErr] = useState<string | null>(null)
+  const [swatchUrl, setSwatchUrl] = useState(initialWebsiteUrl)
+  const [swatchBusy, setSwatchBusy] = useState(false)
+  const [swatchMsg, setSwatchMsg] = useState<string | null>(null)
+  const [swatchErr, setSwatchErr] = useState<string | null>(null)
   const [photosCount, setPhotosCount] = useState(initialGallery.length)
   const [coloursCount, setColoursCount] = useState(initialColours.length)
   const [linksCount, setLinksCount] = useState(initialCustomDocumentLinks.length)
@@ -241,15 +246,17 @@ export function SetupFlowClient({
       const res = await fetch(`/api/manufacturer/systems/${systemId}/import-from-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manufacturerId, url: trimmed, autoExtract: true }),
+        body: JSON.stringify({ manufacturerId, url: trimmed, autoExtract: true, replacePhotos }),
       })
       const data = await res.json()
       if (!res.ok) {
         setQuickErr(data.error ?? 'Could not import from that product page.')
         return
       }
+      if (!swatchUrl.trim()) setSwatchUrl(trimmed)
       const parts: string[] = []
       if (data.photosAdded > 0) parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
+      if (data.swatchesAdded > 0) parts.push(`${data.swatchesAdded} colour swatch${data.swatchesAdded === 1 ? '' : 'es'}`)
       if (data.linksAdded > 0) parts.push(`${data.linksAdded} product link`)
       if (data.pdfsQueued > 0) parts.push(`${data.pdfsQueued} PDF guide${data.pdfsQueued === 1 ? '' : 's'} queued for AI extraction`)
       setQuickMsg(
@@ -257,7 +264,8 @@ export function SetupFlowClient({
           ? `Imported ${parts.join(', ')}. Refreshing steps below…`
           : 'Product page checked — everything found is already added.',
       )
-      if (data.photosAdded > 0) setPhotosCount(data.totalPhotos ?? photosCount + data.photosAdded)
+      if (data.photosAdded > 0 || replacePhotos) setPhotosCount(data.totalPhotos ?? photosCount + data.photosAdded)
+      if (data.swatchesAdded > 0) setColoursCount(data.totalColours ?? coloursCount + data.swatchesAdded)
       if (data.linksAdded > 0) setLinksCount((c) => c + data.linksAdded)
       if (data.pdfsQueued > 0) setDocumentsCount((c) => c + data.pdfsQueued)
       if (Array.isArray(data.jobIds) && data.jobIds.length > 0) {
@@ -269,6 +277,37 @@ export function SetupFlowClient({
       setQuickErr(err instanceof Error ? err.message : String(err))
     } finally {
       setQuickBusy(false)
+    }
+  }
+
+  async function pullSwatchesFromUrl() {
+    const trimmed = (swatchUrl || quickUrl).trim()
+    if (!trimmed) return
+    setSwatchBusy(true)
+    setSwatchErr(null)
+    setSwatchMsg(null)
+    try {
+      const res = await fetch(`/api/manufacturer/systems/${systemId}/import-from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manufacturerId, url: trimmed, mode: 'swatches_only', autoExtract: false }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSwatchErr(data.error ?? 'Could not pull colour swatches from that page.')
+        return
+      }
+      if (data.swatchesAdded > 0) {
+        setColoursCount(data.totalColours ?? coloursCount + data.swatchesAdded)
+        setSwatchMsg(`Pulled ${data.swatchesAdded} colour swatch${data.swatchesAdded === 1 ? '' : 'es'} from the page.`)
+        router.refresh()
+      } else {
+        setSwatchMsg('No new colour swatches were found on that page (any already listed were skipped).')
+      }
+    } catch (err) {
+      setSwatchErr(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSwatchBusy(false)
     }
   }
 
@@ -342,8 +381,8 @@ export function SetupFlowClient({
           ⚡ Quick Start — Auto-fill from your product page
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', margin: '0 0 0.65rem', lineHeight: 1.5 }}>
-          Paste your official product page URL and we&apos;ll pull product photos, add your link, and
-          queue any PDF installation/spec guides on the page automatically.
+          Paste your official product page URL and we&apos;ll pull product photos, colour swatches,
+          add your link, and queue any PDF installation/spec guides on the page automatically.
         </p>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <input
@@ -372,6 +411,17 @@ export function SetupFlowClient({
             {quickBusy ? 'Importing…' : 'Auto-Fill'}
           </button>
         </div>
+        {photosCount > 0 && (
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', fontSize: '0.76rem', color: 'var(--ds-text-muted)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={replacePhotos}
+              onChange={(e) => setReplacePhotos(e.target.checked)}
+              style={{ accentColor: '#185D7A' }}
+            />
+            Replace existing photos with photos from this page
+          </label>
+        )}
         {quickMsg && <div style={{ fontSize: '0.78rem', color: '#16a34a', marginTop: '0.5rem', fontWeight: 600 }}>{quickMsg}</div>}
         {quickErr && <div style={{ fontSize: '0.78rem', color: '#dc2626', marginTop: '0.5rem' }}>{quickErr}</div>}
       </div>
@@ -387,9 +437,41 @@ export function SetupFlowClient({
         doneLabel={coloursCount > 0 ? `${coloursCount} colour${coloursCount === 1 ? '' : 's'}` : 'skip if not applicable'}
       >
         <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.7rem', lineHeight: 1.55 }}>
-          Add a swatch image for each colour or finish this system comes in — skip this step if it
-          doesn&apos;t apply to this product.
+          Add a swatch image for each colour or finish this system comes in — or pull them
+          automatically from your product page. Skip this step if it doesn&apos;t apply.
         </p>
+        <div style={{ display: 'flex', gap: '0.45rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+          <input
+            type="url"
+            value={swatchUrl}
+            onChange={(e) => setSwatchUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); pullSwatchesFromUrl() } }}
+            placeholder={quickUrl || 'https://www.yourbrand.com.au/products/your-product'}
+            disabled={swatchBusy}
+            style={{
+              flex: 1, minWidth: 220, padding: '6px 10px', borderRadius: 7,
+              border: '1px solid var(--ds-border)',
+              background: 'var(--ds-surface, rgba(255,255,255,0.04))',
+              color: 'inherit', fontSize: '0.8rem',
+            }}
+          />
+          <button
+            type="button"
+            onClick={pullSwatchesFromUrl}
+            disabled={swatchBusy || !(swatchUrl || quickUrl).trim()}
+            style={{
+              fontSize: '0.78rem', fontWeight: 700, color: '#185D7A',
+              background: 'rgba(24,93,122,0.08)',
+              border: '1px solid rgba(24,93,122,0.35)', borderRadius: 7,
+              padding: '6px 12px', cursor: swatchBusy || !(swatchUrl || quickUrl).trim() ? 'default' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {swatchBusy ? 'Pulling swatches…' : '⚡ Pull swatches from page'}
+          </button>
+        </div>
+        {swatchMsg && <div style={{ fontSize: '0.76rem', color: '#16a34a', marginBottom: '0.5rem', fontWeight: 600 }}>{swatchMsg}</div>}
+        {swatchErr && <div style={{ fontSize: '0.76rem', color: '#dc2626', marginBottom: '0.5rem' }}>{swatchErr}</div>}
         <ColoursSection
           systemId={systemId} manufacturerId={manufacturerId}
           initialColours={initialColours} pickerAssets={pickerAssets}

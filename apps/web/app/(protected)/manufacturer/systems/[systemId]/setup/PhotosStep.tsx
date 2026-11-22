@@ -120,6 +120,15 @@ export function PhotosStep({
     })
   }
 
+  function clearAll() {
+    setGallery([])
+    onChanged?.(0)
+    setEditingIndex(null)
+    setGalleryImages(systemId, manufacturerId, []).then((res) => {
+      if (!res.ok) setError(res.error)
+    })
+  }
+
   function updatePosition(i: number, x: number, y: number, zoom: number) {
     setGallery((prev) => prev.map((g, j) => (j === i ? { ...g, position_x: x, position_y: y, zoom } : g)))
   }
@@ -174,7 +183,20 @@ export function PhotosStep({
       {error && <div style={{ fontSize: '0.78rem', color: '#dc2626', marginBottom: '0.6rem' }}>{error}</div>}
 
       {gallery.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '0.5rem' }}>
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.45rem' }}>
+            <button
+              type="button"
+              onClick={clearAll}
+              style={{
+                fontSize: '0.74rem', fontWeight: 600, color: '#b91c1c',
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+              }}
+            >
+              Clear all photos
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '0.5rem' }}>
           {gallery.map((g, i) => (
             <div key={i} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1 / 1', background: '#f1f5f9' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -213,7 +235,8 @@ export function PhotosStep({
               </button>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       {editingIndex != null && gallery[editingIndex] && (

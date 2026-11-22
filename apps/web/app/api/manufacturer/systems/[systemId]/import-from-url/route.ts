@@ -1,16 +1,19 @@
 // 1-Click "Import from Product Page URL" for manufacturer self-serve setup.
 //
-// Given a single official product page URL (e.g.
-// https://www.jameshardie.com.au/products/hardiedeck-system), this route:
-//   1. Fetches the HTML (including embedded __NEXT_DATA__ / JSON-LD / og:image)
+// Given an official product page URL (e.g.
+// https://www.jameshardie.com.au/products/timbertech-vintage-collection), this route:
+//   1. Fetches the HTML (inspecting __NEXT_DATA__ product subtrees FIRST while
+//      excluding global header/nav/footer/menu chrome, then falling back to
+//      cleaned main-content HTML)
 //   2. Non-destructively adds the product page link to custom_document_links
 //      (and sets website_url if blank)
-//   3. Extracts clean product/gallery photos (up to 10 total) and appends them
-//      to staged_systems.gallery_images (setting hero_image_url if blank)
-//   4. Discovers linked PDF guides (install, sealing/design, technical data,
-//      warranty/brochure), auto-classifies each role, creates source_documents +
-//      system_sources rows, and enqueues fetch_url -> docling -> auto_chain
-//      (system_identity_parser + knowledge_parser) on the cloud worker.
+//   3. Extracts product-specific gallery/hero photos (up to 10 total), filtering
+//      out nav/promo banners, GIFs, SVGs, and icons
+//   4. Extracts product colour/finish swatches (name + swatch image URL) and
+//      inserts/updates them in staged_system_colours
+//   5. Discovers linked PDF guides (install, design/care, technical data,
+//      warranty/brochure), deduplicates against existing docs, and enqueues
+//      fetch_url -> docling -> auto_chain on the cloud worker.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getStudioSession } from '@/lib/studio-auth/session'
@@ -21,8 +24,10 @@ export const runtime = 'nodejs'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_GALLERY = 10
 const MAX_PDFS = 8
+const MAX_SWATCHES = 24
 
 type SystemSourceRole = 'install_guide' | 'design_guide' | 'tech_data' | 'source_catalogue'
+type ImportMode = 'full' | 'swatches_only' | 'photos_only'
 
 type GalleryPhoto = {
   asset_id?: string | null
@@ -39,6 +44,44 @@ type CustomDocumentLink = {
   type?: 'product_page' | 'web_guide'
 }
 
+type ExtractedSwatch = {
+  name: string
+  imageUrl: string
+}
+
+const SKIP_JSON_KEYS = new Set([
+  'menu',
+  'menus',
+  'header',
+  'headers',
+  'footer',
+  'footers',
+  'nav',
+  'navbar',
+  'navigation',
+  'megamenu',
+  'global',
+  'globaldata',
+  'globalconfig',
+  'siteconfig',
+  'cookiebanner',
+  'relatedproducts',
+  'otherproducts',
+  'productitems',
+  'recommendedproducts',
+  'alsolike',
+  'crosssell',
+  'upsell',
+  'timbertechdeckingsamplestaticdata',
+  'timbertechdeckingsampleproductitems',
+  'samplestaticdata',
+  'sampleproductitems',
+  'metadata',
+])
+
+const NON_COLOUR_PHRASE_RE =
+  /^(?:low maintenance|easy to maintain|durability|exceptional durability|moisture|resistant|fire resistant|design versatility|cools quickly|realistic timber|warranty|\d+[- ]?year|download|install|installation|brochure|guide|faq|frequently asked|contact|order|sample|specification|specifications|accessories|resources|comparison|overview|features|benefits|why |how to|view |learn more|read more|see more|shop now|buy now|square|grooved|fascia|trim|clip|screw|fastener|subframe|joist|bearer)/i
+
 function isBlockedHost(hostname: string): boolean {
   const h = hostname.toLowerCase()
   if (h === 'localhost' || h === '::1' || h.endsWith('.local') || h.endsWith('.internal')) return true
@@ -54,19 +97,38 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
     .replace(/\\u002F/gi, '/')
     .replace(/\\\//g, '/')
 }
 
+function stripTagsAndClean(raw: string): string {
+  return decodeHtmlEntities(raw)
+    .replace(/<[^>]+>/g, '')
+    .replace(/\u202f|\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function resolveUrl(raw: string, base: URL): string | null {
   try {
-    const cleaned = decodeHtmlEntities(raw.trim())
+    let cleaned = decodeHtmlEntities(raw.trim())
     if (!cleaned || cleaned.startsWith('data:') || cleaned.startsWith('javascript:') || cleaned.startsWith('mailto:')) {
       return null
+    }
+    // Unwrap Next.js /_next/image?url=... proxy URLs to the underlying durable asset URL
+    if (cleaned.startsWith('/_next/image')) {
+      const parsedNext = new URL(cleaned, base)
+      const inner = parsedNext.searchParams.get('url')
+      if (inner) cleaned = inner
     }
     const u = new URL(cleaned, base)
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
     if (isBlockedHost(u.hostname)) return null
+    // Prefer https on well-known CDNs that emit both http and https copies
+    if (u.protocol === 'http:' && /(?:ctfassets\.net|cloudinary\.com|imgix\.net)$/i.test(u.hostname)) {
+      u.protocol = 'https:'
+    }
     return u.toString()
   } catch {
     return null
@@ -114,39 +176,291 @@ function deriveLabel(urlStr: string, fallback: string): string {
   }
 }
 
-function looksLikeUsefulProductPhoto(urlStr: string, alt = ''): boolean {
+function isImageUrl(urlStr: string): boolean {
+  const lower = urlStr.toLowerCase()
+  if (/\.svg(\?|$|#)|\.gif(\?|$|#)/i.test(lower)) return false
+  return (
+    /\.(jpg|jpeg|png|webp|avif)(\?|$|#)/i.test(lower) ||
+    /images\.ctfassets\.net|res\.cloudinary\.com\/[^/]+\/image\/|imgix\.net/i.test(lower)
+  )
+}
+
+function looksLikeUsefulProductPhoto(urlStr: string, alt = '', width?: number, height?: number): boolean {
+  if (!isImageUrl(urlStr)) return false
+  if (typeof width === 'number' && width > 0 && width < 360) return false
+  if (typeof height === 'number' && height > 0 && height < 220) return false
   const lower = `${urlStr} ${alt}`.toLowerCase()
-  if (!/\.(jpg|jpeg|png|webp|avif)(\?|$|#)/i.test(urlStr.toLowerCase()) && !/ctfassets\.net|cloudinary\.com|imgix\.net/i.test(urlStr.toLowerCase())) {
-    return false
-  }
-  if (/\.svg(\?|$)|favicon|logo|icon|sprite|avatar|badge|social|facebook|instagram|linkedin|youtube|pinterest|pixel|tracking|analytics|spacer|placeholder|arrow|chevron|close|menu|search|congrat|promo|campaign|award|newsletter|zero-harm|zero_harm|app-store|google-play|qr-code|banner-ad|safety-worker/i.test(lower)) {
+  if (
+    /favicon|logo|icon|icons?[_ -]|sprite|avatar|badge|social|facebook|instagram|linkedin|youtube|pinterest|pixel|tracking|analytics|spacer|placeholder|arrow|chevron|close|menu|search|congrat|promo|campaign|award|winner|newsletter|zero-harm|zero_harm|app-store|google-play|qr-code|banner-ad|safety-worker|mask[_ ]group|square[_ ]98/i.test(
+      lower,
+    )
+  ) {
     return false
   }
   return true
 }
 
+function looksLikeSwatchImage(urlStr: string, width?: number, height?: number): boolean {
+  if (!isImageUrl(urlStr)) return false
+  if (typeof width === 'number' && width > 0 && width < 48) return false
+  if (typeof height === 'number' && height > 0 && height < 48) return false
+  const lower = urlStr.toLowerCase()
+  if (/favicon|logo|sprite|social|facebook|instagram|linkedin|youtube|pixel|tracking|arrow|chevron|winner|zero-harm|icons?_-_/.test(lower)) {
+    return false
+  }
+  return true
+}
+
+function cleanColourName(raw: string): string | null {
+  let name = stripTagsAndClean(raw)
+    .replace(/^(?:colour|color|finish|swatch|shade)\s*[:–—-]\s*/i, '')
+    .replace(/\s*(?:swatch|thumbnail|sample|tile|icon|board|decking)\s*$/i, '')
+    .trim()
+  if (!name || name.length < 2 || name.length > 42) return null
+  // Reject numeric SKUs, dimensions, URLs, or long sentences
+  if (/^\d[\d\s.,x×mm-]*$/i.test(name)) return null
+  if (/^https?:\/\//i.test(name) || /[{}[\]<>]/.test(name)) return null
+  const words = name.split(/\s+/)
+  if (words.length > 5) return null
+  if (NON_COLOUR_PHRASE_RE.test(name)) return null
+  if (/^[0-9a-f]{16,}$/i.test(name.replace(/[^0-9a-f]/gi, '')) && name.length >= 16) return null
+  return name
+}
+
+function extractAssetUrlFromObj(obj: unknown): { url: string; title?: string; width?: number; height?: number } | null {
+  if (!obj) return null
+  if (typeof obj === 'string') return { url: obj }
+  if (typeof obj !== 'object') return null
+  const rec = obj as Record<string, unknown>
+
+  // Contentful Asset shape: { fields: { title, file: { url, details: { image: { width, height } } } } }
+  const fields = (rec.fields && typeof rec.fields === 'object' ? rec.fields : rec) as Record<string, unknown>
+  const file = fields.file as Record<string, unknown> | undefined
+  if (file && typeof file.url === 'string') {
+    const imgDetails = (file.details as Record<string, unknown> | undefined)?.image as
+      | { width?: number; height?: number }
+      | undefined
+    return {
+      url: file.url,
+      title: typeof fields.title === 'string' ? fields.title : undefined,
+      width: imgDetails?.width,
+      height: imgDetails?.height,
+    }
+  }
+  // Generic CMS / Shopify / Sanity / Cloudinary shape
+  for (const k of ['secure_url', 'url', 'src', 'imageUrl', 'image_url', 'swatchUrl', 'swatch_url']) {
+    if (typeof fields[k] === 'string') {
+      return {
+        url: fields[k] as string,
+        title: typeof fields.alt === 'string' ? fields.alt : typeof fields.title === 'string' ? fields.title : undefined,
+        width: typeof fields.width === 'number' ? fields.width : undefined,
+        height: typeof fields.height === 'number' ? fields.height : undefined,
+      }
+    }
+  }
+  return null
+}
+
+function extractFromNextData(
+  html: string,
+  baseUrl: URL,
+  systemName: string,
+): {
+  galleryPhotos: { url: string; alt: string; priority: number }[]
+  swatches: ExtractedSwatch[]
+  pdfs: { url: string; label: string }[]
+} {
+  const galleryPhotos: { url: string; alt: string; priority: number }[] = []
+  const swatches: ExtractedSwatch[] = []
+  const pdfs: { url: string; label: string }[] = []
+
+  const nextMatch = html.match(/<script\s+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)
+  if (!nextMatch) return { galleryPhotos, swatches, pdfs }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(nextMatch[1])
+  } catch {
+    return { galleryPhotos, swatches, pdfs }
+  }
+
+  const pageProps = (parsed as { props?: { pageProps?: Record<string, unknown> } })?.props?.pageProps
+  if (!pageProps || typeof pageProps !== 'object') return { galleryPhotos, swatches, pdfs }
+
+  const seenSwatchNames = new Set<string>()
+  const pushSwatch = (rawName: string, rawUrl: string, width?: number, height?: number) => {
+    const name = cleanColourName(rawName)
+    if (!name) return
+    const resolved = resolveUrl(rawUrl, baseUrl)
+    if (!resolved || !looksLikeSwatchImage(resolved, width, height)) return
+    const key = name.toLowerCase()
+    if (seenSwatchNames.has(key)) return
+    seenSwatchNames.add(key)
+    swatches.push({ name, imageUrl: resolved })
+  }
+
+  const visited = new Set<unknown>()
+
+  const walk = (node: unknown, pathKeys: string[], inGallery: boolean, inSwatchContext: boolean, depth: number) => {
+    if (!node || typeof node !== 'object' || depth > 14 || visited.has(node)) return
+    visited.add(node)
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        walk(item, pathKeys, inGallery, inSwatchContext, depth + 1)
+      }
+      return
+    }
+
+    const rec = node as Record<string, unknown>
+    const fields = rec.fields && typeof rec.fields === 'object' && !Array.isArray(rec.fields)
+      ? (rec.fields as Record<string, unknown>)
+      : rec
+
+    // Check if this container represents a colour/swatch/spec section
+    const compKey = typeof fields.frontEndComponentKey === 'string' ? fields.frontEndComponentKey : ''
+    const sectionTitle = typeof fields.title === 'string' ? stripTagsAndClean(fields.title) : ''
+    const isFeatureSection = /comparison|whyChoose|faq|disclaimer|benefit|feature/i.test(`${compKey} ${sectionTitle}`)
+    const nextSwatchCtx =
+      !isFeatureSection &&
+      (inSwatchContext ||
+        /colour|color|swatch|finish|shade|specification|variant/i.test(`${compKey} ${sectionTitle}`))
+
+    // 1) Detect PDFs in Contentful/Cloudinary resource entries
+    if (typeof fields.linkUrl === 'string' && /\.pdf(\?|$|#)/i.test(fields.linkUrl)) {
+      const resolved = resolveUrl(fields.linkUrl, baseUrl)
+      if (resolved) {
+        const label = typeof fields.linkText === 'string' ? stripTagsAndClean(fields.linkText) : deriveLabel(resolved, `${systemName} document`)
+        pdfs.push({ url: resolved, label })
+      }
+    }
+    if (Array.isArray(fields.pdf)) {
+      const label = typeof fields.linkText === 'string' ? stripTagsAndClean(fields.linkText) : ''
+      for (const p of fields.pdf) {
+        const pr = p as Record<string, unknown> | null
+        const rawPdfUrl = (typeof pr?.secure_url === 'string' && pr.secure_url) || (typeof pr?.url === 'string' && pr.url) || ''
+        if (rawPdfUrl && /\.pdf(\?|$|#)/i.test(rawPdfUrl)) {
+          const resolved = resolveUrl(rawPdfUrl, baseUrl)
+          if (resolved) pdfs.push({ url: resolved, label: label || deriveLabel(resolved, `${systemName} document`) })
+        }
+      }
+    }
+
+    // 2) Detect colour/swatch items inside swatch/spec sections
+    //    e.g. James Hardie TimberTech: { linkText: "Weathered Teak", icon: { fields: { file: { url } } }, links: [SKU...] }
+    //    or generic CMS: { colour_name / colorName / swatchName / name, swatch / image / icon }
+    if (!isFeatureSection) {
+      const rawColourLabel =
+        (typeof fields.colour_name === 'string' && fields.colour_name) ||
+        (typeof fields.color_name === 'string' && fields.color_name) ||
+        (typeof fields.colourName === 'string' && fields.colourName) ||
+        (typeof fields.colorName === 'string' && fields.colorName) ||
+        (typeof fields.swatchName === 'string' && fields.swatchName) ||
+        (nextSwatchCtx && typeof fields.linkText === 'string' && fields.linkText) ||
+        (nextSwatchCtx && typeof fields.name === 'string' && fields.name) ||
+        (nextSwatchCtx && typeof fields.title === 'string' && fields.title) ||
+        null
+
+      if (rawColourLabel) {
+        const hasSkuLinks = Array.isArray(fields.links) && fields.links.length > 0
+        const hasExplicitColourKey = Boolean(
+          fields.colour_name || fields.color_name || fields.colourName || fields.colorName || fields.swatchName || fields.swatch || fields.swatchImage,
+        )
+        const strictColourSection = /colour|color|swatch|finish|shade/i.test(`${compKey} ${sectionTitle} ${pathKeys.slice(-2).join(' ')}`)
+
+        if (hasExplicitColourKey || strictColourSection || (nextSwatchCtx && hasSkuLinks)) {
+          const swatchAsset =
+            extractAssetUrlFromObj(fields.swatch) ||
+            extractAssetUrlFromObj(fields.swatchImage) ||
+            extractAssetUrlFromObj(fields.swatch_image) ||
+            extractAssetUrlFromObj(fields.icon) ||
+            extractAssetUrlFromObj(fields.image) ||
+            extractAssetUrlFromObj(fields.thumbnail)
+          if (swatchAsset?.url) {
+            pushSwatch(rawColourLabel, swatchAsset.url, swatchAsset.width, swatchAsset.height)
+          }
+        }
+      }
+    }
+
+    // 3) Detect Contentful / CMS gallery or hero photo asset objects
+    const asset = extractAssetUrlFromObj(rec)
+    if (asset && !isFeatureSection) {
+      const resolved = resolveUrl(asset.url, baseUrl)
+      const cleanAlt = asset.title ? stripTagsAndClean(asset.title) : systemName
+      const lastKey = (pathKeys[pathKeys.length - 1] || '').toLowerCase()
+      const isIconField = /icon|logo|avatar|badge|swatch/.test(lastKey)
+      if (resolved && !isIconField && looksLikeUsefulProductPhoto(resolved, cleanAlt, asset.width, asset.height)) {
+        const priority = inGallery ? 10 : /hero|banner|cover|main/.test(pathKeys.join(' ').toLowerCase()) ? 8 : 4
+        galleryPhotos.push({ url: resolved, alt: cleanAlt || systemName, priority })
+      }
+    }
+
+    // 4) Recurse into child keys while skipping global site chrome & feature/icon subtrees
+    for (const [k, v] of Object.entries(rec)) {
+      if (!v || typeof v !== 'object') continue
+      const kl = k.toLowerCase()
+      if (SKIP_JSON_KEYS.has(kl)) continue
+      if (/^(?:menu|header|footer|nav|navigation|megamenu|related|otherproduct|iconimage|sampleproduct)/i.test(kl)) continue
+      if (isFeatureSection && kl === 'accessorieslist') continue
+      const childInGallery = inGallery || /slide|gallery|banner|hero|carousel|media|photo|images/i.test(kl)
+      const childInSwatch = nextSwatchCtx || /colour|color|swatch|finish|shade|variant/i.test(kl)
+      walk(v, [...pathKeys, k], childInGallery, childInSwatch, depth + 1)
+    }
+  }
+
+  // Prefer primary product root keys inside pageProps, skipping global menu/footer/productItems
+  for (const [k, v] of Object.entries(pageProps)) {
+    if (!v || typeof v !== 'object') continue
+    if (SKIP_JSON_KEYS.has(k.toLowerCase())) continue
+    if (/^(?:menu|header|footer|nav|productitems|sample)/i.test(k)) continue
+    walk(v, [k], /banner|hero|gallery|slide/i.test(k), /colour|color|swatch|finish/i.test(k), 0)
+  }
+
+  // Sort photos: explicit gallery/banner slides first
+  galleryPhotos.sort((a, b) => b.priority - a.priority)
+
+  return { galleryPhotos, swatches, pdfs }
+}
+
 function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
   title: string
   images: { url: string; alt: string }[]
+  swatches: ExtractedSwatch[]
   pdfs: { url: string; label: string; role: SystemSourceRole }[]
 } {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
-  const rawTitle = titleMatch ? decodeHtmlEntities(titleMatch[1].replace(/\s+/g, ' ').trim()) : systemName
+  const rawTitle = titleMatch ? stripTagsAndClean(titleMatch[1]) : systemName
   const title = rawTitle.split(/\s*[|–—-]\s*/)[0]?.trim() || systemName
+
+  const titleTokens = `${systemName} ${title}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !/^(?:with|from|that|this|your|deck|decking|system|product|collection|james|hardie|australia)$/.test(w))
+
+  const nextExtracted = extractFromNextData(html, baseUrl, systemName)
 
   const images: { url: string; alt: string }[] = []
   const seenImg = new Set<string>()
-  const pushImg = (rawUrl: string, alt: string) => {
+  const swatchUrlKeys = new Set(nextExtracted.swatches.map((s) => s.imageUrl.split(/[?#]/)[0].toLowerCase()))
+
+  const pushImg = (rawUrl: string, alt: string, allowIfSwatch = false) => {
     const resolved = resolveUrl(rawUrl, baseUrl)
     if (!resolved) return
-    // Strip query params when deduping so Contentful ?fm=webp & bare URLs don't duplicate
     const key = resolved.split(/[?#]/)[0].toLowerCase()
+    if (!allowIfSwatch && swatchUrlKeys.has(key)) return
     if (seenImg.has(key) || !looksLikeUsefulProductPhoto(resolved, alt)) return
     seenImg.add(key)
-    images.push({ url: resolved, alt: alt.trim() || systemName })
+    images.push({ url: resolved, alt: stripTagsAndClean(alt) || systemName })
   }
 
-  // 1) og:image & twitter:image first (almost always the best hero shot)
+  // 1) Structured product gallery photos from __NEXT_DATA__ FIRST (excludes nav/footer/promo chrome!)
+  for (const p of nextExtracted.galleryPhotos) {
+    pushImg(p.url, p.alt)
+  }
+
+  // 2) og:image & twitter:image (great hero fallback when not already in gallery)
   for (const m of Array.from(html.matchAll(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["'][^>]*>/gi))) {
     pushImg(m[1], `${systemName} hero`)
   }
@@ -154,25 +468,70 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
     pushImg(m[1], `${systemName} hero`)
   }
 
-  // 2) Standard <img> tags
-  for (const m of Array.from(html.matchAll(/<img\b[^>]*>/gi))) {
+  // 3) Cleaned HTML body fallback (strip header/nav/footer/aside/script/style so mega-menu promos don't pollute!)
+  const cleanedHtml = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<header\b[^>]*>[\s\S]*?<\/header>/gi, ' ')
+    .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, ' ')
+    .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, ' ')
+    .replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, ' ')
+
+  const swatches: ExtractedSwatch[] = [...nextExtracted.swatches]
+  const seenSwatchNames = new Set(swatches.map((s) => s.name.toLowerCase()))
+
+  // Collect HTML <img> tags, separating swatch images from product photos and scoring relevance
+  const scoredHtmlImgs: { url: string; alt: string; score: number }[] = []
+  for (const m of Array.from(cleanedHtml.matchAll(/<img\b[^>]*>/gi))) {
     const tag = m[0]
-    const srcM = tag.match(/\b(?:src|data-src)=["']([^"']+)["']/i)
+    const srcM = tag.match(/\b(?:src|data-src|data-lazy-src)=["']([^"']+)["']/i)
     if (!srcM) continue
-    const altM = tag.match(/\balt=["']([^"']*)["']/i)
-    pushImg(srcM[1], altM ? decodeHtmlEntities(altM[1]) : systemName)
+    const altRaw = (tag.match(/\balt=["']([^"']*)["']/i) || [])[1] || ''
+    const titleAttr = (tag.match(/\btitle=["']([^"']*)["']/i) || [])[1] || ''
+    const classAttr = (tag.match(/\bclass=["']([^"']*)["']/i) || [])[1] || ''
+    const alt = stripTagsAndClean(altRaw || titleAttr)
+    const resolved = resolveUrl(srcM[1], baseUrl)
+    if (!resolved) continue
+
+    // Check if this <img> looks like a colour swatch on non-Next.js sites
+    const looksSwatchTag = /\b(swatch|colour|color|finish)\b/i.test(`${classAttr} ${resolved} ${altRaw}`)
+    if (looksSwatchTag && swatches.length < MAX_SWATCHES) {
+      const candidateName =
+        cleanColourName(alt) ||
+        cleanColourName(deriveLabel(resolved, ''))
+      if (candidateName && !seenSwatchNames.has(candidateName.toLowerCase()) && looksLikeSwatchImage(resolved)) {
+        seenSwatchNames.add(candidateName.toLowerCase())
+        swatches.push({ name: candidateName, imageUrl: resolved })
+        swatchUrlKeys.add(resolved.split(/[?#]/)[0].toLowerCase())
+        continue
+      }
+    }
+
+    if (!looksLikeUsefulProductPhoto(resolved, alt)) continue
+
+    // Reject random SHA-hash filenames with random/empty alt (typical mega-menu promo tiles)
+    const filePart = resolved.split(/[?#]/)[0].split('/').pop() || ''
+    const hasHashFilename = /^[0-9a-f]{24,}/i.test(filePart)
+    const hasHashAlt = !alt || /^[0-9a-f]{20,}/i.test(alt.replace(/[^0-9a-f]/gi, ''))
+    if (hasHashFilename && hasHashAlt) continue
+
+    let score = 0
+    const hay = `${resolved} ${alt}`.toLowerCase()
+    for (const tok of titleTokens) {
+      if (hay.includes(tok)) score += 4
+    }
+    if (alt.length >= 8 && !hasHashAlt) score += 2
+    if (/\.(jpe?g|webp)(\?|$)/i.test(resolved)) score += 1
+    scoredHtmlImgs.push({ url: resolved, alt: alt || systemName, score })
   }
 
-  // 3) Embedded CMS image URLs (Contentful / Cloudinary / direct jpg/webp in __NEXT_DATA__)
-  for (const m of Array.from(html.matchAll(/(?:https?:)?\/\/(?:images\.ctfassets\.net|res\.cloudinary\.com)[^\s"'\\<>]+/gi))) {
-    const raw = m[0].startsWith('//') ? `https:${m[0]}` : m[0]
-    pushImg(raw, systemName)
+  scoredHtmlImgs.sort((a, b) => b.score - a.score)
+  for (const img of scoredHtmlImgs) {
+    if (images.length >= MAX_GALLERY) break
+    pushImg(img.url, img.alt)
   }
 
-  // 4) PDF links from <a href> and embedded JSON/CMS asset strings
-  // Deduplicate by BOTH canonical URL (without query/hash) AND normalized
-  // filename/label so pages that link the same PDF in multiple tabs/JSON blobs
-  // only ever enqueue it once.
+  // 4) PDF links from structured __NEXT_DATA__ first, then <a href>, then embedded URLs
   const pdfs: { url: string; label: string; role: SystemSourceRole }[] = []
   const seenPdfKeys = new Set<string>()
   const pushPdf = (rawUrl: string, anchorText?: string) => {
@@ -181,7 +540,7 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
     const urlNoQuery = resolved.split(/[?#]/)[0].toLowerCase()
     if (!/\.pdf$/i.test(urlNoQuery)) return
     const fileKey = normDocKey(urlNoQuery)
-    const cleanedAnchor = anchorText ? decodeHtmlEntities(anchorText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()) : ''
+    const cleanedAnchor = anchorText ? stripTagsAndClean(anchorText) : ''
     const label = cleanedAnchor && cleanedAnchor.length >= 4 && !/^(download|view|open|pdf|click here)$/i.test(cleanedAnchor)
       ? cleanedAnchor.slice(0, 140)
       : deriveLabel(resolved, `${systemName} document`)
@@ -195,17 +554,23 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
     pdfs.push({ url: resolved, label, role: guessPdfRole(`${label} ${resolved}`) })
   }
 
-  for (const m of Array.from(html.matchAll(/<a\b[^>]*href=["']([^"']+\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]*?)<\/a>/gi))) {
+  for (const p of nextExtracted.pdfs) {
+    pushPdf(p.url, p.label)
+  }
+  for (const m of Array.from(cleanedHtml.matchAll(/<a\b[^>]*href=["']([^"']+\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]*?)<\/a>/gi))) {
     pushPdf(m[1], m[2])
   }
-  for (const m of Array.from(html.matchAll(/(?:https?:)?\/\/[^\s"'\\<>]+\.pdf(?:\?[^\s"'\\<>]*)?/gi))) {
-    const raw = m[0].startsWith('//') ? `https:${m[0]}` : m[0]
-    pushPdf(raw)
+  if (pdfs.length === 0) {
+    for (const m of Array.from(html.matchAll(/(?:https?:)?\/\/[^\s"'\\<>]+\.pdf(?:\?[^\s"'\\<>]*)?/gi))) {
+      const raw = m[0].startsWith('//') ? `https:${m[0]}` : m[0]
+      pushPdf(raw)
+    }
   }
 
   return {
     title,
     images: images.slice(0, MAX_GALLERY),
+    swatches: swatches.slice(0, MAX_SWATCHES),
     pdfs: pdfs.slice(0, MAX_PDFS),
   }
 }
@@ -225,11 +590,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     manufacturerId?: string
     url?: string
     autoExtract?: boolean
+    mode?: ImportMode
+    replacePhotos?: boolean
   } | null
 
   const manufacturerId = body?.manufacturerId
   const rawUrl = body?.url?.trim()
   const autoExtract = body?.autoExtract !== false
+  const mode: ImportMode = body?.mode === 'swatches_only' || body?.mode === 'photos_only' ? body.mode : 'full'
+  const replacePhotos = Boolean(body?.replacePhotos)
 
   if (!manufacturerId || !UUID_RE.test(manufacturerId)) {
     return NextResponse.json({ error: 'manufacturerId is required.' }, { status: 400 })
@@ -330,31 +699,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
 
   const extracted = extractPageAssets(html, finalUrl, systemName)
 
-  // Merge photos non-destructively (up to 10 total)
-  const existingGallery: GalleryPhoto[] = Array.isArray(sys.gallery_images) ? sys.gallery_images : []
-  const existingImgUrls = new Set(existingGallery.map((g) => g.url))
+  // ── 1) Photos & Links (full or photos_only) ────────────────────────────────
+  const existingGallery: GalleryPhoto[] = replacePhotos ? [] : (Array.isArray(sys.gallery_images) ? sys.gallery_images : [])
+  const existingImgUrls = new Set(existingGallery.map((g) => g.url.split(/[?#]/)[0].toLowerCase()))
   const addedPhotos: GalleryPhoto[] = []
-  for (const img of extracted.images) {
-    if (existingGallery.length + addedPhotos.length >= MAX_GALLERY) break
-    if (existingImgUrls.has(img.url)) continue
-    existingImgUrls.add(img.url)
-    addedPhotos.push({
-      asset_id: null,
-      url: img.url,
-      alt: img.alt,
-      position_x: 50,
-      position_y: 50,
-      zoom: 1,
-    })
+
+  if (mode === 'full' || mode === 'photos_only') {
+    for (const img of extracted.images) {
+      if (existingGallery.length + addedPhotos.length >= MAX_GALLERY) break
+      const key = img.url.split(/[?#]/)[0].toLowerCase()
+      if (existingImgUrls.has(key)) continue
+      existingImgUrls.add(key)
+      addedPhotos.push({
+        asset_id: null,
+        url: img.url,
+        alt: img.alt,
+        position_x: 50,
+        position_y: 50,
+        zoom: 1,
+      })
+    }
   }
   const nextGallery = [...existingGallery, ...addedPhotos]
 
-  // Merge product page link non-destructively
   const existingLinks: CustomDocumentLink[] = Array.isArray(sys.custom_document_links) ? sys.custom_document_links : []
   const existingLinkUrls = new Set(existingLinks.map((l) => l.url))
   const nextLinks = [...existingLinks]
   let linksAdded = 0
-  if (!existingLinkUrls.has(finalUrl.toString())) {
+  if (mode === 'full' && !existingLinkUrls.has(finalUrl.toString())) {
     nextLinks.unshift({
       label: `${extracted.title} — Official Product Page`,
       url: finalUrl.toString(),
@@ -364,8 +736,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
   }
 
   const sysPatch: Record<string, unknown> = {}
-  if (addedPhotos.length > 0) sysPatch.gallery_images = nextGallery
-  if (!sys.hero_image_url && nextGallery[0]?.url) sysPatch.hero_image_url = nextGallery[0].url
+  if ((mode === 'full' || mode === 'photos_only') && (addedPhotos.length > 0 || replacePhotos)) {
+    sysPatch.gallery_images = nextGallery
+    if ((replacePhotos || !sys.hero_image_url) && nextGallery[0]?.url) {
+      sysPatch.hero_image_url = nextGallery[0].url
+    }
+  }
   if (!sys.website_url) sysPatch.website_url = finalUrl.toString()
   if (linksAdded > 0) sysPatch.custom_document_links = nextLinks
 
@@ -380,128 +756,175 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     }
   }
 
-  // Register & queue discovered PDFs (deduped against existing system_sources
-  // by URL, filename, AND normalized label so already-uploaded local PDFs are
-  // never re-queued).
-  const { data: existingSources } = await supabase
-    .from('system_sources')
-    .select('url, label, source_documents(document_name, original_filename)')
-    .eq('staged_system_id', systemId)
+  // ── 2) Colour swatches (full or swatches_only) ─────────────────────────────
+  let swatchesAdded = 0
+  let totalColours = 0
+  const addedSwatches: ExtractedSwatch[] = []
 
-  type ExistingSourceRow = {
-    url: string | null
-    label: string | null
-    source_documents:
-      | { document_name: string | null; original_filename: string | null }
-      | { document_name: string | null; original_filename: string | null }[]
-      | null
-  }
-  const seenExisting = new Set<string>()
-  for (const s of (existingSources ?? []) as unknown as ExistingSourceRow[]) {
-    if (s.url) {
-      seenExisting.add(s.url.split(/[?#]/)[0].toLowerCase())
-      const fk = normDocKey(s.url)
-      if (fk) seenExisting.add(`name:${fk}`)
-    }
-    if (s.label) {
-      const lk = normDocKey(s.label)
-      if (lk) seenExisting.add(`name:${lk}`)
-    }
-    const sd = Array.isArray(s.source_documents) ? s.source_documents[0] : s.source_documents
-    if (sd?.document_name) {
-      const dk = normDocKey(sd.document_name)
-      if (dk) seenExisting.add(`name:${dk}`)
-    }
-    if (sd?.original_filename) {
-      const ok = normDocKey(sd.original_filename)
-      if (ok) seenExisting.add(`name:${ok}`)
+  if (mode === 'full' || mode === 'swatches_only') {
+    const { data: existingCols } = await supabase
+      .from('staged_system_colours')
+      .select('id, colour_name, image_url')
+      .eq('staged_system_id', systemId)
+
+    const existingList = (existingCols ?? []) as { id: string; colour_name: string | null; image_url: string | null }[]
+    totalColours = existingList.length
+    const byName = new Map(existingList.map((c) => [(c.colour_name ?? '').trim().toLowerCase(), c]))
+
+    for (const sw of extracted.swatches) {
+      const key = sw.name.trim().toLowerCase()
+      const existing = byName.get(key)
+      if (existing) {
+        if (!existing.image_url && sw.imageUrl) {
+          await supabase
+            .from('staged_system_colours')
+            .update({ image_url: sw.imageUrl })
+            .eq('id', existing.id)
+          swatchesAdded += 1
+          addedSwatches.push(sw)
+        }
+        continue
+      }
+      const { error: colErr } = await supabase
+        .from('staged_system_colours')
+        .insert({
+          staged_system_id: systemId,
+          colour_name: sw.name,
+          image_url: sw.imageUrl,
+          is_stocked: true,
+          verification_status: 'pending_review',
+        })
+      if (!colErr) {
+        byName.set(key, { id: '', colour_name: sw.name, image_url: sw.imageUrl })
+        swatchesAdded += 1
+        totalColours += 1
+        addedSwatches.push(sw)
+      }
     }
   }
 
+  // ── 3) Discovered PDFs (full mode only) ────────────────────────────────────
   const queuedJobIds: string[] = []
   const addedPdfs: { label: string; role: SystemSourceRole; url: string }[] = []
 
-  for (const pdf of extracted.pdfs) {
-    const urlKey = pdf.url.split(/[?#]/)[0].toLowerCase()
-    const fileKey = normDocKey(pdf.url)
-    const labelKey = normDocKey(pdf.label)
-    if (
-      seenExisting.has(urlKey) ||
-      (fileKey && seenExisting.has(`name:${fileKey}`)) ||
-      (labelKey && seenExisting.has(`name:${labelKey}`))
-    ) {
-      continue
-    }
-    seenExisting.add(urlKey)
-    if (fileKey) seenExisting.add(`name:${fileKey}`)
-    if (labelKey) seenExisting.add(`name:${labelKey}`)
-
-    const { data: doc, error: docErr } = await supabase
-      .from('source_documents')
-      .insert({
-        manufacturer_id: manufacturerId,
-        original_filename: `${pdf.label}.pdf`,
-        document_name: pdf.label,
-        document_type: pdf.role,
-        storage_provider: 'cloudflare_r2',
-        source_url: pdf.url,
-        ingest_kind: 'url_fetch',
-        status: 'pending_fetch',
-        uploaded_by: session.user.id,
-      })
-      .select('id')
-      .single()
-
-    if (docErr || !doc) continue
-    const documentId = (doc as { id: string }).id
-
-    let systemSourceId: string | null = null
-    const { data: srcRow } = await supabase
+  if (mode === 'full') {
+    const { data: existingSources } = await supabase
       .from('system_sources')
-      .upsert(
-        {
-          manufacturer_id: manufacturerId,
-          staged_system_id: systemId,
-          role: pdf.role,
-          label: pdf.label,
-          url: pdf.url,
-          source_document_id: documentId,
-          ingest_status: 'queued',
-          include_in_container: true,
-        },
-        { onConflict: 'staged_system_id,role,url' },
-      )
-      .select('id')
-      .single()
-    if (srcRow) systemSourceId = (srcRow as { id: string }).id
+      .select('url, label, source_documents(document_name, original_filename)')
+      .eq('staged_system_id', systemId)
 
-    const { data: job } = await supabase
-      .from('pipeline_jobs')
-      .insert({
-        manufacturer_id: manufacturerId,
-        document_id: documentId,
-        job_type: 'fetch_url',
-        status: 'pending',
-        payload: {
-          document_id: documentId,
+    type ExistingSourceRow = {
+      url: string | null
+      label: string | null
+      source_documents:
+        | { document_name: string | null; original_filename: string | null }
+        | { document_name: string | null; original_filename: string | null }[]
+        | null
+    }
+    const seenExisting = new Set<string>()
+    for (const s of (existingSources ?? []) as unknown as ExistingSourceRow[]) {
+      if (s.url) {
+        seenExisting.add(s.url.split(/[?#]/)[0].toLowerCase())
+        const fk = normDocKey(s.url)
+        if (fk) seenExisting.add(`name:${fk}`)
+      }
+      if (s.label) {
+        const lk = normDocKey(s.label)
+        if (lk) seenExisting.add(`name:${lk}`)
+      }
+      const sd = Array.isArray(s.source_documents) ? s.source_documents[0] : s.source_documents
+      if (sd?.document_name) {
+        const dk = normDocKey(sd.document_name)
+        if (dk) seenExisting.add(`name:${dk}`)
+      }
+      if (sd?.original_filename) {
+        const ok = normDocKey(sd.original_filename)
+        if (ok) seenExisting.add(`name:${ok}`)
+      }
+    }
+
+    for (const pdf of extracted.pdfs) {
+      const urlKey = pdf.url.split(/[?#]/)[0].toLowerCase()
+      const fileKey = normDocKey(pdf.url)
+      const labelKey = normDocKey(pdf.label)
+      if (
+        seenExisting.has(urlKey) ||
+        (fileKey && seenExisting.has(`name:${fileKey}`)) ||
+        (labelKey && seenExisting.has(`name:${labelKey}`))
+      ) {
+        continue
+      }
+      seenExisting.add(urlKey)
+      if (fileKey) seenExisting.add(`name:${fileKey}`)
+      if (labelKey) seenExisting.add(`name:${labelKey}`)
+
+      const { data: doc, error: docErr } = await supabase
+        .from('source_documents')
+        .insert({
+          manufacturer_id: manufacturerId,
+          original_filename: `${pdf.label}.pdf`,
           document_name: pdf.label,
-          manufacturer_id: manufacturerId,
-          manufacturer_name: manufacturerName,
+          document_type: pdf.role,
+          storage_provider: 'cloudflare_r2',
           source_url: pdf.url,
-          system_source_id: systemSourceId,
-          staged_system_id: systemId,
-          system_name: systemName,
-          then_docling: true,
-          auto_chain: autoExtract,
-          chunk_size: 7,
-          dry_run: false,
-        },
-      })
-      .select('id')
-      .single()
+          ingest_kind: 'url_fetch',
+          status: 'pending_fetch',
+          uploaded_by: session.user.id,
+        })
+        .select('id')
+        .single()
 
-    if (job) queuedJobIds.push((job as { id: string }).id)
-    addedPdfs.push(pdf)
+      if (docErr || !doc) continue
+      const documentId = (doc as { id: string }).id
+
+      let systemSourceId: string | null = null
+      const { data: srcRow } = await supabase
+        .from('system_sources')
+        .upsert(
+          {
+            manufacturer_id: manufacturerId,
+            staged_system_id: systemId,
+            role: pdf.role,
+            label: pdf.label,
+            url: pdf.url,
+            source_document_id: documentId,
+            ingest_status: 'queued',
+            include_in_container: true,
+          },
+          { onConflict: 'staged_system_id,role,url' },
+        )
+        .select('id')
+        .single()
+      if (srcRow) systemSourceId = (srcRow as { id: string }).id
+
+      const { data: job } = await supabase
+        .from('pipeline_jobs')
+        .insert({
+          manufacturer_id: manufacturerId,
+          document_id: documentId,
+          job_type: 'fetch_url',
+          status: 'pending',
+          payload: {
+            document_id: documentId,
+            document_name: pdf.label,
+            manufacturer_id: manufacturerId,
+            manufacturer_name: manufacturerName,
+            source_url: pdf.url,
+            system_source_id: systemSourceId,
+            staged_system_id: systemId,
+            system_name: systemName,
+            then_docling: true,
+            auto_chain: autoExtract,
+            chunk_size: 7,
+            dry_run: false,
+          },
+        })
+        .select('id')
+        .single()
+
+      if (job) queuedJobIds.push((job as { id: string }).id)
+      addedPdfs.push(pdf)
+    }
   }
 
   return NextResponse.json({
@@ -509,6 +932,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     pageTitle: extracted.title,
     photosAdded: addedPhotos.length,
     totalPhotos: nextGallery.length,
+    swatchesAdded,
+    totalColours,
+    swatches: addedSwatches,
     linksAdded,
     pdfsQueued: addedPdfs.length,
     pdfs: addedPdfs,
