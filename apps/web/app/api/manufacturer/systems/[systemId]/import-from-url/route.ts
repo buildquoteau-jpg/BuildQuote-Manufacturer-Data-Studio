@@ -81,6 +81,23 @@ function guessPdfRole(nameOrUrl: string): SystemSourceRole {
   return 'source_catalogue'
 }
 
+function normDocKey(raw: string | null | undefined): string {
+  if (!raw) return ''
+  let s = raw
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const u = new URL(raw)
+      s = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || raw)
+    }
+  } catch { /* fallback to raw */ }
+  return s
+    .replace(/\.pdf$/i, '')
+    .replace(/[™®©]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
 function deriveLabel(urlStr: string, fallback: string): string {
   try {
     const u = new URL(urlStr)
@@ -152,19 +169,28 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
   }
 
   // 4) PDF links from <a href> and embedded JSON/CMS asset strings
+  // Deduplicate by BOTH canonical URL (without query/hash) AND normalized
+  // filename/label so pages that link the same PDF in multiple tabs/JSON blobs
+  // only ever enqueue it once.
   const pdfs: { url: string; label: string; role: SystemSourceRole }[] = []
-  const seenPdf = new Set<string>()
+  const seenPdfKeys = new Set<string>()
   const pushPdf = (rawUrl: string, anchorText?: string) => {
     const resolved = resolveUrl(rawUrl, baseUrl)
     if (!resolved) return
-    const key = resolved.split('#')[0]
-    if (seenPdf.has(key)) return
-    if (!/\.pdf(\?|$|#)/i.test(resolved)) return
-    seenPdf.add(key)
+    const urlNoQuery = resolved.split(/[?#]/)[0].toLowerCase()
+    if (!/\.pdf$/i.test(urlNoQuery)) return
+    const fileKey = normDocKey(urlNoQuery)
     const cleanedAnchor = anchorText ? decodeHtmlEntities(anchorText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()) : ''
     const label = cleanedAnchor && cleanedAnchor.length >= 4 && !/^(download|view|open|pdf|click here)$/i.test(cleanedAnchor)
       ? cleanedAnchor.slice(0, 140)
       : deriveLabel(resolved, `${systemName} document`)
+    const labelKey = normDocKey(label)
+    if (seenPdfKeys.has(urlNoQuery) || (fileKey && seenPdfKeys.has(`file:${fileKey}`)) || (labelKey && seenPdfKeys.has(`label:${labelKey}`))) {
+      return
+    }
+    seenPdfKeys.add(urlNoQuery)
+    if (fileKey) seenPdfKeys.add(`file:${fileKey}`)
+    if (labelKey) seenPdfKeys.add(`label:${labelKey}`)
     pdfs.push({ url: resolved, label, role: guessPdfRole(`${label} ${resolved}`) })
   }
 
@@ -353,19 +379,61 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     }
   }
 
-  // Register & queue discovered PDFs (deduped against existing system_sources)
+  // Register & queue discovered PDFs (deduped against existing system_sources
+  // by URL, filename, AND normalized label so already-uploaded local PDFs are
+  // never re-queued).
   const { data: existingSources } = await supabase
     .from('system_sources')
-    .select('url')
+    .select('url, label, source_documents(document_name, original_filename)')
     .eq('staged_system_id', systemId)
-  const seenSourceUrls = new Set(((existingSources ?? []) as { url: string | null }[]).map((s) => s.url).filter(Boolean))
+
+  type ExistingSourceRow = {
+    url: string | null
+    label: string | null
+    source_documents:
+      | { document_name: string | null; original_filename: string | null }
+      | { document_name: string | null; original_filename: string | null }[]
+      | null
+  }
+  const seenExisting = new Set<string>()
+  for (const s of (existingSources ?? []) as unknown as ExistingSourceRow[]) {
+    if (s.url) {
+      seenExisting.add(s.url.split(/[?#]/)[0].toLowerCase())
+      const fk = normDocKey(s.url)
+      if (fk) seenExisting.add(`name:${fk}`)
+    }
+    if (s.label) {
+      const lk = normDocKey(s.label)
+      if (lk) seenExisting.add(`name:${lk}`)
+    }
+    const sd = Array.isArray(s.source_documents) ? s.source_documents[0] : s.source_documents
+    if (sd?.document_name) {
+      const dk = normDocKey(sd.document_name)
+      if (dk) seenExisting.add(`name:${dk}`)
+    }
+    if (sd?.original_filename) {
+      const ok = normDocKey(sd.original_filename)
+      if (ok) seenExisting.add(`name:${ok}`)
+    }
+  }
 
   const queuedJobIds: string[] = []
   const addedPdfs: { label: string; role: SystemSourceRole; url: string }[] = []
 
   for (const pdf of extracted.pdfs) {
-    if (seenSourceUrls.has(pdf.url)) continue
-    seenSourceUrls.add(pdf.url)
+    const urlKey = pdf.url.split(/[?#]/)[0].toLowerCase()
+    const fileKey = normDocKey(pdf.url)
+    const labelKey = normDocKey(pdf.label)
+    if (
+      seenExisting.has(urlKey) ||
+      (fileKey && seenExisting.has(`name:${fileKey}`)) ||
+      (labelKey && seenExisting.has(`name:${labelKey}`))
+    ) {
+      continue
+    }
+    seenExisting.add(urlKey)
+    if (fileKey) seenExisting.add(`name:${fileKey}`)
+    if (labelKey) seenExisting.add(`name:${labelKey}`)
 
     const { data: doc, error: docErr } = await supabase
       .from('source_documents')
