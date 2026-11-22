@@ -15,6 +15,7 @@ import {
   getManufacturerComponents,
 } from '@/lib/studio-manufacturer/verification-actions'
 import type { VerificationSystemComponent } from '@/lib/studio-manufacturer/workspace'
+import { InlineItemImagePicker } from './InlineItemImagePicker'
 
 export function ComponentsSection({
   systemId, manufacturerId, initialComponents,
@@ -35,6 +36,14 @@ export function ComponentsSection({
     setComponents((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)))
     startTransition(async () => {
       const res = await updateComponent(id, manufacturerId, { [field]: value || null })
+      if (!res.ok) setError(res.error)
+    })
+  }
+
+  function saveImage(id: string, url: string | null) {
+    setComponents((prev) => prev.map((c) => (c.id === id ? { ...c, image_url: url } : c)))
+    startTransition(async () => {
+      const res = await updateComponent(id, manufacturerId, { image_url: url })
       if (!res.ok) setError(res.error)
     })
   }
@@ -84,6 +93,13 @@ export function ComponentsSection({
     <div>
       {components.map((c) => (
         <div key={c.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.55rem 0', borderBottom: '1px solid var(--ds-border, #e5e7eb)' }}>
+          <InlineItemImagePicker
+            manufacturerId={manufacturerId}
+            systemId={systemId}
+            label={c.name}
+            value={c.image_url}
+            onSave={(url) => saveImage(c.id, url)}
+          />
           <input defaultValue={c.name} onBlur={(e) => rename(c.id, 'name', e.target.value)}
             style={{ flex: 2, padding: '0.32rem 0.5rem', border: '1px solid var(--ds-border, #d1d5db)', borderRadius: 6, fontSize: '0.84rem' }} />
           <input defaultValue={c.sku ?? ''} placeholder="SKU" onBlur={(e) => rename(c.id, 'sku', e.target.value)}

@@ -37,6 +37,7 @@ function adaptComponent(c: VerificationSystemComponent, i: number): SystemCardCo
       category: c.category,
       uom: c.uom,
       procurement_route: c.procurement_route,
+      image_url: c.image_url ?? null,
     },
   }
 }
@@ -104,6 +105,7 @@ export function adaptStagedSystem(
         supplier_pack_qty: p.supplier_pack_qty,
         supplier_pack_uom: p.supplier_pack_uom,
         sort_order: p.sort_order ?? i,
+        image_url: p.image_url ?? null,
       })),
     system_components: [...system.components]
       .sort(bySort)

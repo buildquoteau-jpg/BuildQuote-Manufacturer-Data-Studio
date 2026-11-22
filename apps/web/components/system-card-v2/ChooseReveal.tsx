@@ -109,6 +109,15 @@ export function ChooseReveal({ colours, profiles }: {
                 .filter(Boolean).join(' × ') || p.dimensions
               return (
                 <div className={styles.itemRow} data-selected={pressed} key={p.id}>
+                  {p.image_url?.trim() && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className={styles.itemThumb}
+                      src={p.image_url.trim()}
+                      alt={p.profile_name ?? 'Profile'}
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  )}
                   <div className={styles.itemRowText}>
                     <span className={styles.profileRole}>{roleLabel(p, i)}</span>
                     <span className={styles.itemRowName}>{p.profile_name}</span>

@@ -210,6 +210,24 @@ export async function buildCardSnapshot(
     return c
   })
 
+  // Normalize relative /api/assets/<id> URLs on profile & component photos to absolute
+  // STUDIO_ORIGIN URLs so external library hosts (buildquote.com.au, decks-wa) render them.
+  const normalizeItemImg = (u: string | null | undefined): string | null => {
+    if (!u || isEphemeralUrl(u)) return null
+    if (u.startsWith('/api/assets/')) return `${STUDIO_ORIGIN.replace(/\/$/, '')}${u}`
+    return u
+  }
+  system.system_profiles = system.system_profiles.map((p) => ({
+    ...p,
+    image_url: normalizeItemImg(p.image_url),
+  }))
+  system.system_components = system.system_components.map((c) => ({
+    ...c,
+    components: c.components
+      ? { ...c.components, image_url: normalizeItemImg(c.components.image_url) }
+      : null,
+  }))
+
   // ── Stockists (embedded with the version; the live page also refreshes
   // them from the production DB, so this is a fallback copy) ──
   let stockists: SystemCardStockist[] = []

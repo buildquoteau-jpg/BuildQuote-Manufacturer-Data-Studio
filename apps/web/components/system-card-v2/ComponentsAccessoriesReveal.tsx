@@ -99,6 +99,15 @@ export function ComponentsAccessoriesReveal({ system }: { system: SystemCardSyst
               const pressed = componentIds.includes(c.id)
               return (
                 <div className={styles.itemRow} data-selected={pressed} key={c.id}>
+                  {c.components?.image_url?.trim() && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className={styles.itemThumb}
+                      src={c.components.image_url.trim()}
+                      alt={c.components.name ?? 'Component'}
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  )}
                   <div className={styles.itemRowText}>
                     <span className={styles.itemRowName}>{c.components?.name}</span>
                     {c.components?.description && <span className={styles.itemRowSub}>{c.components.description}</span>}

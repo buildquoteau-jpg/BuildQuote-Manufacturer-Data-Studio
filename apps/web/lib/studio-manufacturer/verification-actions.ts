@@ -509,7 +509,7 @@ export async function updateProfile(
   profileId: string,
   systemId: string,
   manufacturerId: string,
-  data: { profile_name?: string; product_code?: string | null; description?: string | null; length_mm?: number | null; width_mm?: number | null; thickness_mm?: number | null; uom?: string | null },
+  data: { profile_name?: string; product_code?: string | null; description?: string | null; length_mm?: number | null; width_mm?: number | null; thickness_mm?: number | null; uom?: string | null; image_url?: string | null },
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }
@@ -764,7 +764,7 @@ export async function addMissingComponent(
 export async function updateComponent(
   componentId: string,
   manufacturerId: string,
-  data: { name?: string; sku?: string | null; description?: string | null; uom?: string | null; procurement_route?: 'specialist_supplier' | 'trade_merchant' | null; sort_order?: number | null },
+  data: { name?: string; sku?: string | null; description?: string | null; uom?: string | null; procurement_route?: 'specialist_supplier' | 'trade_merchant' | null; sort_order?: number | null; image_url?: string | null },
 ): Promise<ActionResult> {
   const auth = await assertManufacturerAccess(manufacturerId)
   if (!auth.allowed) return { ok: false, error: auth.error }

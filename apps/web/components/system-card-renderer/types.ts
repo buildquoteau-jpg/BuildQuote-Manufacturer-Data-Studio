@@ -48,6 +48,7 @@ export type SystemCardProfile = {
   // (the production adapter) doesn't populate this yet, so it's always
   // undefined/absent there; existing renders are unaffected either way.
   weight_kg?: number | null
+  image_url?: string | null
 }
 
 // A component entry on the card. Mirrors v6's link-table shape: `role` is the
@@ -64,6 +65,7 @@ export type SystemCardComponentEntry = {
     category: string | null
     uom: string | null
     procurement_route: string | null
+    image_url?: string | null
   } | null
 }
 

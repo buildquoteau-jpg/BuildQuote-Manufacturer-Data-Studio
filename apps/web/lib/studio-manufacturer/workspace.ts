@@ -575,6 +575,7 @@ export type VerificationSystemProfile = {
   supplier_pack_qty: number | null
   supplier_pack_uom: string | null
   sort_order: number | null
+  image_url?: string | null
 }
 
 export type VerificationSystemComponent = {
@@ -588,6 +589,7 @@ export type VerificationSystemComponent = {
   supplier_pack_uom: string | null
   sort_order: number | null
   procurement_route: 'specialist_supplier' | 'trade_merchant' | null
+  image_url?: string | null
 }
 
 export type VerificationSystemColour = {
@@ -770,7 +772,7 @@ export async function getManufacturerVerificationData(
       .select(
         'id, staged_system_id, product_code, profile_name, description, dimensions, ' +
         'length_mm, height_mm, width_mm, thickness_mm, uom, ' +
-        'supplier_pack_qty, supplier_pack_uom, sort_order',
+        'supplier_pack_qty, supplier_pack_uom, sort_order, image_url',
       )
       .in('staged_system_id', systemIds)
       .order('sort_order'),
@@ -782,7 +784,7 @@ export async function getManufacturerVerificationData(
     c.supabase
       .from('staged_system_components')
       .select(
-        'staged_system_id, staged_components(id, sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order, procurement_route)',
+        'staged_system_id, staged_components(id, sku, name, description, category, uom, supplier_pack_qty, supplier_pack_uom, sort_order, procurement_route, image_url)',
       )
       .in('staged_system_id', systemIds),
   ])

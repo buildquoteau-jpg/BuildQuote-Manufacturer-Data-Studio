@@ -11,6 +11,7 @@ import {
   removeProfile,
 } from '@/lib/studio-manufacturer/verification-actions'
 import type { VerificationSystemProfile } from '@/lib/studio-manufacturer/workspace'
+import { InlineItemImagePicker } from './InlineItemImagePicker'
 
 const cellStyle: React.CSSProperties = { padding: '0.4rem 0.5rem', fontSize: '0.82rem' }
 const inputStyle: React.CSSProperties = { width: '100%', padding: '0.3rem 0.4rem', border: '1px solid var(--ds-border, #d1d5db)', borderRadius: 4, fontSize: '0.82rem' }
@@ -36,6 +37,15 @@ export function VariantsSection({
       const res = await updateProfile(id, systemId, manufacturerId, {
         [field]: numeric ? (value ? Number(value) : null) : (value || null),
       } as any)
+      if (!res.ok) setError(res.error)
+    })
+  }
+
+  function saveImage(id: string, url: string | null) {
+    setProfiles((prev) => prev.map((p) => (p.id === id ? { ...p, image_url: url } : p)))
+    setError(null)
+    startTransition(async () => {
+      const res = await updateProfile(id, systemId, manufacturerId, { image_url: url })
       if (!res.ok) setError(res.error)
     })
   }
@@ -81,7 +91,7 @@ export function VariantsSection({
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#185D7A' }}>
-                {['Name', 'Product code', 'Length (mm)', 'Width (mm)', 'Thickness (mm)', 'UOM', ''].map((h) => (
+                {['Pic', 'Name', 'Product code', 'Length (mm)', 'Width (mm)', 'Thickness (mm)', 'UOM', ''].map((h) => (
                   <th key={h} style={{ ...cellStyle, textAlign: 'left', color: '#fff', fontWeight: 700 }}>{h}</th>
                 ))}
               </tr>
@@ -89,6 +99,15 @@ export function VariantsSection({
             <tbody>
               {profiles.map((p) => (
                 <tr key={p.id} style={{ borderBottom: '1px solid var(--ds-border, #e5e7eb)' }}>
+                  <td style={cellStyle}>
+                    <InlineItemImagePicker
+                      manufacturerId={manufacturerId}
+                      systemId={systemId}
+                      label={p.profile_name ?? 'Profile'}
+                      value={p.image_url}
+                      onSave={(url) => saveImage(p.id, url)}
+                    />
+                  </td>
                   <td style={cellStyle}><input style={inputStyle} defaultValue={p.profile_name ?? ''} onBlur={(e) => patchField(p.id, 'profile_name', e.target.value)} /></td>
                   <td style={cellStyle}><input style={inputStyle} defaultValue={p.product_code ?? ''} onBlur={(e) => patchField(p.id, 'product_code', e.target.value)} /></td>
                   <td style={cellStyle}><input style={inputStyle} defaultValue={p.length_mm ?? ''} onBlur={(e) => patchField(p.id, 'length_mm', e.target.value)} /></td>
