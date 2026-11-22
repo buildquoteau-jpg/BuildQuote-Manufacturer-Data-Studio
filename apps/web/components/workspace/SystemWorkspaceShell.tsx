@@ -6,8 +6,9 @@
 // Replaces Verify systems + Asset picker + Preview + Publish-card as
 // separate tabs — everything for one product lives here.
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { SystemCardV2Experience } from '@/components/system-card-v2/SystemCardV2Experience'
 import type { SystemCardSystem } from '@/components/system-card-renderer/types'
 import type { SlotAsset } from '@/app/(protected)/manufacturer/profile/AssetSlotControl'
@@ -29,7 +30,8 @@ import { EvidenceGroupBulkVerify } from './EvidenceGroupBulkVerify'
 import { UnknownsSummary } from './UnknownsSummary'
 import { LinksSection } from './LinksSection'
 import type { FactViewModel } from './factViewModel'
-import type { CustomDocumentLink } from '@/lib/studio-manufacturer/verification-actions'
+import { markSystemVerified, type CustomDocumentLink } from '@/lib/studio-manufacturer/verification-actions'
+import { publishCardLive } from '@/lib/studio-manufacturer/publish-live-actions'
 import type { LinkLibraryEntry } from '@/lib/studio-manufacturer/link-library'
 
 type PreviewTab = 'card' | 'ai' | 'jsonld'
@@ -94,9 +96,49 @@ export function SystemWorkspaceShell({
   customDocumentLinks: CustomDocumentLink[]
   linkLibrary: LinkLibraryEntry[]
 }) {
+  const router = useRouter()
   const [tab, setTab] = useState<PreviewTab>('card')
   const [customAttrs, setCustomAttrs] = useState(customAttributes)
   const [jsonCopied, setJsonCopied] = useState(false)
+  const [status, setStatus] = useState(verificationStatus)
+  const [initials, setInitials] = useState('')
+  const [actionPending, startActionTransition] = useTransition()
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [liveUrl, setLiveUrl] = useState<string | null>(null)
+  const [actionErr, setActionErr] = useState<string | null>(null)
+
+  const isVerified = status === 'manufacturer_verified'
+
+  function handleMarkVerified(andPublish = false) {
+    setActionErr(null)
+    setActionMsg(null)
+    const sig = initials.trim().toUpperCase() || 'VERIFIED'
+    startActionTransition(async () => {
+      if (!isVerified) {
+        const res = await markSystemVerified(systemId, manufacturerId, sig)
+        if (!res.ok) {
+          setActionErr(res.error ?? 'Could not mark system verified.')
+          return
+        }
+        setStatus('manufacturer_verified')
+        if (!andPublish) {
+          setActionMsg('Marked as verified — this system is now ready on the Publish tab.')
+          router.refresh()
+          return
+        }
+      }
+      if (andPublish) {
+        const pub = await publishCardLive(systemId)
+        if (!pub.ok) {
+          setActionErr(pub.error ?? 'Publish failed.')
+          return
+        }
+        setLiveUrl(pub.liveUrl)
+        setActionMsg(`Published v${pub.version} live!${pub.warnings.length ? ` (${pub.warnings[0]})` : ''}`)
+        router.refresh()
+      }
+    })
+  }
 
   const identityNeeds = needsCountFor(identityFacts)
   const attributeNeeds = needsCountFor(attributeFacts)
@@ -110,15 +152,16 @@ export function SystemWorkspaceShell({
 
   const stages = ['Documents', 'Extracted', 'Review', 'Verified', 'Live']
   const stageIndex =
-    verificationStatus === 'manufacturer_verified' ? 3 :
-    verificationStatus === 'in_review' ? 2 :
+    liveUrl ? 4 :
+    isVerified ? 3 :
+    status === 'in_review' ? 2 :
     allFacts.length > 0 ? 1 : 0
 
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', marginBottom: '0.9rem', flexWrap: 'wrap' }}>
-        <Link href="/manufacturer/systems" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--ds-text-muted, #6b7280)', textDecoration: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+        <Link href="/manufacturer/review" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--ds-text-muted, #6b7280)', textDecoration: 'none' }}>
           ← All systems
         </Link>
         <h1 style={{ fontSize: '1.15rem', margin: 0, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -126,11 +169,11 @@ export function SystemWorkspaceShell({
         </h1>
         <span style={{
           fontSize: '0.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20,
-          background: verificationStatus === 'manufacturer_verified' ? '#f0fdf4' : '#fffbeb',
-          border: `1px solid ${verificationStatus === 'manufacturer_verified' ? '#bbf7d0' : '#fde68a'}`,
-          color: verificationStatus === 'manufacturer_verified' ? '#16a34a' : '#d97706',
+          background: isVerified ? '#f0fdf4' : '#fffbeb',
+          border: `1px solid ${isVerified ? '#bbf7d0' : '#fde68a'}`,
+          color: isVerified ? '#16a34a' : '#d97706',
         }}>
-          {verificationStatus === 'manufacturer_verified' ? 'Verified' : verificationStatus === 'in_review' ? 'In review' : 'Draft'}
+          {isVerified ? '✓ Verified' : status === 'in_review' ? 'In review' : 'Draft'}
         </span>
         <Link href={`/manufacturer/systems/${systemId}/setup`} style={{
           fontSize: '0.78rem', fontWeight: 600, color: 'var(--ds-text-muted, #6b7280)',
@@ -138,13 +181,86 @@ export function SystemWorkspaceShell({
         }}>
           Setup &amp; PDFs
         </Link>
-        <Link href="/manufacturer/publish" style={{
-          fontSize: '0.78rem', fontWeight: 700, color: '#fff', background: '#185D7A',
-          borderRadius: 7, padding: '5px 12px', textDecoration: 'none',
-        }}>
-          Publish →
-        </Link>
+        {!isVerified ? (
+          <>
+            <input
+              type="text"
+              maxLength={6}
+              value={initials}
+              onChange={(e) => setInitials(e.target.value)}
+              placeholder="Initials"
+              title="Your initials for the verification sign-off"
+              style={{
+                width: 68, padding: '4px 8px', fontSize: '0.76rem', fontWeight: 700,
+                textTransform: 'uppercase', border: '1px solid var(--ds-border, #d1d5db)',
+                borderRadius: 7, background: '#fff',
+              }}
+            />
+            <button
+              type="button"
+              disabled={actionPending}
+              onClick={() => handleMarkVerified(false)}
+              style={{
+                fontSize: '0.78rem', fontWeight: 700, color: '#166534', background: '#f0fdf4',
+                border: '1px solid #86efac', borderRadius: 7, padding: '5px 11px',
+                cursor: actionPending ? 'default' : 'pointer',
+              }}
+            >
+              {actionPending ? 'Saving…' : '✓ Mark verified'}
+            </button>
+            <button
+              type="button"
+              disabled={actionPending}
+              onClick={() => handleMarkVerified(true)}
+              style={{
+                fontSize: '0.78rem', fontWeight: 700, color: '#fff', background: '#16a34a',
+                border: 'none', borderRadius: 7, padding: '5px 12px',
+                cursor: actionPending ? 'default' : 'pointer',
+              }}
+            >
+              {actionPending ? 'Publishing…' : 'Verify & Publish live →'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={actionPending}
+              onClick={() => handleMarkVerified(true)}
+              style={{
+                fontSize: '0.78rem', fontWeight: 700, color: '#fff', background: '#16a34a',
+                border: 'none', borderRadius: 7, padding: '5px 12px',
+                cursor: actionPending ? 'default' : 'pointer',
+              }}
+            >
+              {actionPending ? 'Publishing…' : 'Publish live →'}
+            </button>
+            <Link href="/manufacturer/publish" style={{
+              fontSize: '0.76rem', fontWeight: 600, color: '#185D7A',
+              border: '1px solid rgba(24,93,122,0.3)', borderRadius: 7, padding: '4px 10px', textDecoration: 'none',
+            }}>
+              Publish tab
+            </Link>
+          </>
+        )}
       </div>
+
+      {(actionMsg || actionErr) && (
+        <div style={{
+          marginBottom: '0.9rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600,
+          background: actionErr ? '#fef2f2' : '#f0fdf4',
+          border: `1px solid ${actionErr ? '#fecaca' : '#bbf7d0'}`,
+          color: actionErr ? '#b91c1c' : '#166534',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
+        }}>
+          <span>{actionErr ?? actionMsg}</span>
+          {liveUrl && (
+            <a href={liveUrl} target="_blank" rel="noreferrer" style={{ color: '#166534', fontWeight: 700 }}>
+              View live card ↗
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Progress rail */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1.3rem', fontSize: '0.74rem', color: 'var(--ds-text-muted, #6b7280)' }}>
