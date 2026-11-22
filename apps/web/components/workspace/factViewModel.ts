@@ -7,6 +7,7 @@ import type { AssertionOrigin, ClaimType, EpistemicStatus } from '@/lib/knowledg
 import type { WorkspaceUiSection } from '@/lib/knowledge/buildSystemKnowledge'
 
 export type FactViewModel = {
+  assertionId?: string | null
   predicate: string
   claimType: ClaimType
   uiSection: WorkspaceUiSection

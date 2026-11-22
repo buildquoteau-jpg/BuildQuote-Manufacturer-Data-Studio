@@ -6,6 +6,7 @@
 // installation step or a warranty term — one component, one code path.
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import type { ClaimType, EpistemicStatus, TrustLevel } from '@/lib/knowledge/vocabulary'
 import {
   verifyAssertion,
@@ -41,6 +42,7 @@ function StatusStamp({ status }: { status: EpistemicStatus }) {
 }
 
 export type FactRowProps = {
+  assertionId?: string | null
   label: string
   predicate: string
   claimType: ClaimType
@@ -59,9 +61,10 @@ export type FactRowProps = {
 }
 
 export function FactRow({
-  label, predicate, claimType, value, rawValue, origin, epistemicStatus,
+  assertionId, label, predicate, claimType, value, rawValue, origin, epistemicStatus,
   sourceLine, quote, conditions, systemId, manufacturerId, readOnly, onChanged,
 }: FactRowProps) {
+  const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [mode, setMode] = useState<'idle' | 'fixing'>('idle')
   const [fixValue, setFixValue] = useState(value)
@@ -72,7 +75,7 @@ export function FactRow({
     startTransition(async () => {
       const res = await action()
       if (!res.ok) setError(res.error ?? 'Something went wrong.')
-      else { setMode('idle'); onChanged?.() }
+      else { setMode('idle'); onChanged?.(); router.refresh() }
     })
   }
 
@@ -107,7 +110,7 @@ export function FactRow({
           {mode === 'idle' ? (
             <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
               <ActionButton label="✓ Correct" disabled={pending}
-                onClick={() => run(() => verifyAssertion(systemId, manufacturerId, predicate, claimType, rawValue, origin))} />
+                onClick={() => run(() => verifyAssertion(systemId, manufacturerId, predicate, claimType, rawValue, origin, assertionId))} />
               <ActionButton label="✎ Fix" disabled={pending} onClick={() => setMode('fixing')} />
               <ActionButton label="✗ Not applicable" disabled={pending}
                 onClick={() => run(() => markAssertionNotApplicable(systemId, manufacturerId, predicate, claimType, rawValue, origin, null))} />

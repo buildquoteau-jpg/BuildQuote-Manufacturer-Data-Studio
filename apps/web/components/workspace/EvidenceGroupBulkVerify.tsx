@@ -25,8 +25,11 @@ export function EvidenceGroupBulkVerify({
   manufacturerId: string
   onChanged?: () => void
 }) {
+  const router = useRouter()
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [allPending, startAllTransition] = useTransition()
+  const [allError, setAllError] = useState<string | null>(null)
 
   const groups = new Map<string, FactViewModel[]>()
   for (const f of facts) {
@@ -43,8 +46,57 @@ export function EvidenceGroupBulkVerify({
 
   if (entries.length === 0) return null
 
+  const totalFacts = entries.reduce((sum, [, list]) => sum + list.length, 0)
+
+  function approveEveryGroup() {
+    setAllError(null)
+    const allItems = entries.flatMap(([, list]) => list)
+    startAllTransition(async () => {
+      const res = await bulkVerifyAssertions(
+        systemId, manufacturerId,
+        allItems.map((f) => ({
+          assertionId: f.assertionId ?? null,
+          predicate: f.predicate,
+          claimType: f.claimType,
+          objectValue: f.rawValue,
+          origin: f.origin,
+        })),
+      )
+      if (!res.ok) {
+        const failed = res.results.filter((r) => !r.ok)
+        setAllError(`${failed.length} of ${allItems.length} could not be verified: ${failed[0]?.error ?? 'unknown error'}`)
+      } else {
+        setDismissed(new Set(entries.map(([k]) => k)))
+        onChanged?.()
+        router.refresh()
+      }
+    })
+  }
+
   return (
     <div style={{ marginBottom: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      {entries.length >= 2 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
+          border: '1px solid #185D7A', background: 'rgba(24,93,122,0.06)', borderRadius: 10, padding: '0.7rem 0.95rem',
+        }}>
+          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+            {totalFacts} extracted facts across {entries.length} official document sections
+          </div>
+          <button
+            type="button"
+            disabled={allPending}
+            onClick={approveEveryGroup}
+            style={{
+              padding: '0.42rem 0.9rem', borderRadius: 7, border: 'none', background: '#185D7A',
+              color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: allPending ? 'default' : 'pointer',
+            }}
+          >
+            {allPending ? 'Approving all…' : `✓ Approve all ${totalFacts} facts`}
+          </button>
+          {allError && <div style={{ width: '100%', fontSize: '0.76rem', color: '#b91c1c' }}>{allError}</div>}
+        </div>
+      )}
       {entries.map(([key, list]) => (
         <EvidenceGroupCard
           key={key}
@@ -93,7 +145,13 @@ function EvidenceGroupCard({
     startTransition(async () => {
       const res = await bulkVerifyAssertions(
         systemId, manufacturerId,
-        facts.map((f) => ({ predicate: f.predicate, claimType: f.claimType, objectValue: f.rawValue, origin: f.origin })),
+        facts.map((f) => ({
+          assertionId: f.assertionId ?? null,
+          predicate: f.predicate,
+          claimType: f.claimType,
+          objectValue: f.rawValue,
+          origin: f.origin,
+        })),
       )
       if (!res.ok) {
         const failed = res.results.filter((r) => !r.ok)

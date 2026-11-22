@@ -1,15 +1,13 @@
 'use client'
 
-// Applications & installation — design doc §7.3. The read side: every
-// installation/application/performance fact the knowledge parser has
-// extracted for this system, plus any company-wide answer (Company
-// Knowledge panel, design doc §9.2) inherited onto it — same FactRow used
-// by Identity and Attributes above, one mental model everywhere. Company-
-// wide facts render read-only here (fixing/correcting one changes every
-// card, so that only happens from the Brand profile's Company Knowledge
-// panel, not from inside one system's workspace).
+// Applications & installation — grouped cleanly by source document with 1-click
+// bulk approval (per guide or all at once) so a manufacturer with 40–80 extracted
+// facts can confirm their own official guides in seconds and only open individual
+// facts to edit outliers.
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { bulkVerifyAssertions } from '@/lib/studio-manufacturer/assertion-actions'
 import { FactRow } from './FactRow'
 import type { FactViewModel } from './factViewModel'
 
@@ -22,8 +20,55 @@ export function ApplicationsSection({
   sourceDocumentId: string | null
   facts: FactViewModel[]
 }) {
+  const router = useRouter()
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  const [bulkPending, startBulk] = useTransition()
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+
+  const unverifiedSystemFacts = facts.filter(
+    (f) => !f.isCompanyLevel && (f.epistemicStatus === 'unverified' || f.epistemicStatus === 'stale'),
+  )
+
+  // Group facts by source document name (stripping ", page X" suffix)
+  const grouped = new Map<string, FactViewModel[]>()
+  for (const f of facts) {
+    const docTitle = f.isCompanyLevel
+      ? 'Company-wide knowledge'
+      : (f.sourceLine?.replace(/,\s*page\s+\d+$/i, '').trim() || 'Extracted technical facts')
+    const list = grouped.get(docTitle) ?? []
+    list.push(f)
+    grouped.set(docTitle, list)
+  }
+  const groupEntries = Array.from(grouped.entries())
+
+  function approveList(list: FactViewModel[]) {
+    const targets = list.filter(
+      (f) => !f.isCompanyLevel && (f.epistemicStatus === 'unverified' || f.epistemicStatus === 'stale'),
+    )
+    if (targets.length === 0) return
+    setBulkError(null)
+    startBulk(async () => {
+      const res = await bulkVerifyAssertions(
+        stagedSystemId,
+        manufacturerId,
+        targets.map((f) => ({
+          assertionId: f.assertionId ?? null,
+          predicate: f.predicate,
+          claimType: f.claimType,
+          objectValue: f.rawValue,
+          origin: f.origin,
+        })),
+      )
+      if (!res.ok) {
+        const failed = res.results.filter((r) => !r.ok)
+        setBulkError(`${failed.length} of ${targets.length} could not be approved: ${failed[0]?.error ?? 'unknown error'}`)
+      } else {
+        router.refresh()
+      }
+    })
+  }
 
   async function run(dryRun: boolean) {
     if (!sourceDocumentId) return
@@ -60,22 +105,101 @@ export function ApplicationsSection({
     <div>
       {facts.length > 0 && (
         <div style={{ marginBottom: '1rem' }}>
-          {facts.map((f) => (
-            <FactRow
-              key={`${f.predicate}-${f.sourceDocumentId ?? 'company'}`}
-              label={f.isCompanyLevel ? `${f.label} · Company-wide` : f.label}
-              predicate={f.predicate} claimType={f.claimType}
-              value={f.value} rawValue={f.rawValue} origin={f.origin} epistemicStatus={f.epistemicStatus}
-              sourceLine={f.sourceLine} systemId={stagedSystemId} manufacturerId={manufacturerId}
-              readOnly={f.isCompanyLevel}
-            />
-          ))}
+          {/* Top 1-click bulk approval bar */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', flexWrap: 'wrap',
+            padding: '0.6rem 0.75rem', borderRadius: 8, background: '#f8fafc', border: '1px solid var(--ds-border, #e5e7eb)',
+            marginBottom: '0.75rem',
+          }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted, #475569)' }}>
+              <strong>{facts.length}</strong> facts across <strong>{groupEntries.length}</strong> source{groupEntries.length === 1 ? '' : 's'}
+              {unverifiedSystemFacts.length > 0
+                ? ` · ${unverifiedSystemFacts.length} awaiting confirmation`
+                : ' · all confirmed ✓'}
+            </div>
+            {unverifiedSystemFacts.length > 0 && (
+              <button
+                type="button"
+                disabled={bulkPending}
+                onClick={() => approveList(unverifiedSystemFacts)}
+                style={{
+                  padding: '0.35rem 0.75rem', borderRadius: 6, border: 'none',
+                  background: '#185D7A', color: '#fff', fontSize: '0.76rem', fontWeight: 700,
+                  cursor: bulkPending ? 'default' : 'pointer',
+                }}
+              >
+                {bulkPending ? 'Approving…' : `✓ Approve all (${unverifiedSystemFacts.length})`}
+              </button>
+            )}
+          </div>
+          {bulkError && <div style={{ fontSize: '0.76rem', color: '#b91c1c', marginBottom: '0.6rem' }}>{bulkError}</div>}
+
+          {/* Collapsible per-document groups so 50+ facts stay tidy */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {groupEntries.map(([docTitle, groupFacts]) => {
+              const unverifiedInGroup = groupFacts.filter(
+                (f) => !f.isCompanyLevel && (f.epistemicStatus === 'unverified' || f.epistemicStatus === 'stale'),
+              )
+              const isOpen = openGroups[docTitle] ?? (facts.length <= 8)
+              return (
+                <div key={docTitle} style={{ border: '1px solid var(--ds-border, #e5e7eb)', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap',
+                    padding: '0.55rem 0.75rem', background: '#fff',
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenGroups((prev) => ({ ...prev, [docTitle]: !isOpen }))}
+                      style={{
+                        flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                        fontSize: '0.8rem', fontWeight: 700, color: '#0f172a',
+                      }}
+                    >
+                      {isOpen ? '▾' : '▸'} {docTitle}{' '}
+                      <span style={{ fontWeight: 500, color: '#64748b' }}>
+                        ({groupFacts.length}{unverifiedInGroup.length > 0 ? ` · ${unverifiedInGroup.length} unverified` : ' · verified'})
+                      </span>
+                    </button>
+                    {unverifiedInGroup.length > 0 && (
+                      <button
+                        type="button"
+                        disabled={bulkPending}
+                        onClick={() => approveList(unverifiedInGroup)}
+                        style={{
+                          padding: '0.25rem 0.6rem', borderRadius: 5, border: '1px solid #185D7A',
+                          background: '#fff', color: '#185D7A', fontSize: '0.72rem', fontWeight: 700,
+                          cursor: bulkPending ? 'default' : 'pointer',
+                        }}
+                      >
+                        ✓ Approve guide ({unverifiedInGroup.length})
+                      </button>
+                    )}
+                  </div>
+                  {isOpen && (
+                    <div style={{ padding: '0 0.75rem', borderTop: '1px solid var(--ds-border, #e5e7eb)' }}>
+                      {groupFacts.map((f, idx) => (
+                        <FactRow
+                          key={f.assertionId ?? `${f.predicate}-${idx}`}
+                          assertionId={f.assertionId}
+                          label={f.isCompanyLevel ? `${f.label} · Company-wide` : f.label}
+                          predicate={f.predicate} claimType={f.claimType}
+                          value={f.value} rawValue={f.rawValue} origin={f.origin} epistemicStatus={f.epistemicStatus}
+                          sourceLine={f.sourceLine} systemId={stagedSystemId} manufacturerId={manufacturerId}
+                          readOnly={f.isCompanyLevel}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
       {!sourceDocumentId && facts.length === 0 && (
         <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted, #6b7280)', margin: '0.4rem 0' }}>
-          Link a source document to this system (Documents tab) before extracting installation
+          Link a source document to this system (Setup &amp; PDFs) before extracting installation
           and application facts from it.
         </p>
       )}

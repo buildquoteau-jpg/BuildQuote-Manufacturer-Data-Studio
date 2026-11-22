@@ -107,6 +107,7 @@ export default async function SystemWorkspacePage({
       .filter((f): f is FactViewModel => f !== null)
 
     applicationFacts = buildApplicationFacts(bundle).map((f) => ({
+      assertionId: f.assertionId,
       predicate: f.predicate,
       claimType: f.claimType,
       uiSection: 'applications',

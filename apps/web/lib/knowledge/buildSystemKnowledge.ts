@@ -407,6 +407,7 @@ function buildKnowledgeAssertionFacts(bundle: CanonicalSystemBundle, inputs: Fac
 // does the actual shaping into that shared type).
 
 export type ApplicationFactSource = {
+  assertionId: string
   predicate: string
   claimType: ClaimType
   label: string
@@ -432,6 +433,7 @@ export function buildApplicationFacts(bundle: CanonicalSystemBundle): Applicatio
     const value = valuePart == null ? '' : String(valuePart)
 
     return {
+      assertionId: row.id,
       predicate: row.predicate,
       claimType: row.claim_type as ClaimType,
       label: humanizePredicate(row.predicate),
