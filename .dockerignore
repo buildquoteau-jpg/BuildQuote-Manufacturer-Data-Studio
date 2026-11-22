@@ -11,6 +11,9 @@ samples
 services
 supabase
 .env*
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
 *.log
 __pycache__
 *.pyc
