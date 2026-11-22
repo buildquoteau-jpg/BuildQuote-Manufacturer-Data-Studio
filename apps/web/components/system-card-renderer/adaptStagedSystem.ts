@@ -68,6 +68,7 @@ export function adaptStagedSystem(
     acoustic_rating: system.acoustic_rating,
     structural_grade: system.structural_grade,
     notes: system.notes,
+    deck_type: system.deck_type ?? null,
     website_url: system.website_url ?? system.source_url,
     install_guide_urls: system.install_guide_urls,
     design_guide_url: system.design_guide_url,

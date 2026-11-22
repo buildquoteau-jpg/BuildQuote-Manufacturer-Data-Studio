@@ -27,6 +27,7 @@ import { buildCardSnapshot } from '@/lib/publishing/buildCardSnapshot'
 import { publishSystem } from '@/lib/studio-admin/publish'
 
 const V6_ORIGIN = process.env.BUILDQUOTE_PUBLIC_ORIGIN || 'https://buildquote.com.au'
+const DECKS_WA_ORIGIN = process.env.DECKS_WA_PUBLIC_ORIGIN || 'https://decks-wa.vercel.app'
 
 export type PublishCardLiveResult =
   | { ok: true; liveUrl: string; version: string; warnings: string[] }
@@ -181,7 +182,7 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     return { ok: false, error: `Publish failed: ${rpcErr.message}` }
   }
 
-  // ── Tell v6 to re-render the ISR pages now (non-fatal; ISR TTL backstop) ──
+  // ── Tell v6 (and Decks WA) to re-render ISR pages now (non-fatal; ISR TTL backstop) ──
   try {
     const res = await fetch(`${V6_ORIGIN}/api/revalidate-card`, {
       method: 'POST',
@@ -195,6 +196,17 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     if (!res.ok) warnings.push(`Live page refresh returned ${res.status} — the card may take up to an hour to update.`)
   } catch (err) {
     warnings.push(`Live page refresh failed (${err instanceof Error ? err.message : 'network error'}) — the card may take up to an hour to update.`)
+  }
+  if (DECKS_WA_ORIGIN) {
+    fetch(`${DECKS_WA_ORIGIN.replace(/\/$/, '')}/api/revalidate-card`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-revalidate-secret': process.env.REVALIDATE_SECRET ?? '',
+      },
+      body: JSON.stringify({ mfrSlug: snap.mfrSlug, slug: snap.slug }),
+      signal: AbortSignal.timeout(6_000),
+    }).catch(() => {})
   }
 
   // ── Bookkeeping: publish state + analytics event (both fail soft) ──

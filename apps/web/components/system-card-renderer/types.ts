@@ -90,6 +90,7 @@ export type SystemCardSystem = {
   acoustic_rating: string | null
   structural_grade: string | null
   notes: string | null
+  deck_type?: string | null
   // Optional — added for System Card V2's Applications block. Real data
   // (e.g. Apex PLUS: "decking, cladding, edging, screening") lives today in
   // staged profile parser_notes, which isn't part of this contract; this is
