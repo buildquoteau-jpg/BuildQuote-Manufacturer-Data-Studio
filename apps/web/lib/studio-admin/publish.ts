@@ -131,13 +131,21 @@ export async function publishManufacturer(
 
   if (mfr.production_manufacturer_id) {
     if (!dryRun) {
-      const { error: updErr } = await prod
+      const { data: updated, error: updErr } = await prod
         .from('manufacturers')
         .update(payload)
         .eq('id', mfr.production_manufacturer_id)
+        .select('id')
+        .maybeSingle()
       if (updErr) throw new Error(`Could not update production manufacturer: ${updErr.message}`)
+      if (updated) {
+        return { productionManufacturerId: updated.id, action: 'updated' }
+      }
+      // Stale production_manufacturer_id (row no longer exists in RFQ DB) —
+      // fall through to adopt by slug or create a fresh production row.
+    } else {
+      return { productionManufacturerId: mfr.production_manufacturer_id, action: 'updated' }
     }
-    return { productionManufacturerId: mfr.production_manufacturer_id, action: 'updated' }
   }
 
   // Adopt an existing production row with the same slug rather than duplicating
