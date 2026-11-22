@@ -21,7 +21,46 @@ import type { SlotAsset } from '@/app/(protected)/manufacturer/profile/AssetSlot
 
 type ExtractionState = 'idle' | 'starting' | 'running' | 'done' | 'error'
 
-type JobStatus = { id: string; jobType: string; status: string; errorMessage: string | null }
+type JobProgress = {
+  totalPages?: number | null
+  totalChunks?: number | null
+  completedChunks?: unknown[]
+  currentChunk?: { startPage?: number; endPage?: number } | null
+  currentStage?: string
+}
+
+type JobStatus = {
+  id: string
+  jobType: string
+  status: string
+  errorMessage: string | null
+  progress?: JobProgress | null
+  autoChain?: boolean
+  chainedJobIds?: string[]
+  createdAt?: string
+}
+
+const JOB_LABELS: Record<string, string> = {
+  fetch_url: 'Downloading PDF from link',
+  docling: 'Reading PDF documents',
+  system_identity_parser: 'Extracting product specs, dimensions & variants',
+  knowledge_parser: 'Building technical & installation knowledge',
+}
+
+function formatJobProgress(j: JobStatus): string {
+  if (j.status === 'done') return 'Complete'
+  if (j.status === 'error') return 'Failed'
+  if (j.status === 'pending') return 'Queued…'
+  if (j.jobType === 'docling' && j.progress) {
+    const cur = j.progress.currentChunk
+    const total = j.progress.totalPages
+    if (cur?.startPage && cur?.endPage && total) {
+      return `Reading pages ${cur.startPage}–${cur.endPage} of ${total}…`
+    }
+    if (total) return `Reading ${total} pages…`
+  }
+  return 'Working…'
+}
 
 function StepShell({ n, title, done, doneLabel, children }: {
   n: number; title: string; done: boolean; doneLabel: string; children: React.ReactNode
@@ -80,10 +119,37 @@ export function SetupFlowClient({
   const [extraction, setExtraction] = useState<ExtractionState>('idle')
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [jobStatuses, setJobStatuses] = useState<JobStatus[]>([])
+  const [pendingSlow, setPendingSlow] = useState(false)
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollAttempts = useRef(0)
+  const trackedIds = useRef<Set<string>>(new Set())
 
-  useEffect(() => () => { if (pollTimer.current) clearInterval(pollTimer.current) }, [])
+  useEffect(() => {
+    // Auto-resume if an extraction for this system is already pending/running
+    // (e.g. manufacturer refreshed the page or returned from another tab).
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/manufacturer/systems/${systemId}/extraction-status?manufacturerId=${manufacturerId}`)
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        const jobs = (data.jobs ?? []) as JobStatus[]
+        const active = jobs.filter((j) => j.status === 'pending' || j.status === 'running')
+        if (active.length > 0 && !cancelled) {
+          setExtraction('running')
+          setJobStatuses(active)
+          pollStatus(active.map((j) => j.id))
+        }
+      } catch {
+        // Non-fatal on mount
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (pollTimer.current) clearInterval(pollTimer.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemId, manufacturerId])
 
   function saveName(value: string) {
     upsertFieldVerification(systemId, manufacturerId, 'name', null, value, 'edited', null)
@@ -93,8 +159,12 @@ export function SetupFlowClient({
     if (pollTimer.current) { clearInterval(pollTimer.current); pollTimer.current = null }
   }
 
-  function pollStatus(ids: string[]) {
+  function pollStatus(initialIds: string[]) {
+    stopPolling()
+    trackedIds.current = new Set(initialIds)
     pollAttempts.current = 0
+    setPendingSlow(false)
+
     pollTimer.current = setInterval(async () => {
       pollAttempts.current += 1
       try {
@@ -102,20 +172,49 @@ export function SetupFlowClient({
         const data = await res.json()
         if (!res.ok) { setExtractionError(data.error ?? 'Could not check status.'); stopPolling(); setExtraction('error'); return }
         const jobs = (data.jobs ?? []) as JobStatus[]
-        const relevant = jobs.filter((j) => ids.includes(j.id))
+
+        // Expand tracked IDs with any auto-chained jobs (e.g. docling ->
+        // system_identity_parser + knowledge_parser) and any active jobs for
+        // this system so we never celebrate before the AI parsers finish.
+        for (const j of jobs) {
+          if (trackedIds.current.has(j.id) && Array.isArray(j.chainedJobIds)) {
+            for (const cid of j.chainedJobIds) trackedIds.current.add(cid)
+          }
+          if (j.status === 'pending' || j.status === 'running') {
+            trackedIds.current.add(j.id)
+          }
+        }
+
+        const relevant = jobs
+          .filter((j) => trackedIds.current.has(j.id))
+          .reverse() // chronological order: docling -> parsers
         setJobStatuses(relevant)
-        const allTerminal = relevant.length > 0 && relevant.every((j) => j.status === 'done' || j.status === 'error')
+
+        const allPending = relevant.length > 0 && relevant.every((j) => j.status === 'pending')
+        setPendingSlow(allPending && pollAttempts.current >= 6) // ~24s with no worker pickup
+
+        // Wait if any tracked docling job had autoChain=true and reported
+        // chainedJobIds that haven't shown up in `relevant` yet.
+        const awaitingChainedRows = relevant.some(
+          (j) => j.status === 'done' && j.autoChain && (j.chainedJobIds?.length ?? 0) > 0 &&
+            j.chainedJobIds!.some((cid) => !relevant.some((r) => r.id === cid)),
+        )
+
+        const allTerminal =
+          relevant.length > 0 &&
+          !awaitingChainedRows &&
+          relevant.every((j) => j.status === 'done' || j.status === 'error')
+
         if (allTerminal) {
           stopPolling()
+          setPendingSlow(false)
           const anyError = relevant.some((j) => j.status === 'error')
           setExtraction(anyError ? 'error' : 'done')
           if (anyError) {
             setExtractionError(relevant.find((j) => j.status === 'error')?.errorMessage ?? 'One of the extraction jobs failed.')
           }
-        } else if (pollAttempts.current > 90) {
-          // ~6 minutes — stop polling but don't call it an error; large
-          // documents can legitimately take a while. Verify systems will
-          // show the result whenever it lands.
+        } else if (pollAttempts.current > 150) {
+          // ~10 minutes — stop polling; Verify systems will show results once ready.
           stopPolling()
         }
       } catch {
@@ -248,14 +347,24 @@ export function SetupFlowClient({
         </button>
 
         {extraction === 'running' && (
-          <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', marginTop: '0.7rem' }}>
-            Reading your documents… this can take a few minutes for larger guides.
+          <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', marginTop: '0.8rem' }}>
+            <div>Working on your System Card — you can stay here or come back in a couple of minutes.</div>
             {jobStatuses.length > 0 && (
-              <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
+              <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', lineHeight: 1.7 }}>
                 {jobStatuses.map((j) => (
-                  <li key={j.id}>{j.jobType.replace(/_/g, ' ')}: {j.status}</li>
+                  <li key={j.id}>
+                    <strong>{JOB_LABELS[j.jobType] ?? j.jobType.replace(/_/g, ' ')}</strong>:{' '}
+                    <span style={{ color: j.status === 'done' ? '#16a34a' : j.status === 'error' ? '#dc2626' : 'inherit' }}>
+                      {formatJobProgress(j)}
+                    </span>
+                  </li>
                 ))}
               </ul>
+            )}
+            {pendingSlow && (
+              <div style={{ marginTop: '0.5rem', color: '#d97706' }}>
+                Your documents are safely queued and waiting for the cloud worker to pick them up.
+              </div>
             )}
           </div>
         )}

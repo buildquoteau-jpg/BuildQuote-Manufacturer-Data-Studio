@@ -29,6 +29,8 @@ Environment variables (read from .env.local):
 import json
 import os
 import re
+import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -66,12 +68,25 @@ WORKER_ID = socket.gethostname()
 # 059 (pipeline_jobs.heartbeat_at); degrades to pending-only claims without it.
 LEASE_TIMEOUT_MIN = int(os.environ.get("PIPELINE_LEASE_TIMEOUT_MIN", "15"))
 
-R2_ACCOUNT_ID = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID", "")
+R2_ACCOUNT_ID = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID") or os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 R2_ACCESS_KEY = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID", "")
 R2_SECRET_KEY = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY", "")
-R2_BUCKET = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "studio-buildquote")
-R2_PUBLIC_URL = os.environ.get("CLOUDFLARE_R2_PUBLIC_URL", "").rstrip("/")
+R2_BUCKET = (
+    os.environ.get("CLOUDFLARE_R2_BUCKET_NAME")
+    or os.environ.get("CLOUDFLARE_R2_BUCKET_SOURCE_DOCUMENTS")
+    or "studio-buildquote"
+)
+R2_PUBLIC_URL = (
+    os.environ.get("CLOUDFLARE_R2_PUBLIC_URL")
+    or os.environ.get("CLOUDFLARE_R2_PUBLIC_BASE_URL")
+    or ""
+).rstrip("/")
 R2_ENDPOINT = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+# Clean up transient per-job files under .local/ after completion (prevents disk
+# fill-up on long-running cloud workers; set PIPELINE_CLEANUP_LOCAL=0 locally if
+# you want to inspect raw Docling folders afterwards).
+CLEANUP_LOCAL = os.environ.get("PIPELINE_CLEANUP_LOCAL", "1").lower() not in ("0", "false", "no")
 
 # Voyage AI embeddings (Step 7). If VOYAGE_API_KEY is unset, embed jobs no-op.
 # Dimension MUST match migration 052's vector(1024).
@@ -448,6 +463,10 @@ def handle_docling(job: dict):
         return
 
     log_line(f"PDF saved to {pdf_path}")
+    if not looks_like_pdf(pdf_path, ""):
+        pdf_path.unlink(missing_ok=True)
+        fail_job(job_id, "Uploaded file is not a valid PDF. Please upload a PDF document (use CSV Import for spreadsheets).", log)
+        return
     update_progress(job_id, progress, log)
 
     python_exe = REPO_ROOT / ".venv-docling" / "Scripts" / "python.exe"
@@ -633,6 +652,15 @@ def handle_docling(job: dict):
         "failedChunks": failed,
         "chainedJobIds": chained_job_ids,
     }, log)
+
+    # Free transient temp files on cloud workers (chunks are already persisted in
+    # Supabase document_chunks; auto_chain parsers read from DB, not local disk).
+    try:
+        pdf_path.unlink(missing_ok=True)
+        if CLEANUP_LOCAL and auto_chain and output_dir.exists():
+            shutil.rmtree(output_dir, ignore_errors=True)
+    except Exception:
+        pass
 
 
 def handle_parser(job: dict):
@@ -967,6 +995,10 @@ def handle_fetch_url(job: dict):
 
     # Chain into docling on the SAME job — it downloads the key we just wrote,
     # chunks it, persists document_chunks, and completes/fails this job itself.
+    try:
+        pdf_path.unlink(missing_ok=True)
+    except Exception:
+        pass
     log_line("Chaining into docling extraction…")
     handle_docling({
         "id": job_id,
@@ -977,6 +1009,7 @@ def handle_fetch_url(job: dict):
             "document_name": document_id,
             "chunk_size": chunk_size,
             "system_source_id": system_source_id,
+            "staged_system_id": payload.get("staged_system_id"),
         },
     })
 
@@ -1159,14 +1192,28 @@ HANDLERS = {
 }
 
 
+_SHUTTING_DOWN = False
+
+
+def _handle_shutdown(signum, _frame):
+    global _SHUTTING_DOWN
+    if not _SHUTTING_DOWN:
+        print(f"\n[worker] Received signal {signum} — finishing current job before exit…")
+        _SHUTTING_DOWN = True
+
+
 def main():
+    signal.signal(signal.SIGTERM, _handle_shutdown)
+    signal.signal(signal.SIGINT, _handle_shutdown)
+
     print(f"[worker] BuildQuote Pipeline Worker starting")
     print(f"[worker] Worker ID : {WORKER_ID}")
     print(f"[worker] Supabase  : {SUPABASE_URL}")
+    print(f"[worker] R2 bucket : {R2_BUCKET} (account={'set' if R2_ACCOUNT_ID else 'MISSING'})")
     print(f"[worker] Repo root : {REPO_ROOT}")
-    print(f"[worker] Polling every {POLL_INTERVAL}s — Ctrl+C to stop\n")
+    print(f"[worker] Polling every {POLL_INTERVAL}s — Ctrl+C or SIGTERM to stop\n")
 
-    while True:
+    while not _SHUTTING_DOWN:
         try:
             job = claim_job()
             if job:
@@ -1194,6 +1241,8 @@ def main():
         except Exception as e:
             print(f"[worker] Poll error: {e}")
             time.sleep(POLL_INTERVAL)
+
+    print("[worker] Exited cleanly.")
 
 
 if __name__ == "__main__":

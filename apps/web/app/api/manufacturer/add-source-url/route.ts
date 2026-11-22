@@ -200,6 +200,7 @@ export async function POST(req: NextRequest) {
         manufacturer_id: manufacturerId,
         source_url: rawUrl,
         system_source_id: systemSourceId,
+        staged_system_id: stagedSystemId,
         then_docling: thenDocling,
         chunk_size: 7,
       },

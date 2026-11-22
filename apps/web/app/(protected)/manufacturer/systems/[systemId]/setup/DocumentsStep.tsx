@@ -28,12 +28,9 @@ const ROLE_OPTIONS: { value: SystemSourceRole; label: string }[] = [
 
 const ACCEPTED_MIME = new Set([
   'application/pdf',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'text/csv',
 ])
-const ACCEPT_ATTR = '.pdf,.xlsx,.xls,.csv'
-const ACCEPTED_LABEL = 'PDF, Excel (.xlsx/.xls) or CSV'
+const ACCEPT_ATTR = '.pdf'
+const ACCEPTED_LABEL = 'PDF (.pdf) — for CSV product tables, use the CSV Import section below'
 const MAX_BYTES = 50 * 1024 * 1024
 
 export function DocumentsStep({
@@ -52,7 +49,50 @@ export function DocumentsStep({
   const [busyMsg, setBusyMsg] = useState('')
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState('')
+  const [addingUrl, setAddingUrl] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function addPdfFromUrl() {
+    const trimmed = pdfUrl.trim()
+    if (!trimmed) return
+    setError('')
+    setAddingUrl(true)
+    try {
+      const res = await fetch('/api/manufacturer/add-source-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manufacturerId,
+          stagedSystemId: systemId,
+          role,
+          url: trimmed,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Could not add document link.')
+        return
+      }
+      let derivedName = trimmed
+      try {
+        const u = new URL(trimmed)
+        const last = u.pathname.split('/').filter(Boolean).pop()
+        if (last) derivedName = decodeURIComponent(last).replace(/\.[^.]+$/, '')
+      } catch { /* fallback to full URL */ }
+      const next: LinkedDocument[] = [
+        ...documents,
+        { documentId: data.documentId, role, label: derivedName, documentName: `${derivedName} (fetching from link…)` },
+      ]
+      setDocuments(next)
+      onChanged?.(next.length)
+      setPdfUrl('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAddingUrl(false)
+    }
+  }
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
@@ -157,7 +197,40 @@ export function DocumentsStep({
           onChange={(e) => { uploadFiles(Array.from(e.target.files ?? [])); e.target.value = '' }}
         />
         <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-          Drop {ROLE_OPTIONS.find((o) => o.value === role)?.label.toLowerCase()} files here, or click to choose
+          Drop {ROLE_OPTIONS.find((o) => o.value === role)?.label.toLowerCase()} PDFs here, or click to choose
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '0.8rem' }}>
+        <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--ds-text-muted)', display: 'block', marginBottom: 4 }}>
+          Or paste a direct PDF link from your website
+        </label>
+        <div style={{ display: 'flex', gap: '0.45rem' }}>
+          <input
+            type="url"
+            value={pdfUrl}
+            onChange={(e) => setPdfUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPdfFromUrl() } }}
+            placeholder="https://example.com.au/guides/installation-guide.pdf"
+            disabled={addingUrl}
+            style={{
+              flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid var(--ds-border)',
+              background: 'var(--ds-surface, rgba(255,255,255,0.04))', color: 'inherit', fontSize: '0.82rem',
+            }}
+          />
+          <button
+            type="button"
+            onClick={addPdfFromUrl}
+            disabled={addingUrl || !pdfUrl.trim()}
+            style={{
+              fontSize: '0.8rem', fontWeight: 700, color: '#fff',
+              background: addingUrl || !pdfUrl.trim() ? '#94a3b8' : '#185D7A',
+              border: 'none', borderRadius: 7, padding: '7px 14px',
+              cursor: addingUrl || !pdfUrl.trim() ? 'default' : 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            {addingUrl ? 'Adding…' : 'Fetch PDF'}
+          </button>
         </div>
       </div>
 

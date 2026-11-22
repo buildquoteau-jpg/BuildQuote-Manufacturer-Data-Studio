@@ -50,7 +50,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ syst
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const { data: jobs, error } = await supabase
     .from('pipeline_jobs')
-    .select('id, job_type, status, error_message, created_at, completed_at')
+    .select('id, job_type, status, error_message, progress, payload, result, created_at, completed_at')
     .eq('manufacturer_id', manufacturerId)
     .filter('payload->>staged_system_id', 'eq', systemId)
     .gte('created_at', since)
@@ -64,14 +64,34 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ syst
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  type RawJob = {
+    id: string
+    job_type: string
+    status: string
+    error_message: string | null
+    progress: Record<string, unknown> | null
+    payload: Record<string, unknown> | null
+    result: Record<string, unknown> | null
+    created_at: string
+    completed_at: string | null
+  }
+
   return NextResponse.json({
-    jobs: (jobs ?? []).map((j: { id: string; job_type: string; status: string; error_message: string | null; created_at: string; completed_at: string | null }) => ({
-      id: j.id,
-      jobType: j.job_type,
-      status: j.status,
-      errorMessage: j.error_message,
-      createdAt: j.created_at,
-      completedAt: j.completed_at,
-    })),
+    jobs: ((jobs ?? []) as RawJob[]).map((j) => {
+      const chained = Array.isArray(j.result?.chainedJobIds)
+        ? (j.result.chainedJobIds as unknown[]).filter((x): x is string => typeof x === 'string')
+        : []
+      return {
+        id: j.id,
+        jobType: j.job_type,
+        status: j.status,
+        errorMessage: j.error_message,
+        progress: j.progress ?? null,
+        autoChain: j.payload?.auto_chain === true,
+        chainedJobIds: chained,
+        createdAt: j.created_at,
+        completedAt: j.completed_at,
+      }
+    }),
   })
 }

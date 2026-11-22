@@ -1,0 +1,12 @@
+# Railway deployment config for the always-on Data Studio pipeline worker.
+# Connect this GitHub repo in Railway, select Asia-Southeast (Singapore) region,
+# and set the required environment variables (see docs/cloud-worker-railway.md).
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.worker"
+
+[deploy]
+startCommand = "python -u scripts/worker/pipeline_worker.py"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

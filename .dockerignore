@@ -1,0 +1,16 @@
+# Keep the cloud worker Docker build context small and secret-free
+.git
+.github
+.local
+.next
+.venv*
+node_modules
+apps
+docs
+samples
+services
+supabase
+.env*
+*.log
+__pycache__
+*.pyc
