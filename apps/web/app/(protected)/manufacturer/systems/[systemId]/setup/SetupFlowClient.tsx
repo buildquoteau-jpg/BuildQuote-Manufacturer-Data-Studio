@@ -130,6 +130,7 @@ export function SetupFlowClient({
   const [documentsCount, setDocumentsCount] = useState(initialDocuments.length)
 
   const [extraction, setExtraction] = useState<ExtractionState>('idle')
+  const [alreadyExtracted, setAlreadyExtracted] = useState(false)
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [jobStatuses, setJobStatuses] = useState<JobStatus[]>([])
   const [pendingSlow, setPendingSlow] = useState(false)
@@ -152,6 +153,15 @@ export function SetupFlowClient({
           setExtraction('running')
           setJobStatuses(active)
           pollStatus(active.map((j) => j.id))
+        } else if (
+          !cancelled &&
+          jobs.some(
+            (j) =>
+              j.status === 'done' &&
+              (j.jobType === 'system_identity_parser' || j.jobType === 'knowledge_parser'),
+          )
+        ) {
+          setAlreadyExtracted(true)
         }
       } catch {
         // Non-fatal on mount
@@ -492,33 +502,83 @@ export function SetupFlowClient({
       </StepShell>
 
       <StepShell n={4} title="Upload system source documents" done={documentsCount > 0} doneLabel={`${documentsCount} document${documentsCount === 1 ? '' : 's'}`}>
-        <DocumentsStep systemId={systemId} manufacturerId={manufacturerId} initialDocuments={initialDocuments} onChanged={setDocumentsCount} />
+        <DocumentsStep
+          systemId={systemId}
+          manufacturerId={manufacturerId}
+          initialDocuments={initialDocuments}
+          onChanged={(nextCount) => {
+            if (nextCount > documentsCount) setAlreadyExtracted(false)
+            setDocumentsCount(nextCount)
+          }}
+        />
       </StepShell>
 
       <StepShell
         n={5}
         title="Create System Card"
-        done={false}
-        doneLabel={documentsCount === 0 ? 'upload a document first' : 'ready'}
+        done={alreadyExtracted && extraction === 'idle'}
+        doneLabel={
+          extraction === 'running'
+            ? 'working…'
+            : alreadyExtracted
+              ? 'already extracted'
+              : documentsCount === 0
+                ? 'upload a document first'
+                : 'ready'
+        }
       >
-        <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.8rem', lineHeight: 1.55 }}>
-          We&apos;ll initiate the pipeline and read the system source documents you uploaded for{' '}
-          {name || 'this system'}. Once complete, you&apos;ll be prompted to verify all extracted
-          information in Verify systems.
-        </p>
-        <button
-          type="button"
-          onClick={startExtraction}
-          disabled={!canExtract}
-          style={{
-            fontSize: '0.88rem', fontWeight: 700, color: '#fff',
-            background: canExtract ? '#185D7A' : '#94a3b8',
-            border: 'none', borderRadius: 8, padding: '10px 22px',
-            cursor: canExtract ? 'pointer' : 'default',
-          }}
-        >
-          {extraction === 'starting' ? 'Starting…' : extraction === 'running' ? 'Working…' : 'Create System Card'}
-        </button>
+        {alreadyExtracted && extraction === 'idle' ? (
+          <>
+            <p style={{ fontSize: '0.82rem', color: '#166534', margin: '0 0 0.85rem', lineHeight: 1.55 }}>
+              Already extracted — your documents for <strong>{name || 'this system'}</strong> have
+              been read by the AI (no need to run this again unless you add new PDFs).
+            </p>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <Link
+                href={`/manufacturer/workspace/${systemId}`}
+                style={{
+                  display: 'inline-block', fontSize: '0.88rem', fontWeight: 700, color: '#fff',
+                  background: '#16a34a', borderRadius: 8, padding: '10px 20px', textDecoration: 'none',
+                }}
+              >
+                Already extracted — go to Verify systems →
+              </Link>
+              <button
+                type="button"
+                onClick={startExtraction}
+                disabled={!canExtract}
+                style={{
+                  fontSize: '0.8rem', fontWeight: 600, color: 'var(--ds-text-muted)',
+                  background: 'transparent', border: '1px solid var(--ds-border)',
+                  borderRadius: 8, padding: '9px 14px', cursor: canExtract ? 'pointer' : 'default',
+                }}
+              >
+                Re-run extraction
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted)', margin: '0 0 0.8rem', lineHeight: 1.55 }}>
+              We&apos;ll initiate the pipeline and read the system source documents you uploaded for{' '}
+              {name || 'this system'}. Once complete, you&apos;ll be prompted to verify all extracted
+              information in Verify systems.
+            </p>
+            <button
+              type="button"
+              onClick={startExtraction}
+              disabled={!canExtract}
+              style={{
+                fontSize: '0.88rem', fontWeight: 700, color: '#fff',
+                background: canExtract ? '#185D7A' : '#94a3b8',
+                border: 'none', borderRadius: 8, padding: '10px 22px',
+                cursor: canExtract ? 'pointer' : 'default',
+              }}
+            >
+              {extraction === 'starting' ? 'Starting…' : extraction === 'running' ? 'Working…' : 'Create System Card'}
+            </button>
+          </>
+        )}
 
         {extraction === 'running' && (
           <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', marginTop: '0.8rem' }}>
