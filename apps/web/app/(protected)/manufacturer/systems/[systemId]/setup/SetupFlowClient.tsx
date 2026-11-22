@@ -352,12 +352,21 @@ export function SetupFlowClient({
           Your photos, colours, links and System Card for <strong>{name}</strong> are loaded. The AI has read
           your documents and filled in what it could find — take a look and confirm it in Verify systems.
         </p>
-        <Link href={`/manufacturer/workspace/${systemId}`} style={{
-          display: 'inline-block', fontSize: '0.85rem', fontWeight: 700, color: '#fff', background: '#16a34a',
-          borderRadius: 8, padding: '9px 20px', textDecoration: 'none',
-        }}>
-          Go to Verify systems →
-        </Link>
+        <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Link href={`/manufacturer/workspace/${systemId}`} style={{
+            display: 'inline-block', fontSize: '0.85rem', fontWeight: 700, color: '#fff', background: '#16a34a',
+            borderRadius: 8, padding: '9px 20px', textDecoration: 'none',
+          }}>
+            Go to Verify systems →
+          </Link>
+          <Link href="/manufacturer/systems" style={{
+            display: 'inline-block', fontSize: '0.85rem', fontWeight: 700, color: '#185D7A',
+            background: '#fff', border: '1px solid rgba(24,93,122,0.35)',
+            borderRadius: 8, padding: '9px 18px', textDecoration: 'none',
+          }}>
+            + Set up another system
+          </Link>
+        </div>
       </div>
     )
   }
@@ -581,22 +590,64 @@ export function SetupFlowClient({
         )}
 
         {extraction === 'running' && (
-          <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', marginTop: '0.8rem' }}>
-            <div>Working on your System Card — you can stay here or come back in a couple of minutes.</div>
+          <div style={{ marginTop: '0.85rem' }}>
+            <div style={{
+              border: '1px solid #bae6fd',
+              background: '#f0f9ff',
+              borderRadius: 9,
+              padding: '0.85rem 1rem',
+              marginBottom: '0.75rem',
+            }}>
+              <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0c4a6e', marginBottom: '0.3rem' }}>
+                ✓ We have everything we need for {name || 'this system'}!
+              </div>
+              <p style={{ fontSize: '0.8rem', color: '#0369a1', margin: '0 0 0.7rem', lineHeight: 1.55 }}>
+                Our cloud AI is reading your documents in the background — you don&apos;t need to
+                stay on this page. You can start setting up your next system, verify another
+                product, or come back in a couple of minutes.
+              </p>
+              <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+                <Link
+                  href="/manufacturer/systems"
+                  style={{
+                    display: 'inline-block', fontSize: '0.8rem', fontWeight: 700, color: '#fff',
+                    background: '#185D7A', borderRadius: 7, padding: '7px 14px', textDecoration: 'none',
+                  }}
+                >
+                  + Start another system
+                </Link>
+                <Link
+                  href="/manufacturer/review"
+                  style={{
+                    display: 'inline-block', fontSize: '0.8rem', fontWeight: 700, color: '#185D7A',
+                    background: '#fff', border: '1px solid rgba(24,93,122,0.35)',
+                    borderRadius: 7, padding: '7px 14px', textDecoration: 'none',
+                  }}
+                >
+                  Verify another system →
+                </Link>
+              </div>
+            </div>
+
             {jobStatuses.length > 0 && (
-              <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', lineHeight: 1.7 }}>
-                {jobStatuses.map((j) => (
-                  <li key={j.id}>
-                    <strong>{JOB_LABELS[j.jobType] ?? j.jobType.replace(/_/g, ' ')}</strong>:{' '}
-                    <span style={{ color: j.status === 'done' ? '#16a34a' : j.status === 'error' ? '#dc2626' : 'inherit' }}>
-                      {formatJobProgress(j)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)' }}>
+                <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+                  Background progress ({jobStatuses.filter((j) => j.status === 'done').length} of {jobStatuses.length} steps complete):
+                </div>
+                <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.1rem', lineHeight: 1.7 }}>
+                  {jobStatuses.map((j) => (
+                    <li key={j.id}>
+                      <strong>{JOB_LABELS[j.jobType] ?? j.jobType.replace(/_/g, ' ')}</strong>:{' '}
+                      <span style={{ color: j.status === 'done' ? '#16a34a' : j.status === 'error' ? '#dc2626' : 'inherit' }}>
+                        {formatJobProgress(j)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {pendingSlow && (
-              <div style={{ marginTop: '0.5rem', color: '#d97706' }}>
+              <div style={{ fontSize: '0.78rem', marginTop: '0.5rem', color: '#d97706' }}>
                 Your documents are safely queued and waiting for the cloud worker to pick them up.
               </div>
             )}
