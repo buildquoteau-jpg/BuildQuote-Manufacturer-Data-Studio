@@ -4,6 +4,16 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'BuildQuote Data Studio',
   description: 'Manufacturer data ingestion, verification and publishing.',
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
 }
 
 export default function RootLayout({

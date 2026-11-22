@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic'
 const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Keep sitemap empty while in private draft (set ALLOW_INDEXING=true when ready)
+  if (process.env.ALLOW_INDEXING !== 'true') return []
   try {
     const supabase = createStudioServiceClient()
 

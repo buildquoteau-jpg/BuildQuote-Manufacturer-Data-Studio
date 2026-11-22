@@ -7,6 +7,17 @@ const nextConfig = {
     // module" error even though local dev works fine.
     serverComponentsExternalPackages: ['sharp'],
   },
+  async headers() {
+    if (process.env.ALLOW_INDEXING === 'true') return [];
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive, nosnippet' },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
