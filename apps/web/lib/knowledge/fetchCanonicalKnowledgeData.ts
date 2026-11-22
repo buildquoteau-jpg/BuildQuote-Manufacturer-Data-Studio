@@ -182,6 +182,51 @@ export type CanonicalSystemBundle = {
   relationshipTargets: Map<string, { name: string; slug: string }>
 }
 
+function slugifySystemName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[™®©]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+export async function fetchCanonicalSystemBundleById(
+  systemId: string,
+): Promise<CanonicalSystemBundle | null> {
+  try {
+    const supabase = createStudioServiceClient()
+    const { data: sys } = await supabase
+      .from('staged_systems')
+      .select('id, name, slug, manufacturer_id')
+      .eq('id', systemId)
+      .maybeSingle()
+    if (!sys) return null
+
+    const mfrId = sys.manufacturer_id as string
+    const { data: mfr } = await supabase
+      .from('data_studio_manufacturers')
+      .select('id, name, slug, abn, phone, website_url')
+      .eq('id', mfrId)
+      .single()
+    if (!mfr) return null
+
+    let effectiveSlug = (sys.slug as string | null)?.trim() || ''
+    if (!effectiveSlug) {
+      effectiveSlug = slugifySystemName((sys.name as string) || systemId) || systemId
+      // Best-effort backfill so /api/cards/<slug>/knowledge.jsonld resolves too
+      await supabase
+        .from('staged_systems')
+        .update({ slug: effectiveSlug })
+        .eq('id', systemId)
+        .is('slug', null)
+    }
+
+    return fetchCanonicalSystemBundle(mfr.slug as string, effectiveSlug)
+  } catch {
+    return null
+  }
+}
+
 export async function fetchCanonicalSystemBundle(
   manufacturerSlug: string,
   cardSlug: string,

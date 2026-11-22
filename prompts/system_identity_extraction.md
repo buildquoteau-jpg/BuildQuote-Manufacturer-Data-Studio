@@ -32,7 +32,14 @@ not extract facts about anything other than the named product.
 {
   "description": "verbatim product description, or null if this chunk doesn't contain one",
   "category": "for deck products exactly one of Decking | Subfloor | Care & Maintenance | Outdoor Living; otherwise the source's own broad category (e.g. Cladding), or null",
-  "subcategory": "e.g. Wood composite decking / Hardwood decking / Fibre cement weatherboard, or null",
+  "subcategory": "e.g. Wood composite decking / Hardwood decking / Fibre cement decking, or null",
+  "deck_type": "for deck products only, exactly one of: composite | hardwood | fibre-cement | tiles | modified | subfloor | care | outdoor — else null",
+  "bal_rating": "highest explicitly stated Bushfire Attack Level e.g. BAL-FZ, BAL-40, BAL-29, BAL-19, BAL-12.5, or null",
+  "fire_rating": "explicitly stated fire rating / AS 1530.1 non-combustible / FRL, or null",
+  "acoustic_rating": "explicitly stated acoustic rating (e.g. Rw / STC), or null",
+  "moisture_resistant": "<true|false|null — true if explicitly rated moisture/rot/water/termite resistant>",
+  "structural_grade": "explicitly stated structural / wind / load rating (e.g. 2 kPa residential / 4 kPa commercial / F17), or null",
+  "australian_made": "<true|false|null — only if explicitly stated>",
   "profiles": [
     {
       "profile_name": "e.g. 180mm Weatherboard 3600mm",
@@ -67,7 +74,7 @@ not extract facts about anything other than the named product.
   ],
   "attributes": [
     {
-      "label": "e.g. Warranty period, R-value, Fire rating",
+      "label": "e.g. BAL Rating, Slip Rating, Max Joist Spacing, Warranty Period, Min Subfloor Clearance, Fixing System, Coating / Sealing Requirement, Density / Mass",
       "value": "the stated value, as text",
       "page_number": <integer>,
       "quote": "verbatim source text"

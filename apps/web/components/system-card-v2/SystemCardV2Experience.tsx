@@ -50,7 +50,7 @@ function ShareIcon() {
 const SECTION_IDS = ['choose', 'attributes', 'ask', 'guides', 'components', 'stockists'] as const
 type SectionId = typeof SECTION_IDS[number]
 
-export function SystemCardV2Experience({ manufacturer, system, stockists = [], onAddToList, showExperimentBanner = true }: {
+export function SystemCardV2Experience({ manufacturer, system, stockists = [], onAddToList, showExperimentBanner = true, embedded = false }: {
   // Only manufacturer.name is used anywhere in this tree — narrower than
   // the full SystemCardManufacturerPage type, which exists for the v6-style
   // manufacturer landing page this experiment doesn't have.
@@ -63,6 +63,7 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], o
   // ShoppingListProvider.addItems — never a BuildQuote API.
   onAddToList?: (items: ShoppingListItem[]) => void
   showExperimentBanner?: boolean
+  embedded?: boolean
 }) {
   // A Set of open section ids, not one currentStep — several sections must
   // be able to stay open simultaneously, and closing one must never affect
@@ -109,8 +110,8 @@ export function SystemCardV2Experience({ manufacturer, system, stockists = [], o
           </div>
         )}
 
-        <div className={styles.page}>
-          <div className={styles.card}>
+        <div className={embedded ? `${styles.page} ${styles.embeddedPage}` : styles.page}>
+          <div className={embedded ? `${styles.card} ${styles.embeddedCard}` : styles.card}>
             <Cover manufacturer={manufacturer} system={system} />
 
             <div className={styles.sectionsList}>

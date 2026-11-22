@@ -56,7 +56,20 @@
      tinted with ink instead of pure black so it reads as a shadow the card
      casts on the page, not a smudge behind it. */
   box-shadow: 0 30px 80px -12px rgba(16, 14, 11, 0.28), 0 10px 26px -10px rgba(16, 14, 11, 0.16);
-  background: #14161a;
+  background: #ffffff;
+}
+
+.embeddedPage {
+  background: transparent;
+  min-height: auto;
+  padding: 0;
+  display: block;
+}
+
+.embeddedCard {
+  max-width: none;
+  border-radius: 10px;
+  box-shadow: none;
 }
 
 /* The card is mobile-first, not mobile-only — on real screen real estate it
@@ -124,31 +137,34 @@
   margin: 0;
   display: flex;
   justify-content: center;
-  padding: 0.55rem 1rem;
+  padding: 0.1rem 1rem;
   background: var(--paper);
 }
 
 .sectionBar {
   position: relative;
-  /* Narrow — just wide enough for its own text plus room for the chevron
-     — not a full-width slab. Five of these read as a curated menu of
-     distinct pills, not one continuous black stripe cut into five. */
+  /* Slim white drawer-pull strip matching live buildquote.com.au System Card V2 */
   width: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.85rem 2.6rem;
-  background: var(--ink);
+  padding: 0.15rem 1.5rem;
+  background: none;
   border: none;
-  border-radius: 999px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
-  min-height: 58px;
-  transition: background-color 0.15s ease;
+  min-height: 36px;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .sectionBar:hover:not(:disabled) {
-  background: #2a2620;
+  opacity: 0.6;
+}
+
+.sectionBar:active:not(:disabled) {
+  opacity: 0.45;
+  transform: scale(0.98);
 }
 
 .sectionBar:focus-visible {
@@ -176,7 +192,7 @@
 .sectionBarIcon {
   display: flex;
   flex-shrink: 0;
-  color: var(--paper);
+  color: var(--ink);
   opacity: 0.8;
 }
 
@@ -184,26 +200,24 @@
   display: block;
   font-family: 'Barlow Condensed', 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   letter-spacing: -0.005em;
-  color: var(--paper);
+  color: var(--ink);
 }
 
 .sectionBarSubtitle {
   display: block;
   font-size: 0.72rem;
-  /* Was 0.62 opacity — the dimming, not the white-on-black itself, was
-     what read as soft/uncrisp next to the bold title. */
-  color: rgba(246, 244, 239, 0.88);
-  margin-top: 0.25rem;
+  color: var(--ink-faint);
+  margin-top: 0.2rem;
 }
 
 .sectionChevron {
   position: absolute;
-  right: 1.25rem;
+  right: 0.25rem;
   top: 50%;
   display: flex;
-  color: var(--paper);
+  color: var(--ink);
   transform: translateY(-50%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }

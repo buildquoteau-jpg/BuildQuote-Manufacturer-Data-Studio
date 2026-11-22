@@ -114,12 +114,12 @@ function deriveLabel(urlStr: string, fallback: string): string {
   }
 }
 
-function looksLikeUsefulProductPhoto(urlStr: string): boolean {
-  const lower = urlStr.toLowerCase()
-  if (!/\.(jpg|jpeg|png|webp|avif)(\?|$|#)/i.test(lower) && !/ctfassets\.net|cloudinary\.com|imgix\.net/i.test(lower)) {
+function looksLikeUsefulProductPhoto(urlStr: string, alt = ''): boolean {
+  const lower = `${urlStr} ${alt}`.toLowerCase()
+  if (!/\.(jpg|jpeg|png|webp|avif)(\?|$|#)/i.test(urlStr.toLowerCase()) && !/ctfassets\.net|cloudinary\.com|imgix\.net/i.test(urlStr.toLowerCase())) {
     return false
   }
-  if (/\.svg(\?|$)|favicon|logo|icon|sprite|avatar|badge|social|facebook|instagram|linkedin|youtube|pinterest|pixel|tracking|analytics|spacer|placeholder|arrow|chevron|close|menu|search/i.test(lower)) {
+  if (/\.svg(\?|$)|favicon|logo|icon|sprite|avatar|badge|social|facebook|instagram|linkedin|youtube|pinterest|pixel|tracking|analytics|spacer|placeholder|arrow|chevron|close|menu|search|congrat|promo|campaign|award|newsletter|zero-harm|zero_harm|app-store|google-play|qr-code|banner-ad|safety-worker/i.test(lower)) {
     return false
   }
   return true
@@ -139,8 +139,9 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
   const pushImg = (rawUrl: string, alt: string) => {
     const resolved = resolveUrl(rawUrl, baseUrl)
     if (!resolved) return
-    const key = resolved.split('#')[0]
-    if (seenImg.has(key) || !looksLikeUsefulProductPhoto(resolved)) return
+    // Strip query params when deduping so Contentful ?fm=webp & bare URLs don't duplicate
+    const key = resolved.split(/[?#]/)[0].toLowerCase()
+    if (seenImg.has(key) || !looksLikeUsefulProductPhoto(resolved, alt)) return
     seenImg.add(key)
     images.push({ url: resolved, alt: alt.trim() || systemName })
   }

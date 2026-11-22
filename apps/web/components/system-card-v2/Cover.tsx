@@ -36,9 +36,18 @@ function firstSentence(text: string | null): string | null {
 
 function ShareIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
-      <line x1="8.6" y1="10.6" x2="15.4" y2="6.4" /><line x1="8.6" y1="13.4" x2="15.4" y2="17.6" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 15V4" />
+      <path d="M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   )
 }
@@ -80,14 +89,17 @@ export function Cover({ manufacturer, system }: {
   const images = (() => {
     const seen = new Set<string>()
     const list: { url: string; alt: string }[] = []
-    if (system.hero_image_url) {
-      list.push({ url: system.hero_image_url, alt: `${system.name} by ${manufacturer.name}` })
-      seen.add(system.hero_image_url)
+    const canonical = (u: string) => u.trim().split(/[?#]/)[0].toLowerCase()
+    const heroUrl = system.hero_image_url?.trim()
+    if (heroUrl) {
+      list.push({ url: heroUrl, alt: `${system.name} by ${manufacturer.name}` })
+      seen.add(canonical(heroUrl))
     }
     for (const g of system.gallery_images ?? []) {
-      if (g.url && !seen.has(g.url)) {
-        list.push({ url: g.url, alt: g.alt || `${system.name} by ${manufacturer.name}` })
-        seen.add(g.url)
+      const url = g.url?.trim()
+      if (url && !seen.has(canonical(url))) {
+        list.push({ url, alt: g.alt || `${system.name} by ${manufacturer.name}` })
+        seen.add(canonical(url))
       }
     }
     return list.slice(0, 10)
@@ -267,9 +279,14 @@ export function Cover({ manufacturer, system }: {
               )
             })}
 
-            <button type="button" className={styles.desktopShareBtn} onClick={handleShare}>
-              <ShareIcon />
-              {shareState === 'copied' ? 'Link copied' : 'Share'}
+            <button
+              type="button"
+              className={styles.desktopShareBtn}
+              onClick={handleShare}
+              aria-label={shareState === 'copied' ? 'Link copied' : 'Share System Card'}
+              title={shareState === 'copied' ? 'Link copied' : 'Share System Card'}
+            >
+              {shareState === 'copied' ? <CheckIcon /> : <ShareIcon />}
             </button>
           </div>
 

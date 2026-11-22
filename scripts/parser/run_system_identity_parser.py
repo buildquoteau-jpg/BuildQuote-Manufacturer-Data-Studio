@@ -216,22 +216,29 @@ def _norm(s: str | None) -> str:
     return re.sub(r'\s+', ' ', (s or '').strip().lower())
 
 
+def _slugify(name: str) -> str:
+    s = re.sub(r"[™®©]", "", name or "").lower()
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+
+SCALAR_SYSTEM_FIELDS = (
+    "description", "category", "subcategory", "deck_type",
+    "bal_rating", "fire_rating", "acoustic_rating",
+    "moisture_resistant", "structural_grade", "australian_made",
+)
+
+
 def merge_chunk_results(chunk_results: list[dict]) -> dict:
-    description = None
-    category = None
-    subcategory = None
+    scalars: dict[str, object] = {f: None for f in SCALAR_SYSTEM_FIELDS}
     profiles: dict[str, dict] = {}
     colours: dict[str, dict] = {}
     components: dict[str, dict] = {}
     attributes: dict[str, dict] = {}
 
     for r in chunk_results:
-        if not description and r.get("description"):
-            description = r["description"]
-        if not category and r.get("category"):
-            category = r["category"]
-        if not subcategory and r.get("subcategory"):
-            subcategory = r["subcategory"]
+        for f in SCALAR_SYSTEM_FIELDS:
+            if scalars[f] is None and r.get(f) is not None and r.get(f) != "":
+                scalars[f] = r[f]
         for p in r.get("profiles") or []:
             key = _norm(p.get("product_code")) or _norm(p.get("profile_name"))
             if key and key not in profiles:
@@ -250,9 +257,7 @@ def merge_chunk_results(chunk_results: list[dict]) -> dict:
                 attributes[key] = a
 
     return {
-        "description": description,
-        "category": category,
-        "subcategory": subcategory,
+        **scalars,
         "profiles": list(profiles.values()),
         "colours": list(colours.values()),
         "components": list(components.values()),
@@ -262,16 +267,29 @@ def merge_chunk_results(chunk_results: list[dict]) -> dict:
 
 # ── Plan → staged_systems UPDATE + staged_system_profiles/colours/components ─
 
-def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source_document_id: str, existing_system: dict) -> dict:
+VALID_DECK_TYPES = {
+    "composite", "hardwood", "fibre-cement", "tiles",
+    "modified", "subfloor", "care", "outdoor",
+}
+
+
+def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source_document_id: str, existing_system: dict, system_name: str = "") -> dict:
     # Only fill fields the system doesn't already have a value for — never
     # clobber a prior extraction or a manufacturer's own edit.
     system_update = {}
-    if not existing_system.get("description") and merged["description"]:
-        system_update["description"] = merged["description"]
-    if not existing_system.get("category") and merged["category"]:
-        system_update["category"] = merged["category"]
-    if not existing_system.get("subcategory") and merged["subcategory"]:
-        system_update["subcategory"] = merged["subcategory"]
+    for f in SCALAR_SYSTEM_FIELDS:
+        if existing_system.get(f) is None or existing_system.get(f) == "":
+            val = merged.get(f)
+            if f == "deck_type" and isinstance(val, str):
+                val = val.strip().lower().replace("_", "-")
+                if val not in VALID_DECK_TYPES:
+                    val = None
+            if val is not None and val != "":
+                system_update[f] = val
+    if not existing_system.get("slug") and system_name:
+        slug = _slugify(system_name)
+        if slug:
+            system_update["slug"] = slug
 
     existing_attrs = existing_system.get("custom_technical_attributes") or []
     existing_attr_labels = {_norm(a.get("label")) for a in existing_attrs}
@@ -503,7 +521,7 @@ def main():
 
         system_rows = sb_get(
             supabase_url, headers, "staged_systems",
-            f"id=eq.{args.staged_system_id}&select=description,category,subcategory,custom_technical_attributes",
+            f"id=eq.{args.staged_system_id}&select=slug,description,category,subcategory,deck_type,bal_rating,fire_rating,acoustic_rating,moisture_resistant,structural_grade,australian_made,custom_technical_attributes",
         )
         if not system_rows:
             msg = f"staged_systems row {args.staged_system_id} not found"
@@ -529,7 +547,7 @@ def main():
             f"{len(merged['components'])} components, {len(merged['attributes'])} attributes"
         )
 
-        plan = build_plan(merged, args.manufacturer_id, args.staged_system_id, args.source_document_id, existing_system)
+        plan = build_plan(merged, args.manufacturer_id, args.staged_system_id, args.source_document_id, existing_system, args.system_name)
 
         DRY_RUN_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
