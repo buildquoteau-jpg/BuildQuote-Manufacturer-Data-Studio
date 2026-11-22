@@ -534,6 +534,8 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
   // 4) PDF links from structured __NEXT_DATA__ first, then <a href>, then embedded URLs
   const pdfs: { url: string; label: string; role: SystemSourceRole }[] = []
   const seenPdfKeys = new Set<string>()
+  const JUNK_PDF_RE =
+    /modern[_ -]?slavery|terms[_ -]?(?:and|&)?[_ -]?conditions|privacy[_ -]?policy|cookie[_ -]?policy|whistleblower|asbestos[_ -]?fact[_ -]?sheet|accessibility[_ -]?statement|supplier[_ -]?code[_ -]?of[_ -]?conduct|credit[_ -]?application|gender[_ -]?pay/i
   const pushPdf = (rawUrl: string, anchorText?: string) => {
     const resolved = resolveUrl(rawUrl, baseUrl)
     if (!resolved) return
@@ -544,6 +546,7 @@ function extractPageAssets(html: string, baseUrl: URL, systemName: string): {
     const label = cleanedAnchor && cleanedAnchor.length >= 4 && !/^(download|view|open|pdf|click here)$/i.test(cleanedAnchor)
       ? cleanedAnchor.slice(0, 140)
       : deriveLabel(resolved, `${systemName} document`)
+    if (JUNK_PDF_RE.test(`${label} ${resolved}`)) return
     const labelKey = normDocKey(label)
     if (seenPdfKeys.has(urlNoQuery) || (fileKey && seenPdfKeys.has(`file:${fileKey}`)) || (labelKey && seenPdfKeys.has(`label:${labelKey}`))) {
       return
