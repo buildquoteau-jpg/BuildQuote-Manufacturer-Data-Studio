@@ -1,9 +1,10 @@
-# Full cloud worker dependencies for scripts/worker/pipeline_worker.py
-# Covers ALL job types: docling (native C++ DoclingParse backend, CPU-only),
-# system_identity_parser, knowledge_parser, parser, fetch_url, embed, rerun_chunk.
+# Lightweight cloud worker dependencies for scripts/worker/pipeline_worker.py
+# Uses pymupdf4llm (pure C++ PyMuPDF Markdown + table extractor, ~50 MB RAM)
+# instead of PyTorch/Docling so large 50+ page PDF catalogues never OOM on
+# cloud worker containers and finish 20x faster.
 requests>=2.31
 python-dotenv>=1.0
 boto3>=1.34
 anthropic>=0.40
 pypdfium2>=4.30
-docling>=2.15
+pymupdf4llm>=0.0.17

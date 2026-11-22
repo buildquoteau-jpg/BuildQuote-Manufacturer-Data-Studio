@@ -15,6 +15,7 @@ Run from the repo root. Activate .venv-docling first.
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -48,6 +49,33 @@ def split_pdf_chunk(input_path: Path, start: int, end: int, out_path: Path):
     new_doc.close()
 
 
+def run_chunk_pymupdf(input_path: Path, page_start: int, page_end: int, out_dir: Path, chunk_no: int) -> dict:
+    """Fast, low-memory PDF-to-Markdown + table extraction via pymupdf4llm (~50 MB RAM)."""
+    import pymupdf4llm  # noqa: PLC0415
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n[chunked] Extracting chunk {chunk_no} (pages {page_start}-{page_end}) via pymupdf4llm")
+    page_indices = list(range(page_start - 1, page_end))
+    md_text = pymupdf4llm.to_markdown(str(input_path), pages=page_indices)
+    if isinstance(md_text, list):
+        md_text = "\n\n".join(str(x.get("text", x) if isinstance(x, dict) else x) for x in md_text)
+    md_text = (md_text or "").strip()
+
+    (out_dir / "output.md").write_text(md_text, encoding="utf-8")
+    table_count = len(re.findall(r"^\|.+\|\s*\n\|[\s:\-|]+\|", md_text, flags=re.MULTILINE))
+    summary = {
+        "input_filename": input_path.name,
+        "engine": "pymupdf4llm",
+        "page_count": len(page_indices),
+        "character_count": len(md_text),
+        "table_count": table_count,
+        "extraction_complete": True,
+    }
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"  [pymupdf4llm] Pages: {len(page_indices)}, Chars: {len(md_text):,}, Tables: {table_count}")
+    return summary
+
+
 def run_chunk(input_path: Path, out_dir: Path, chunk_no: int) -> dict:
     """Run extract_docling.py on a chunk PDF. Returns the summary dict."""
     print(f"\n[chunked] Running Docling on chunk {chunk_no}: {input_path.name}")
@@ -66,11 +94,13 @@ def run_chunk(input_path: Path, out_dir: Path, chunk_no: int) -> dict:
     print(result.stdout)
     if result.stderr:
         print(result.stderr)
+    if result.returncode != 0:
+        print(f"  [chunked] Docling subprocess exited with code {result.returncode}")
 
     summary_file = out_dir / "summary.json"
     if summary_file.exists():
         return json.loads(summary_file.read_text(encoding="utf-8"))
-    return {"error": f"chunk {chunk_no} produced no summary.json"}
+    return {"error": f"chunk {chunk_no} produced no summary.json (exit {result.returncode})"}
 
 
 def merge_outputs(chunk_dirs: list, total_pages: int, out_dir: Path, input_path: Path):
@@ -153,7 +183,21 @@ def main():
     parser.add_argument("--out", default=None, help="Output directory under .local/docling-output/")
     parser.add_argument("--start-page", type=int, default=None, help="First page to extract (1-indexed, default: 1)")
     parser.add_argument("--end-page", type=int, default=None, help="Last page to extract (1-indexed, default: last page)")
+    parser.add_argument(
+        "--engine",
+        choices=["auto", "pymupdf", "docling"],
+        default=os.environ.get("PDF_EXTRACTOR", "auto").lower(),
+        help="Extraction engine: pymupdf (fast, low RAM), docling, or auto (default: PDF_EXTRACTOR env or auto)",
+    )
     args = parser.parse_args()
+
+    engine = args.engine
+    if engine == "auto":
+        try:
+            import pymupdf4llm  # noqa: F401, PLC0415
+            engine = "pymupdf"
+        except ImportError:
+            engine = "docling"
 
     input_path = Path(args.input)
     if not input_path.exists():
@@ -209,11 +253,13 @@ def main():
         REPORTER.progress(
             {"totalPages": total_pages, "totalChunks": total_chunks,
              "currentChunk": {"chunkNo": chunk_no, "startPage": page, "endPage": page_end}},
-            log_line=f"docling chunk {chunk_no}/{total_chunks} (pages {page}-{page_end})",
+            log_line=f"extract ({engine}) chunk {chunk_no}/{total_chunks} (pages {page}-{page_end})",
         )
-        split_pdf_chunk(input_path, page, page_end, chunk_pdf)
-
-        run_chunk(chunk_pdf, chunk_out, chunk_no)
+        if engine == "pymupdf":
+            run_chunk_pymupdf(input_path, page, page_end, chunk_out, chunk_no)
+        else:
+            split_pdf_chunk(input_path, page, page_end, chunk_pdf)
+            run_chunk(chunk_pdf, chunk_out, chunk_no)
         chunk_dirs.append((chunk_out, page, page_end))
 
         page = page_end + 1

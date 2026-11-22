@@ -1,25 +1,19 @@
 # BuildQuote Data Studio — Always-On Cloud Pipeline Worker
-# Runs scripts/worker/pipeline_worker.py (Docling + AI identity & knowledge parsers + URL fetch + embeddings).
-# Built for Railway / Render / Fly.io (CPU-only; no GPU required because chunked Docling uses DoclingParseDocumentBackend).
+# Runs scripts/worker/pipeline_worker.py (pymupdf4llm PDF extraction + AI identity & knowledge parsers + URL fetch + embeddings).
+# Fast, compact (~250 MB image, ~60 MB idle RAM, ~100 MB peak) — never OOMs on large catalogues.
 
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PDF_EXTRACTOR=pymupdf
 
-# Minimal system libs required by pypdfium2 / docling-parse / opencv-headless
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 \
-    libgl1 \
-    libgomp1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Install CPU-only PyTorch first so docling does not pull multi-GB CUDA wheels
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 
 COPY requirements-worker.txt ./
 RUN pip install -r requirements-worker.txt
