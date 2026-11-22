@@ -8,7 +8,7 @@
 // (recordDocumentUpload with stagedSystemId + systemSourceRole — the
 // manufacturer-facing linkage built in this same effort, task #26).
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { requestDocumentUploadUrl, recordDocumentUpload, type SystemSourceRole } from '@/lib/studio-manufacturer/document-actions'
 import { CsvImportPanel } from './CsvImportPanel'
 
@@ -21,10 +21,18 @@ export type LinkedDocument = {
 
 const ROLE_OPTIONS: { value: SystemSourceRole; label: string }[] = [
   { value: 'install_guide', label: 'Installation guide' },
-  { value: 'design_guide', label: 'Design guide' },
+  { value: 'design_guide', label: 'Design / sealing / care guide' },
   { value: 'tech_data', label: 'Technical data sheet' },
-  { value: 'source_catalogue', label: 'Other (sustainability, certifications, etc.)' },
+  { value: 'source_catalogue', label: 'Other (warranty, brochure, certifications)' },
 ]
+
+function guessRoleFromName(name: string): SystemSourceRole {
+  const s = name.toLowerCase()
+  if (/install|fixing|fasten|subframe|framing/.test(s)) return 'install_guide'
+  if (/seal|coat|paint|oil|care|maint|design|best.?practice|finish|colour|color/.test(s)) return 'design_guide'
+  if (/tds|tech|spec|data.?sheet|span|bal|slip|fire|acoustic|engineering/.test(s)) return 'tech_data'
+  return 'source_catalogue'
+}
 
 const ACCEPTED_MIME = new Set([
   'application/pdf',
@@ -45,7 +53,8 @@ export function DocumentsStep({
   onChanged?: (count: number) => void
 }) {
   const [documents, setDocuments] = useState(initialDocuments)
-  const [role, setRole] = useState<SystemSourceRole>('install_guide')
+  useEffect(() => { setDocuments(initialDocuments) }, [initialDocuments])
+  const [role, setRole] = useState<'auto' | SystemSourceRole>('auto')
   const [busyMsg, setBusyMsg] = useState('')
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
@@ -58,6 +67,7 @@ export function DocumentsStep({
     if (!trimmed) return
     setError('')
     setAddingUrl(true)
+    const resolvedRole: SystemSourceRole = role === 'auto' ? guessRoleFromName(trimmed) : role
     try {
       const res = await fetch('/api/manufacturer/add-source-url', {
         method: 'POST',
@@ -65,7 +75,7 @@ export function DocumentsStep({
         body: JSON.stringify({
           manufacturerId,
           stagedSystemId: systemId,
-          role,
+          role: resolvedRole,
           url: trimmed,
         }),
       })
@@ -82,7 +92,7 @@ export function DocumentsStep({
       } catch { /* fallback to full URL */ }
       const next: LinkedDocument[] = [
         ...documents,
-        { documentId: data.documentId, role, label: derivedName, documentName: `${derivedName} (fetching from link…)` },
+        { documentId: data.documentId, role: resolvedRole, label: derivedName, documentName: `${derivedName} (fetching from link…)` },
       ]
       setDocuments(next)
       onChanged?.(next.length)
@@ -104,6 +114,7 @@ export function DocumentsStep({
       if (!ACCEPTED_MIME.has(file.type)) { errors.push(`${file.name}: not a supported file type`); continue }
       if (file.size > MAX_BYTES) { errors.push(`${file.name}: exceeds 50 MB`); continue }
 
+      const fileRole: SystemSourceRole = role === 'auto' ? guessRoleFromName(file.name) : role
       setBusyMsg(`Uploading ${file.name}…`)
       try {
         const presign = await requestDocumentUploadUrl({
@@ -111,7 +122,7 @@ export function DocumentsStep({
           originalFilename: file.name,
           contentType: file.type,
           fileSizeBytes: file.size,
-          documentType: role,
+          documentType: fileRole,
         })
         if (!presign.ok) { errors.push(`${file.name}: ${presign.error}`); continue }
 
@@ -123,16 +134,16 @@ export function DocumentsStep({
           manufacturerId,
           originalFilename: file.name,
           documentName,
-          documentType: role,
+          documentType: fileRole,
           storageKey: presign.storageKey,
           contentType: file.type,
           fileSizeBytes: file.size,
           stagedSystemId: systemId,
-          systemSourceRole: role,
+          systemSourceRole: fileRole,
         })
         if (!record.ok) { errors.push(`${file.name}: ${record.error}`); continue }
 
-        added.push({ documentId: record.documentId, role, label: documentName, documentName })
+        added.push({ documentId: record.documentId, role: fileRole, label: documentName, documentName })
       } catch (err) {
         errors.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`)
       }
@@ -162,16 +173,17 @@ export function DocumentsStep({
 
       <div style={{ marginBottom: '0.6rem' }}>
         <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--ds-text-muted)', display: 'block', marginBottom: 4 }}>
-          What kind of document are you about to add?
+          Document type (auto-detect lets you drop all PDFs at once)
         </label>
         <select
           value={role}
-          onChange={(e) => setRole(e.target.value as SystemSourceRole)}
+          onChange={(e) => setRole(e.target.value as 'auto' | SystemSourceRole)}
           style={{
             padding: '7px 10px', borderRadius: 7, border: '1px solid var(--ds-border)',
             background: 'var(--ds-surface, rgba(255,255,255,0.04))', color: 'inherit', fontSize: '0.85rem',
           }}
         >
+          <option value="auto">Auto-detect from filename (recommended)</option>
           {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
@@ -197,7 +209,9 @@ export function DocumentsStep({
           onChange={(e) => { uploadFiles(Array.from(e.target.files ?? [])); e.target.value = '' }}
         />
         <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-          Drop {ROLE_OPTIONS.find((o) => o.value === role)?.label.toLowerCase()} PDFs here, or click to choose
+          {role === 'auto'
+            ? 'Drop all your PDFs here at once, or click to choose'
+            : `Drop ${ROLE_OPTIONS.find((o) => o.value === role)?.label.toLowerCase()} PDFs here, or click to choose`}
         </div>
       </div>
 

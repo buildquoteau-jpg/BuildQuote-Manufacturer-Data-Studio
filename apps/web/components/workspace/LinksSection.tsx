@@ -10,7 +10,7 @@
 // framing, and reuses the existing manufacturer-wide link library so a
 // decking calculator or warranty page doesn't need retyping on every system.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { setCustomDocumentLinks, type CustomDocumentLink } from '@/lib/studio-manufacturer/verification-actions'
 import { addLinkLibraryEntry } from '@/lib/studio-manufacturer/link-library-actions'
 import { LinkLibraryPicker } from '@/components/studio/LinkLibraryPicker'
@@ -35,6 +35,7 @@ export function LinksSection({
   onChanged?: (count: number) => void
 }) {
   const [links, setLinks] = useState<CustomDocumentLink[]>(initialLinks)
+  useEffect(() => { setLinks(initialLinks) }, [initialLinks])
   const [library, setLibrary] = useState(linkLibrary)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)

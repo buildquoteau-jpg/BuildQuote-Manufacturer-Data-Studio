@@ -337,6 +337,15 @@ def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source
     }
 
 
+def _dedupe_key(value: str | None) -> str:
+    """Aggressive normalization for cross-PDF dedupe (strips ™, ®, punctuation, extra spaces)."""
+    if not value:
+        return ""
+    s = re.sub(r"[™®©]", "", str(value)).lower()
+    s = re.sub(r"[^a-z0-9]+", " ", s).strip()
+    return s
+
+
 def insert_plan(supabase_url: str, headers: dict, plan: dict) -> dict:
     staged_system_id = plan["staged_system_id"]
     match = f"id=eq.{staged_system_id}"
@@ -344,15 +353,73 @@ def insert_plan(supabase_url: str, headers: dict, plan: dict) -> dict:
     if plan["system_update"]:
         sb_patch(supabase_url, headers, "staged_systems", match, plan["system_update"])
 
-    if plan["profiles"]:
-        sb_post(supabase_url, headers, "staged_system_profiles", plan["profiles"])
-    if plan["colours"]:
-        sb_post(supabase_url, headers, "staged_system_colours", plan["colours"])
+    # Fetch existing rows on this system so uploading multiple overlapping PDFs
+    # (e.g. install guide + sealing guide + best practice guide) never creates
+    # duplicate profiles, colours, or components.
+    existing_profiles = sb_get(
+        supabase_url, headers, "staged_system_profiles",
+        f"staged_system_id=eq.{staged_system_id}&select=profile_name,product_code",
+    )
+    seen_prof_names = {_dedupe_key(r.get("profile_name")) for r in existing_profiles if r.get("profile_name")}
+    seen_prof_codes = {_dedupe_key(r.get("product_code")) for r in existing_profiles if r.get("product_code")}
+
+    new_profiles = []
+    for p in plan["profiles"]:
+        p_name = _dedupe_key(p.get("profile_name"))
+        p_code = _dedupe_key(p.get("product_code"))
+        if (p_code and p_code in seen_prof_codes) or (p_name and p_name in seen_prof_names):
+            continue
+        if p_code:
+            seen_prof_codes.add(p_code)
+        if p_name:
+            seen_prof_names.add(p_name)
+        new_profiles.append(p)
+    if new_profiles:
+        sb_post(supabase_url, headers, "staged_system_profiles", new_profiles)
+
+    existing_colours = sb_get(
+        supabase_url, headers, "staged_system_colours",
+        f"staged_system_id=eq.{staged_system_id}&select=colour_name",
+    )
+    seen_colours = {_dedupe_key(r.get("colour_name")) for r in existing_colours if r.get("colour_name")}
+    new_colours = []
+    for c in plan["colours"]:
+        c_key = _dedupe_key(c.get("colour_name"))
+        if c_key and c_key in seen_colours:
+            continue
+        if c_key:
+            seen_colours.add(c_key)
+        new_colours.append(c)
+    if new_colours:
+        sb_post(supabase_url, headers, "staged_system_colours", new_colours)
+
+    existing_comp_links = sb_get(
+        supabase_url, headers, "staged_system_components",
+        f"staged_system_id=eq.{staged_system_id}&select=staged_components(name,sku)",
+    )
+    seen_comp_names: set[str] = set()
+    seen_comp_skus: set[str] = set()
+    for link in existing_comp_links:
+        sc = link.get("staged_components")
+        if isinstance(sc, dict):
+            if sc.get("name"):
+                seen_comp_names.add(_dedupe_key(sc["name"]))
+            if sc.get("sku"):
+                seen_comp_skus.add(_dedupe_key(sc["sku"]))
 
     components_inserted = 0
     for comp in plan["components"]:
-        role = comp.pop("_role")
-        rows = sb_post(supabase_url, headers, "staged_components", [comp])
+        comp_copy = dict(comp)
+        role = comp_copy.pop("_role")
+        c_name = _dedupe_key(comp_copy.get("name"))
+        c_sku = _dedupe_key(comp_copy.get("sku"))
+        if (c_sku and c_sku in seen_comp_skus) or (c_name and c_name in seen_comp_names):
+            continue
+        if c_sku:
+            seen_comp_skus.add(c_sku)
+        if c_name:
+            seen_comp_names.add(c_name)
+        rows = sb_post(supabase_url, headers, "staged_components", [comp_copy])
         if not rows:
             continue
         component_id = rows[0]["id"]
@@ -361,15 +428,17 @@ def insert_plan(supabase_url: str, headers: dict, plan: dict) -> dict:
             "staged_system_id": staged_system_id,
             "staged_component_id": component_id,
             "role": role,
-            "sort_order": comp["sort_order"],
-            "extraction_confidence": comp["extraction_confidence"],
+            "sort_order": comp_copy["sort_order"],
+            "extraction_confidence": comp_copy["extraction_confidence"],
         }])
 
     return {
         "systemUpdated": bool(plan["system_update"]),
-        "profilesInserted": len(plan["profiles"]),
-        "coloursInserted": len(plan["colours"]),
+        "profilesInserted": len(new_profiles),
+        "profilesSkippedDupes": len(plan["profiles"]) - len(new_profiles),
+        "coloursInserted": len(new_colours),
         "componentsInserted": components_inserted,
+        "componentsSkippedDupes": len(plan["components"]) - components_inserted,
     }
 
 

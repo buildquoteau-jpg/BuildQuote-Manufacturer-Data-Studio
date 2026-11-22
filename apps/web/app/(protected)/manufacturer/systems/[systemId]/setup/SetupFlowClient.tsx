@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { upsertFieldVerification } from '@/lib/studio-manufacturer/verification-actions'
 import { PhotosStep, type GalleryPhoto } from './PhotosStep'
 import { LinksSection } from '@/components/workspace/LinksSection'
@@ -93,6 +94,7 @@ export function SetupFlowClient({
   systemId,
   systemName,
   manufacturerId,
+  initialWebsiteUrl = '',
   initialGallery,
   initialColours,
   pickerAssets,
@@ -103,6 +105,7 @@ export function SetupFlowClient({
   systemId: string
   systemName: string
   manufacturerId: string
+  initialWebsiteUrl?: string
   initialGallery: GalleryPhoto[]
   initialColours: VerificationSystemColour[]
   pickerAssets: SlotAsset[]
@@ -110,7 +113,12 @@ export function SetupFlowClient({
   linkLibrary: LinkLibraryEntry[]
   initialDocuments: LinkedDocument[]
 }) {
+  const router = useRouter()
   const [name, setName] = useState(systemName)
+  const [quickUrl, setQuickUrl] = useState(initialWebsiteUrl)
+  const [quickBusy, setQuickBusy] = useState(false)
+  const [quickMsg, setQuickMsg] = useState<string | null>(null)
+  const [quickErr, setQuickErr] = useState<string | null>(null)
   const [photosCount, setPhotosCount] = useState(initialGallery.length)
   const [coloursCount, setColoursCount] = useState(initialColours.length)
   const [linksCount, setLinksCount] = useState(initialCustomDocumentLinks.length)
@@ -223,6 +231,47 @@ export function SetupFlowClient({
     }, 4000)
   }
 
+  async function importFromProductUrl() {
+    const trimmed = quickUrl.trim()
+    if (!trimmed) return
+    setQuickBusy(true)
+    setQuickErr(null)
+    setQuickMsg(null)
+    try {
+      const res = await fetch(`/api/manufacturer/systems/${systemId}/import-from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manufacturerId, url: trimmed, autoExtract: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setQuickErr(data.error ?? 'Could not import from that product page.')
+        return
+      }
+      const parts: string[] = []
+      if (data.photosAdded > 0) parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
+      if (data.linksAdded > 0) parts.push(`${data.linksAdded} product link`)
+      if (data.pdfsQueued > 0) parts.push(`${data.pdfsQueued} PDF guide${data.pdfsQueued === 1 ? '' : 's'} queued for AI extraction`)
+      setQuickMsg(
+        parts.length > 0
+          ? `Imported ${parts.join(', ')}. Refreshing steps below…`
+          : 'Product page checked — everything found is already added.',
+      )
+      if (data.photosAdded > 0) setPhotosCount(data.totalPhotos ?? photosCount + data.photosAdded)
+      if (data.linksAdded > 0) setLinksCount((c) => c + data.linksAdded)
+      if (data.pdfsQueued > 0) setDocumentsCount((c) => c + data.pdfsQueued)
+      if (Array.isArray(data.jobIds) && data.jobIds.length > 0) {
+        setExtraction('running')
+        pollStatus(data.jobIds)
+      }
+      router.refresh()
+    } catch (err) {
+      setQuickErr(err instanceof Error ? err.message : String(err))
+    } finally {
+      setQuickBusy(false)
+    }
+  }
+
   async function startExtraction() {
     setExtraction('starting')
     setExtractionError(null)
@@ -282,6 +331,49 @@ export function SetupFlowClient({
             color: 'inherit', fontSize: '1rem', fontWeight: 700, outline: 'none',
           }}
         />
+      </div>
+
+      <div style={{
+        border: '1.5px solid #185D7A', borderRadius: 10,
+        padding: '1rem 1.1rem', marginBottom: '1.1rem',
+        background: 'rgba(24,93,122,0.06)',
+      }}>
+        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#185D7A', marginBottom: '0.25rem' }}>
+          ⚡ Quick Start — Auto-fill from your product page
+        </div>
+        <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', margin: '0 0 0.65rem', lineHeight: 1.5 }}>
+          Paste your official product page URL and we&apos;ll pull product photos, add your link, and
+          queue any PDF installation/spec guides on the page automatically.
+        </p>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <input
+            type="url"
+            value={quickUrl}
+            onChange={(e) => setQuickUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); importFromProductUrl() } }}
+            placeholder="https://www.yourbrand.com.au/products/your-decking-system"
+            disabled={quickBusy}
+            style={{
+              flex: 1, padding: '8px 11px', borderRadius: 8, border: '1px solid var(--ds-border)',
+              background: 'var(--ds-surface, rgba(255,255,255,0.04))', color: 'inherit', fontSize: '0.84rem',
+            }}
+          />
+          <button
+            type="button"
+            onClick={importFromProductUrl}
+            disabled={quickBusy || !quickUrl.trim()}
+            style={{
+              fontSize: '0.84rem', fontWeight: 700, color: '#fff',
+              background: quickBusy || !quickUrl.trim() ? '#94a3b8' : '#185D7A',
+              border: 'none', borderRadius: 8, padding: '8px 16px',
+              cursor: quickBusy || !quickUrl.trim() ? 'default' : 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            {quickBusy ? 'Importing…' : 'Auto-Fill'}
+          </button>
+        </div>
+        {quickMsg && <div style={{ fontSize: '0.78rem', color: '#16a34a', marginTop: '0.5rem', fontWeight: 600 }}>{quickMsg}</div>}
+        {quickErr && <div style={{ fontSize: '0.78rem', color: '#dc2626', marginTop: '0.5rem' }}>{quickErr}</div>}
       </div>
 
       <StepShell n={1} title="Upload photos" done={photosCount > 0} doneLabel={`${photosCount} photo${photosCount === 1 ? '' : 's'}`}>

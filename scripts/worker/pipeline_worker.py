@@ -1006,10 +1006,14 @@ def handle_fetch_url(job: dict):
             "document_id": document_id,
             "manufacturer_id": manufacturer_id,
             "storage_key": storage_key,
-            "document_name": document_id,
+            "document_name": payload.get("document_name") or document_id,
             "chunk_size": chunk_size,
             "system_source_id": system_source_id,
             "staged_system_id": payload.get("staged_system_id"),
+            "auto_chain": payload.get("auto_chain", False),
+            "manufacturer_name": payload.get("manufacturer_name", ""),
+            "system_name": payload.get("system_name", ""),
+            "dry_run": payload.get("dry_run", False),
         },
     })
 

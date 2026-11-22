@@ -83,6 +83,7 @@ export default async function SystemSetupPage({
           systemId={system.id}
           systemName={system.name}
           manufacturerId={ctx.manufacturerId}
+          initialWebsiteUrl={system.website_url ?? ''}
           initialGallery={system.gallery_images ?? []}
           initialColours={system.colours}
           pickerAssets={pickerAssets}

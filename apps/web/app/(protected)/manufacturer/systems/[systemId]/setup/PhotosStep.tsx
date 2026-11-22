@@ -8,7 +8,7 @@
 // image has (CmsEditor.tsx's CropAdjuster) — full drag-and-drop reordering
 // stays a later follow-up.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   requestAssetUploadUrl,
   processAndRecordAssetUpload,
@@ -44,6 +44,7 @@ export function PhotosStep({
   onChanged?: (count: number) => void
 }) {
   const [gallery, setGallery] = useState<GalleryPhoto[]>(initialGallery)
+  useEffect(() => { setGallery(initialGallery) }, [initialGallery])
   const [busyMsg, setBusyMsg] = useState('')
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
