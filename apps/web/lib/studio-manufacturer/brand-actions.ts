@@ -31,6 +31,8 @@ export type BrandProfileFields = {
   hero_wide_image_position_y: number
   logo_url: string | null
   phone: string | null
+  contact_email?: string | null
+  contact_name?: string | null
   abn: string | null
   // Asset-library links (migration 046). Saved alongside the *_url columns —
   // the URLs keep working for everything that reads them today, while the
@@ -83,6 +85,8 @@ export async function saveBrandProfile(
     hero_wide_image_position_y: clampPositionY(fields.hero_wide_image_position_y),
     logo_url:       fields.logo_url?.trim()       || null,
     phone:          fields.phone?.trim()           || null,
+    contact_email:  fields.contact_email?.trim()   || null,
+    contact_name:   fields.contact_name?.trim()    || null,
     abn:            fields.abn?.trim()             || null,
     logo_asset_id:            fields.logo_asset_id ?? null,
     hero_image_asset_id:      fields.hero_image_asset_id ?? null,
@@ -97,14 +101,27 @@ export async function saveBrandProfile(
 
   if (!error) return { ok: true, productionSynced: await syncToProduction(manufacturerId) }
 
-  // Migration 046 may not be applied yet — retry without the asset-id columns.
-  if (error.code === '42703' || /_asset_id/.test(error.message ?? '')) {
+  // Migration 070 (contact_email/contact_name) or 046 (*_asset_id) may not be applied yet.
+  if (error.code === '42703' || /contact_(email|name)|_asset_id/.test(error.message ?? '')) {
+    const {
+      contact_email: _c1,
+      contact_name: _c2,
+      ...payloadNoContact
+    } = payload
+    if (/contact_(email|name)/.test(error.message ?? '')) {
+      const { error: retry070Err } = await supabase
+        .from('data_studio_manufacturers')
+        .update(payloadNoContact)
+        .eq('id', manufacturerId)
+      if (!retry070Err) return { ok: true, productionSynced: await syncToProduction(manufacturerId) }
+    }
+
     const {
       logo_asset_id: _a1,
       hero_image_asset_id: _a2,
       hero_wide_image_asset_id: _a3,
       ...payloadNoAssets
-    } = payload
+    } = payloadNoContact
     const { error: retry046Err } = await supabase
       .from('data_studio_manufacturers')
       .update(payloadNoAssets)

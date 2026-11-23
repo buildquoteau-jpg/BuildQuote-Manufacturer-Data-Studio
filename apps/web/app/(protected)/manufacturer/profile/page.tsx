@@ -15,17 +15,23 @@ type ManufacturerProfile = {
   hero_image_url: string | null; hero_image_position_y: number | null
   hero_wide_image_url: string | null; hero_wide_image_position_y: number | null
   logo_url: string | null
-  phone: string | null; abn: string | null
+  phone: string | null; contact_email: string | null; contact_name: string | null; abn: string | null
   logo_asset_id: string | null
   hero_image_asset_id: string | null
   hero_wide_image_asset_id: string | null
 }
 
+const CONTACT_COLUMNS = ', contact_email, contact_name'
 const ASSET_ID_COLUMNS = ', logo_asset_id, hero_image_asset_id, hero_wide_image_asset_id'
 const FULL_COLUMNS =
   'id, name, slug, status, description, website_url, hero_image_url, hero_image_position_y, hero_wide_image_url, hero_wide_image_position_y, logo_url, phone, abn'
 const BASE_COLUMNS =
   'id, name, slug, status, description, website_url, hero_image_url, logo_url, phone, abn'
+
+const NULL_CONTACT = {
+  contact_email: null,
+  contact_name: null,
+}
 
 const NULL_ASSET_IDS = {
   logo_asset_id: null,
@@ -38,21 +44,33 @@ async function getFullManufacturerProfile(manufacturerId: string): Promise<Manuf
     const supabase = createStudioServerClient()
     const { data, error } = await supabase
       .from('data_studio_manufacturers')
-      .select(FULL_COLUMNS + ASSET_ID_COLUMNS)
+      .select(FULL_COLUMNS + ASSET_ID_COLUMNS + CONTACT_COLUMNS)
       .eq('id', manufacturerId)
       .single()
 
     if (!error) return data as unknown as ManufacturerProfile
 
+    // Migration 070 (contact_email/contact_name) may not be applied yet — retry without them.
+    if (error.code === '42703' && /contact_(email|name)/.test(error.message ?? '')) {
+      const { data: no070, error: no070Err } = await supabase
+        .from('data_studio_manufacturers')
+        .select(FULL_COLUMNS + ASSET_ID_COLUMNS)
+        .eq('id', manufacturerId)
+        .single()
+      if (!no070Err && no070) {
+        return { ...(no070 as unknown as Omit<ManufacturerProfile, keyof typeof NULL_CONTACT>), ...NULL_CONTACT }
+      }
+    }
+
     // Migration 046 may not be applied yet — retry without the asset-id columns.
-    if (error.code === '42703' || /_asset_id/.test(error.message ?? '')) {
+    if (error.code === '42703' || /_asset_id|contact_(email|name)/.test(error.message ?? '')) {
       const { data: no046, error: no046Err } = await supabase
         .from('data_studio_manufacturers')
         .select(FULL_COLUMNS)
         .eq('id', manufacturerId)
         .single()
       if (!no046Err && no046) {
-        return { ...(no046 as unknown as Omit<ManufacturerProfile, keyof typeof NULL_ASSET_IDS>), ...NULL_ASSET_IDS }
+        return { ...(no046 as unknown as Omit<ManufacturerProfile, keyof typeof NULL_ASSET_IDS | keyof typeof NULL_CONTACT>), ...NULL_CONTACT, ...NULL_ASSET_IDS }
       }
       // Migrations 031/034 may not be applied yet either — fall back to a query
       // without the hero-position / wide-image columns and default them to null.
@@ -65,11 +83,12 @@ async function getFullManufacturerProfile(manufacturerId: string): Promise<Manuf
       return {
         ...(fallback as unknown as Omit<
           ManufacturerProfile,
-          'hero_image_position_y' | 'hero_wide_image_url' | 'hero_wide_image_position_y' | keyof typeof NULL_ASSET_IDS
+          'hero_image_position_y' | 'hero_wide_image_url' | 'hero_wide_image_position_y' | keyof typeof NULL_ASSET_IDS | keyof typeof NULL_CONTACT
         >),
         hero_image_position_y: null,
         hero_wide_image_url: null,
         hero_wide_image_position_y: null,
+        ...NULL_CONTACT,
         ...NULL_ASSET_IDS,
       }
     }
@@ -143,6 +162,8 @@ export default async function ManufacturerProfilePage() {
           hero_wide_image_position_y: profile.hero_wide_image_position_y ?? 50,
           logo_url:       profile.logo_url,
           phone:          profile.phone,
+          contact_email:  profile.contact_email,
+          contact_name:   profile.contact_name,
           abn:            profile.abn,
           logo_asset_id:            profile.logo_asset_id,
           hero_image_asset_id:      profile.hero_image_asset_id,

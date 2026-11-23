@@ -220,6 +220,8 @@ export function BrandProfileForm({
     hero_wide_image_position_y: initialValues.hero_wide_image_position_y ?? 50,
     logo_url:       initialValues.logo_url       ?? '',
     phone:          initialValues.phone          ?? '',
+    contact_email:  initialValues.contact_email  ?? '',
+    contact_name:   initialValues.contact_name   ?? '',
     abn:            initialValues.abn            ?? '',
     logo_asset_id:            initialValues.logo_asset_id ?? null,
     hero_image_asset_id:      initialValues.hero_image_asset_id ?? null,
@@ -307,6 +309,8 @@ export function BrandProfileForm({
         hero_wide_image_position_y: fields.hero_wide_image_position_y,
         logo_url:       fields.logo_url       || null,
         phone:          fields.phone          || null,
+        contact_email:  fields.contact_email  || null,
+        contact_name:   fields.contact_name   || null,
         abn:            fields.abn            || null,
         logo_asset_id:            fields.logo_asset_id ?? null,
         hero_image_asset_id:      fields.hero_image_asset_id ?? null,
@@ -513,14 +517,39 @@ export function BrandProfileForm({
           />
         </Field>
 
-        <Field label="Phone" hint="National enquiry line or head office number.">
+        <Field
+          label="Contact person or support desk"
+          hint="Shown publicly to trades and homeowners on your brand page & System Cards (e.g. 'WA Trade & Technical Desk' or 'Mathew Seear — WA Sales')."
+        >
+          <input
+            type="text"
+            value={fields.contact_name ?? ''}
+            onChange={set('contact_name')}
+            onFocus={onFocus} onBlur={onBlur}
+            placeholder="WA Technical & Trade Support Desk"
+            style={inputStyle}
+          />
+        </Field>
+
+        <Field label="Phone" hint="Direct national or WA enquiry line — builders and homeowners can call straight from your System Cards.">
           <input
             type="tel"
             value={fields.phone ?? ''}
             onChange={set('phone')}
             onFocus={onFocus} onBlur={onBlur}
             placeholder="1800 000 000"
-            style={{ ...inputStyle, maxWidth: '220px' }}
+            style={{ ...inputStyle, maxWidth: '240px' }}
+          />
+        </Field>
+
+        <Field label="Public enquiry / technical email" hint="Shown directly on your brand page & System Cards so builders and homeowners can email your team without leaving the site.">
+          <input
+            type="email"
+            value={fields.contact_email ?? ''}
+            onChange={set('contact_email')}
+            onFocus={onFocus} onBlur={onBlur}
+            placeholder="support@yourbrand.com.au"
+            style={{ ...inputStyle, maxWidth: '340px' }}
           />
         </Field>
 
