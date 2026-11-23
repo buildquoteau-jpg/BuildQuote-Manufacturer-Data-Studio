@@ -183,6 +183,14 @@ export async function POST(req: NextRequest) {
     } else {
       systemSourceId = (srcRow as { id: string }).id
     }
+
+    // Keep legacy staged_systems.source_document_id populated on first attached doc
+    // so publishing + Supplier "My Products" traceability always sees it.
+    await supabase
+      .from('staged_systems')
+      .update({ source_document_id: documentId, updated_at: new Date().toISOString() })
+      .eq('id', stagedSystemId)
+      .is('source_document_id', null)
   }
 
   // 3) Enqueue the fetch job. Chain into docling for chunkable (PDF) roles, or

@@ -80,8 +80,37 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     return { ok: false, error: 'Give the card a real name before publishing.' }
   }
 
+  // ── Resolve primary source_document_id (legacy column OR modern system_sources) ──
+  // Multi-source cards added via URL-fetch store their linked documents in
+  // `system_sources.source_document_id`. If the legacy `staged_systems.source_document_id`
+  // column is still null, auto-promote the best linked source document so traceability
+  // and the production `systems` / Supplier "My Products" sync work seamlessly.
+  let resolvedSourceDocId: string | null = snap.stagedSystem.source_document_id ?? null
+  if (!resolvedSourceDocId) {
+    const { data: linkedSources } = await supabase
+      .from('system_sources')
+      .select('source_document_id, ingest_status, role')
+      .eq('staged_system_id', stagedSystemId)
+      .not('source_document_id', 'is', null)
+      .limit(20)
+
+    const rows = (linkedSources ?? []) as { source_document_id: string | null; ingest_status: string | null; role: string | null }[]
+    const best =
+      rows.find((r) => r.ingest_status === 'extracted' && r.role === 'source_catalogue') ??
+      rows.find((r) => r.ingest_status === 'extracted') ??
+      rows.find((r) => r.source_document_id)
+    if (best?.source_document_id) {
+      resolvedSourceDocId = best.source_document_id
+      await supabase
+        .from('staged_systems')
+        .update({ source_document_id: resolvedSourceDocId, updated_at: new Date().toISOString() })
+        .eq('id', stagedSystemId)
+        .is('source_document_id', null)
+    }
+  }
+
   // ── Source Traceability Rule: warn but allow ──
-  if (!snap.stagedSystem.source_document_id) {
+  if (!resolvedSourceDocId) {
     warnings.push('No source document is linked — the published card has no traceability record.')
   }
 
@@ -228,7 +257,7 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     meta: {
       version: nextVersion,
       published_by: auth.label,
-      missing_source_document: !snap.stagedSystem.source_document_id,
+      missing_source_document: !resolvedSourceDocId,
       warnings,
     },
   }).then(({ error }) => {
@@ -247,7 +276,7 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
   // linked source document (Source Traceability Rule) — when missing, skip
   // it with a warning rather than failing the live publish, matching the
   // warn-but-allow treatment already given to that same condition above.
-  if (snap.stagedSystem.source_document_id) {
+  if (resolvedSourceDocId) {
     try {
       const sysResult = await publishSystem(stagedSystemId, false)
       if (!sysResult.ok) {

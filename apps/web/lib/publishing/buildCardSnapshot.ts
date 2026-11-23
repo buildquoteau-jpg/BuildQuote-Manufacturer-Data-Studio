@@ -101,7 +101,12 @@ async function deriveJpegCover(source: {
       if (!got.ok) throw new Error(got.error)
       bytes = got.bytes
     } else {
-      const res = await fetch(source.url)
+      const res = await fetch(source.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; BuildQuoteBot/1.0; +https://buildquote.com.au)',
+          Accept: 'image/*,*/*;q=0.8',
+        },
+      })
       if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
       bytes = new Uint8Array(await res.arrayBuffer())
     }

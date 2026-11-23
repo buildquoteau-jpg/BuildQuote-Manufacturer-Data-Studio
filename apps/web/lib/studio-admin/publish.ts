@@ -361,18 +361,44 @@ export async function publishSystem(
     return blankResult(systemId, `Could not load system: ${sysErr?.message ?? 'not found'}`)
   }
 
+  // Auto-resolve primary source document from modern system_sources when legacy column is null
+  let effectiveSourceDocId: string | null = sys.source_document_id ?? null
+  if (!effectiveSourceDocId) {
+    const { data: linkedSources } = await ds
+      .from('system_sources')
+      .select('source_document_id, ingest_status, role')
+      .eq('staged_system_id', systemId)
+      .not('source_document_id', 'is', null)
+      .limit(20)
+    const rows = (linkedSources ?? []) as { source_document_id: string | null; ingest_status: string | null; role: string | null }[]
+    const best =
+      rows.find((r) => r.ingest_status === 'extracted' && r.role === 'source_catalogue') ??
+      rows.find((r) => r.ingest_status === 'extracted') ??
+      rows.find((r) => r.source_document_id)
+    if (best?.source_document_id) {
+      effectiveSourceDocId = best.source_document_id
+      if (!dryRun) {
+        await ds
+          .from('staged_systems')
+          .update({ source_document_id: effectiveSourceDocId, updated_at: new Date().toISOString() })
+          .eq('id', systemId)
+          .is('source_document_id', null)
+      }
+    }
+  }
+
   const richExtra = {
     category: sys.category,
     description: sys.description,
     heroImageUrl: sys.hero_image_url,
-    hasSourceDoc: !!sys.source_document_id,
+    hasSourceDoc: !!effectiveSourceDocId,
   }
 
   try {
     const { productionManufacturerId, action: manufacturerAction } =
       await publishManufacturer(ds, prod, sys.manufacturer_id, dryRun)
 
-    if (!sys.source_document_id) {
+    if (!effectiveSourceDocId) {
       throw new Error(
         'This system has no source document linked — the Source Traceability Rule requires every ' +
         'published system to reference a catalogue source. Re-run the parser with a source document, ' +
@@ -380,7 +406,7 @@ export async function publishSystem(
       )
     }
     const { productionSourceId, action: catalogueSourceAction } =
-      await publishCatalogueSource(ds, prod, sys.source_document_id, productionManufacturerId, dryRun)
+      await publishCatalogueSource(ds, prod, effectiveSourceDocId, productionManufacturerId, dryRun)
 
     const slug = sys.slug || (dryRun ? '(generated on publish)' : await uniqueSystemSlug(prod, sys.name, productionManufacturerId))
 
