@@ -330,16 +330,49 @@ def upload_document(storage_key: str, src_path: Path, content_type: str = "appli
 
 def fetch_url_to_path(source_url: str, dest_path: Path) -> str:
     """Download a URL to a local file. Returns the response Content-Type (lowercased)."""
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; BuildQuoteDataStudio/1.0; +https://studio.buildquote.com.au)"}
+    from urllib.parse import urlparse
+
+    parsed = urlparse(source_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}/" if parsed.scheme and parsed.netloc else None
+    browser_ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    )
+    headers = {
+        "User-Agent": browser_ua,
+        "Accept": "application/pdf,application/octet-stream,*/*;q=0.8",
+        "Accept-Language": "en-AU,en;q=0.9",
+        "Cache-Control": "no-cache",
+    }
+    if origin:
+        headers["Referer"] = origin
+
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(source_url, headers=headers, allow_redirects=True, timeout=90, stream=True) as r:
-        r.raise_for_status()
-        ctype = (r.headers.get("Content-Type", "") or "").split(";")[0].strip().lower()
-        with open(dest_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-    return ctype
+    try:
+        with requests.get(source_url, headers=headers, allow_redirects=True, timeout=90, stream=True) as r:
+            r.raise_for_status()
+            ctype = (r.headers.get("Content-Type", "") or "").split(";")[0].strip().lower()
+            with open(dest_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+        return ctype
+    except Exception as first_err:
+        # Fallback to curl (different TLS fingerprint / HTTP/2 — avoids WAF drops on sites like itiaustralia/accoya)
+        curl_cmd = [
+            "curl", "-fsSL", "--max-time", "90",
+            "-A", browser_ua,
+            "-H", "Accept: application/pdf,*/*;q=0.8",
+            "-H", "Accept-Language: en-AU,en;q=0.9",
+        ]
+        if origin:
+            curl_cmd += ["-e", origin]
+        curl_cmd += ["-o", str(dest_path), source_url]
+        proc = subprocess.run(curl_cmd, capture_output=True, text=True)
+        if proc.returncode == 0 and dest_path.exists() and dest_path.stat().st_size > 0:
+            return "application/pdf" if looks_like_pdf(dest_path, "") else "application/octet-stream"
+        raise first_err
 
 
 def looks_like_pdf(path: Path, ctype: str) -> bool:
