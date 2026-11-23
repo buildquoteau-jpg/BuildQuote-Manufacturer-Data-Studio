@@ -131,6 +131,32 @@ a:hover {
   text-decoration: underline;
 }
 
+.studio-header-utils {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.studio-header-util-link,
+.studio-header-util-btn {
+  color: rgba(255, 255, 255, 0.84) !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.studio-header-util-link:hover,
+.studio-header-util-btn:hover {
+  color: #fff !important;
+  text-decoration: underline;
+}
+
 .studio-nav {
   background: var(--ds-card-bg);
   border-bottom: 1px solid var(--ds-border);
@@ -152,8 +178,8 @@ a:hover {
     background: linear-gradient(to right, transparent, var(--ds-card-bg));
   }
   .studio-nav a {
-    padding: 0.65rem 0.7rem;
-    font-size: 0.83rem;
+    padding: 0.65rem 0.65rem;
+    font-size: 0.82rem;
   }
 }
 
@@ -163,29 +189,72 @@ a:hover {
   margin: 0 auto;
   padding: 0 var(--studio-px);
   display: flex;
+  align-items: center;
   gap: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
+.studio-nav-inner.studio-nav-flow {
+  gap: 0.15rem;
+}
+
 .studio-nav-inner::-webkit-scrollbar {
   display: none;
 }
 
+.studio-nav-sep {
+  color: #cbd5e1;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+
 .studio-nav a {
-  padding: 0.65rem 1rem;
+  padding: 0.72rem 0.85rem;
   font-size: 0.875rem;
+  font-weight: 500;
   color: var(--ds-text-sub);
   white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  display: block;
+  border-bottom: 2.5px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .studio-nav a:hover {
   color: var(--ds-navy);
   text-decoration: none;
   border-bottom-color: var(--ds-border);
+}
+
+.studio-nav a.is-active {
+  color: var(--ds-navy);
+  font-weight: 700;
+  border-bottom-color: var(--ds-navy);
+}
+
+.studio-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e9eff3;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.studio-step-num.is-active {
+  background: var(--ds-navy);
+  color: #fff;
 }
 
 .studio-main {

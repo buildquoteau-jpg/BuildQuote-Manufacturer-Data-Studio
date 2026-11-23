@@ -53,7 +53,24 @@ export default async function ManufacturerLayout({ children }: { children: React
           <span>
             Admin view — viewing as <strong>{mfrName}</strong>
           </span>
-          <ExitGateButton />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <a
+              href="/manufacturer/pipeline"
+              style={{
+                color: 'rgba(255,255,255,0.9)',
+                textDecoration: 'none',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                padding: '0.25rem 0.65rem',
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+              }}
+            >
+              Pipeline
+            </a>
+            <ExitGateButton />
+          </div>
         </div>
       )
     }

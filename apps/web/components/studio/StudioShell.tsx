@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react'
 import { logout } from '@/lib/studio-auth/actions'
-import { getStudioSession } from '@/lib/studio-auth/session'
+import { StudioNavBar, type NavItem } from './StudioNavBar'
 
 export type StudioRole = 'admin' | 'reviewer' | 'manufacturer' | 'dashboard'
-
-type NavItem = { label: string; href: string }
 
 const ADMIN_NAV: NavItem[] = [
   { label: 'Home', href: '/dashboard' },
@@ -19,19 +17,14 @@ const REVIEWER_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard' },
 ]
 
-// Design doc addendum 3, §C1: everything is noise until the system-by-system
-// workflow is proven. Not deleted — Documents/Asset upload/AI Questions/
-// Stockists/Packages/Embeds & Links/Analytics/Inbox/Help routes and code all
-// still exist, just unlinked from the nav, same "de-link, don't delete"
-// pattern as the earlier Dashboard retirement.
+// Clean 5-step manufacturer workflow — every secondary link (Account, Help, Sign out)
+// lives quietly in the top header; admin-only Pipeline lives in the Admin view bar.
 const MFR_NAV: NavItem[] = [
-  { label: 'Start Here',      href: '/manufacturer/start-here' },
-  { label: 'Brand profile',   href: '/manufacturer/profile' },
-  { label: 'User profile',    href: '/manufacturer/account' },
-  { label: 'Systems',         href: '/manufacturer/systems' },
-  { label: 'Verify systems',  href: '/manufacturer/review' },
-  { label: 'Agent Ready',     href: '/manufacturer/agent-ready' },
-  { label: 'Publish',         href: '/manufacturer/publish' },
+  { step: 1, label: 'Brand',        href: '/manufacturer/profile',     matchPrefixes: ['/manufacturer/profile'] },
+  { step: 2, label: 'Add products', href: '/manufacturer/start-here',  matchPrefixes: ['/manufacturer/start-here'] },
+  { step: 3, label: 'Verify',       href: '/manufacturer/review',      matchPrefixes: ['/manufacturer/review', '/manufacturer/workspace', '/manufacturer/systems'] },
+  { step: 4, label: 'Agent Ready',  href: '/manufacturer/agent-ready', matchPrefixes: ['/manufacturer/agent-ready'] },
+  { step: 5, label: 'Publish',      href: '/manufacturer/publish',     matchPrefixes: ['/manufacturer/publish'] },
 ]
 
 const DASHBOARD_NAV: NavItem[] = [
@@ -49,7 +42,7 @@ const BADGE_BY_ROLE: Record<StudioRole, { className: string; label: string }> = 
   admin:        { className: 'studio-badge studio-badge-admin', label: 'Admin' },
   reviewer:     { className: 'studio-badge studio-badge-draft', label: 'Reviewer' },
   manufacturer: { className: 'studio-badge studio-badge-mfr',   label: 'Manufacturer' },
-  dashboard:    { className: 'studio-badge studio-badge-draft',  label: 'Dashboard' },
+  dashboard:    { className: 'studio-badge studio-badge-draft', label: 'Dashboard' },
 }
 
 type Props = {
@@ -63,21 +56,14 @@ type Props = {
    * Pass null to suppress any notice (default: no notice).
    */
   notice?: string | null
-  /** When true, renders the Pipeline nav item (admin-only). */
+  /** Kept for backwards compatibility with existing callers; Pipeline now lives in the Admin bar. */
   showPipelineNav?: boolean
   children: ReactNode
 }
 
-export async function StudioShell({ role, subtitle, workspaceName, notice, showPipelineNav, children }: Props) {
-  const session = await getStudioSession()
-  const isAdmin = session.globalRole === 'buildquote_admin'
-  const baseNav = NAV_BY_ROLE[role]
-  const showPipeline = showPipelineNav ?? isAdmin
-  const nav = (role === 'manufacturer' && showPipeline)
-    ? [...baseNav.filter(n => n.href !== '/manufacturer/help'), { label: 'Pipeline', href: '/manufacturer/pipeline' }, { label: 'Help', href: '/manufacturer/help' }]
-    : baseNav
+export async function StudioShell({ role, subtitle, workspaceName, notice, children }: Props) {
+  const nav = NAV_BY_ROLE[role]
   const badge = BADGE_BY_ROLE[role]
-  // Default: no notice. Pages opt in by passing a string.
   const noticeText = notice ?? null
 
   return (
@@ -89,7 +75,7 @@ export async function StudioShell({ role, subtitle, workspaceName, notice, showP
           {workspaceName && (
             <span
               style={{
-                marginLeft: '0.75rem',
+                marginLeft: '0.5rem',
                 fontSize: '0.88rem',
                 fontWeight: 600,
                 color: 'var(--ds-header-text, #fff)',
@@ -97,47 +83,42 @@ export async function StudioShell({ role, subtitle, workspaceName, notice, showP
               }}
             >
               {workspaceName}
-              {subtitle && (
-                <span style={{ fontWeight: 400, opacity: 0.65, marginLeft: '0.4rem' }}>
-                  — {subtitle}
-                </span>
-              )}
             </span>
           )}
           {!workspaceName && subtitle && (
-            <span style={{ marginLeft: 'auto', fontSize: '0.85rem', opacity: 0.75 }}>
+            <span
+              style={{
+                marginLeft: '0.5rem',
+                fontSize: '0.82rem',
+                opacity: 0.72,
+              }}
+            >
               {subtitle}
             </span>
           )}
+
+          {/* Utility links neatly tucked in the top-right header bar */}
+          <div className="studio-header-utils">
+            {role === 'manufacturer' && (
+              <>
+                <a href="/manufacturer/account" className="studio-header-util-link">
+                  Account
+                </a>
+                <a href="/manufacturer/help" className="studio-header-util-link">
+                  Help
+                </a>
+              </>
+            )}
+            <form action={logout} style={{ margin: 0, display: 'inline-flex', alignItems: 'center' }}>
+              <button type="submit" className="studio-header-util-btn">
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
-      <nav className="studio-nav">
-        <div className="studio-nav-inner">
-          {nav.map((item) => (
-            <a key={item.href} href={item.href}>
-              {item.label}
-            </a>
-          ))}
-          {/* Sign-out is a server action — form POST, no client JS needed */}
-          <form action={logout} style={{ marginLeft: 'auto' }}>
-            <button
-              type="submit"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 'inherit',
-                color: 'var(--ds-text-muted)',
-                padding: '0',
-                lineHeight: 'inherit',
-              }}
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </nav>
+      <StudioNavBar items={nav} isFlow={role === 'manufacturer'} />
 
       <main className="studio-main">
         {noticeText !== null && (
