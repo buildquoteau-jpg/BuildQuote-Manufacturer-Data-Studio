@@ -55,7 +55,7 @@ export default function EnterInviteCodePage() {
           <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.8 }}>
             BuildQuote Data Studio
           </div>
-          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, margin: '0.35rem 0 0' }}>
+          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, margin: '0.35rem 0 0', color: '#ffffff' }}>
             Enter Workspace Invitation Code
           </h1>
         </div>
@@ -120,11 +120,22 @@ export default function EnterInviteCodePage() {
             Continue to workspace →
           </button>
 
-          <div style={{ marginTop: '1.1rem', textAlign: 'center', fontSize: '0.8rem', color: '#64748b' }}>
-            Already have a workspace account?{' '}
-            <a href="/login" style={{ color: '#185D7A', fontWeight: 700, textDecoration: 'none' }}>
-              Sign in
-            </a>
+          <div style={{ marginTop: '1.1rem', textAlign: 'center', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.6 }}>
+            <div>
+              Already have a workspace account?{' '}
+              <a href="/login" style={{ color: '#185D7A', fontWeight: 700, textDecoration: 'none' }}>
+                Sign in
+              </a>
+            </div>
+            <div style={{ marginTop: '0.25rem' }}>
+              Need an invite code?{' '}
+              <a
+                href="mailto:hello@buildquote.com.au?subject=BuildQuote%20Data%20Studio%20Invitation%20Code%20Request"
+                style={{ color: '#185D7A', fontWeight: 700, textDecoration: 'none' }}
+              >
+                Request manufacturer access
+              </a>
+            </div>
           </div>
         </form>
       </div>

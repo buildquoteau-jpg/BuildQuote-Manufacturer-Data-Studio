@@ -190,7 +190,7 @@ export default async function InviteRedeemPage({
             </div>
           )}
 
-          <h1 style={{ fontSize: '1.45rem', fontWeight: 800, margin: '0.75rem 0 0.3rem', letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontSize: '1.45rem', fontWeight: 800, margin: '0.75rem 0 0.3rem', letterSpacing: '-0.01em', color: '#ffffff' }}>
             {mfr.name}
           </h1>
           <p style={{ margin: 0, fontSize: '0.84rem', color: 'rgba(255,255,255,0.82)' }}>
