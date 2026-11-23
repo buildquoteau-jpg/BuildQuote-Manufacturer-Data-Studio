@@ -6,6 +6,7 @@ import { createStudioServerClient } from '@/lib/supabase/server'
 import { fetchCanonicalSystemBundle } from '@/lib/knowledge/fetchCanonicalKnowledgeData'
 import { buildFromCanonical } from '@/lib/knowledge/buildSystemKnowledge'
 import { renderKnowledgeMarkdown } from '@/lib/knowledge/renderKnowledgeMarkdown'
+import { buildAgentReviewUrl } from '@/lib/knowledge/agentReviewToken'
 import { StudioShell } from '@/components/studio/StudioShell'
 import { AgentReadyClient } from './AgentReadyClient'
 
@@ -88,15 +89,23 @@ export default async function AgentReadyDetailPage({
     // pre-068 environment
   }
 
+  const studioOrigin = process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au'
+  const agentReviewJsonUrl = buildAgentReviewUrl(studioOrigin, systemId, 'jsonld')
+  const agentReviewMdUrl = buildAgentReviewUrl(studioOrigin, systemId, 'markdown')
+
   return (
     <StudioShell role="manufacturer" subtitle={`${result.manufacturer.name} · Agent Ready`}>
       <BackLink />
       <AgentReadyClient
         systemId={systemId}
         manufacturerId={ctx.manufacturerId}
+        manufacturerName={result.manufacturer.name}
         systemName={system.name}
+        systemSlug={system.slug}
         knowledgeObject={knowledgeObject}
         markdown={markdown}
+        agentReviewJsonUrl={agentReviewJsonUrl}
+        agentReviewMdUrl={agentReviewMdUrl}
         signedOffAt={signedOffAt}
         signedOffNotes={signedOffNotes}
       />

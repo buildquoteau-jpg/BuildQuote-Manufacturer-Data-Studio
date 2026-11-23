@@ -47,6 +47,8 @@ export async function middleware(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/api/widget') &&
     // Public card data (stockist refresh for travelling cards)
     !request.nextUrl.pathname.startsWith('/api/cards') &&
+    // Signed read-only Agent Review endpoint for manufacturer AI agents
+    !request.nextUrl.pathname.startsWith('/api/agent-review') &&
     // Public permanent asset images embedded in published cards
     !request.nextUrl.pathname.startsWith('/api/assets') &&
     // Public hosted card pages (canonical + versioned URLs)
