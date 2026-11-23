@@ -107,6 +107,25 @@ export default async function LoginPage() {
           </h2>
 
           <LoginForm />
+
+          <div
+            style={{
+              marginTop: '1.25rem',
+              paddingTop: '1rem',
+              borderTop: '1px solid #e2e8f0',
+              textAlign: 'center',
+              fontSize: '0.8rem',
+              color: '#64748b',
+            }}
+          >
+            Have a manufacturer workspace invitation code?{' '}
+            <a
+              href="/invite"
+              style={{ color: '#185D7A', fontWeight: 700, textDecoration: 'none' }}
+            >
+              Enter invite code →
+            </a>
+          </div>
         </div>
       </div>
 

@@ -43,6 +43,9 @@ export async function middleware(request: NextRequest) {
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/auth') &&
+    // Signed manufacturer workspace invitation links
+    !request.nextUrl.pathname.startsWith('/invite') &&
+    !request.nextUrl.pathname.startsWith('/api/invite') &&
     !request.nextUrl.pathname.startsWith('/widget') &&
     !request.nextUrl.pathname.startsWith('/api/widget') &&
     // Public card data (stockist refresh for travelling cards)
