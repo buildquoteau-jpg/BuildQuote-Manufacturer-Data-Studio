@@ -17,8 +17,8 @@ export function buildCardJsonLd(system: SystemCardSystem, url: string | null): R
   addProp('Acoustic rating', system.acoustic_rating)
   addProp('BAL rating', system.bal_rating)
   addProp('Structural grade', system.structural_grade)
-  addProp('Moisture resistant', system.moisture_resistant ?? undefined)
-  addProp('Australian made', system.australian_made ?? undefined)
+  addProp('Moisture resistant', system.moisture_resistant === true ? true : undefined)
+  addProp('Australian made', system.australian_made === true ? true : undefined)
 
   // Components on the card are related products (fixings, accessories,
   // consumables that belong to the system).

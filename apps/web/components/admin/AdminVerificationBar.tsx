@@ -37,9 +37,9 @@ interface Props {
   initialBalRating: string | null
   initialFireRating: string | null
   initialAcousticRating: string | null
-  initialMoistureResistant: boolean
+  initialMoistureResistant: boolean | null
   initialStructuralGrade: string | null
-  initialAustralianMade: boolean
+  initialAustralianMade: boolean | null
 }
 
 // ── Shared input style ────────────────────────────────────────
@@ -81,9 +81,9 @@ export function AdminVerificationBar({
   const [balRating,         setBalRating]         = useState(initialBalRating ?? '')
   const [fireRating,        setFireRating]        = useState(initialFireRating ?? '')
   const [acousticRating,    setAcousticRating]    = useState(initialAcousticRating ?? '')
-  const [moistureResistant, setMoistureResistant] = useState(initialMoistureResistant)
+  const [moistureResistant, setMoistureResistant] = useState(Boolean(initialMoistureResistant))
   const [structuralGrade,   setStructuralGrade]   = useState(initialStructuralGrade ?? '')
-  const [australianMade,    setAustralianMade]    = useState(initialAustralianMade)
+  const [australianMade,    setAustralianMade]    = useState(Boolean(initialAustralianMade))
   const [attrPending, startAttrTransition] = useTransition()
   const [attrMsg, setAttrMsg] = useState<string | null>(null)
   const [attrErr, setAttrErr] = useState<string | null>(null)
@@ -123,9 +123,9 @@ export function AdminVerificationBar({
       bal_rating:         balRating || null,
       fire_rating:        fireRating || null,
       acoustic_rating:    acousticRating || null,
-      moisture_resistant: moistureResistant,
+      moisture_resistant: moistureResistant ? true : null,
       structural_grade:   structuralGrade || null,
-      australian_made:    australianMade,
+      australian_made:    australianMade ? true : null,
     }
     startAttrTransition(async () => {
       const result = await updateSystemAttributes(systemId, attrs)

@@ -128,11 +128,22 @@ export async function upsertFieldVerification(
       // "Not set" must clear the column to null, not write false — false
       // means an affirmative "No" while null means "not verified", and the
       // toggle UI only ever offers Yes / Not set, never a real No.
+      const nextVal = verifiedValue === null ? null : verifiedValue === 'true'
       const { error } = await supabase
         .from('staged_systems')
-        .update({ [fieldName]: verifiedValue === null ? null : verifiedValue === 'true', updated_at: now })
+        .update({ [fieldName]: nextVal, updated_at: now })
         .eq('id', systemId)
-      if (error) return { ok: false, error: error.message }
+      // Pre-migration-071 safety: if staged_systems.moisture_resistant still has NOT NULL,
+      // fall back to false so clearing doesn't fail with a 23502 error.
+      if (error && fieldName === 'moisture_resistant' && nextVal === null && (error.code === '23502' || /not-null/i.test(error.message ?? ''))) {
+        const { error: retryErr } = await supabase
+          .from('staged_systems')
+          .update({ moisture_resistant: false, updated_at: now })
+          .eq('id', systemId)
+        if (retryErr) return { ok: false, error: retryErr.message }
+      } else if (error) {
+        return { ok: false, error: error.message }
+      }
     }
     await markDraftChanged(supabase, systemId)
   }

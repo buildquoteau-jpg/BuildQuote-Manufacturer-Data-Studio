@@ -11,9 +11,9 @@ export type SystemAttributes = {
   bal_rating: string | null
   fire_rating: string | null
   acoustic_rating: string | null
-  moisture_resistant: boolean
+  moisture_resistant: boolean | null
   structural_grade: string | null
-  australian_made: boolean
+  australian_made: boolean | null
 }
 
 async function assertCanWrite(): Promise<{ allowed: true } | { allowed: false; error: string }> {
@@ -56,17 +56,28 @@ export async function updateSystemAttributes(
   if (!auth.allowed) return { ok: false, error: auth.error }
 
   const supabase = createStudioServerClient()
+  const basePatch = {
+    bal_rating:         attrs.bal_rating || null,
+    fire_rating:        attrs.fire_rating?.trim() || null,
+    acoustic_rating:    attrs.acoustic_rating?.trim() || null,
+    moisture_resistant: attrs.moisture_resistant,
+    structural_grade:   attrs.structural_grade?.trim() || null,
+    australian_made:    attrs.australian_made,
+  }
   const { error } = await supabase
     .from('staged_systems')
-    .update({
-      bal_rating:         attrs.bal_rating || null,
-      fire_rating:        attrs.fire_rating?.trim() || null,
-      acoustic_rating:    attrs.acoustic_rating?.trim() || null,
-      moisture_resistant: attrs.moisture_resistant,
-      structural_grade:   attrs.structural_grade?.trim() || null,
-      australian_made:    attrs.australian_made,
-    })
+    .update(basePatch)
     .eq('id', systemId)
+
+  // Pre-migration-071 fallback: staged_systems.moisture_resistant used to be NOT NULL DEFAULT false.
+  if (error && (error.code === '23502' || /moisture_resistant.*not-null/i.test(error.message ?? '')) && attrs.moisture_resistant === null) {
+    const { error: retryErr } = await supabase
+      .from('staged_systems')
+      .update({ ...basePatch, moisture_resistant: false })
+      .eq('id', systemId)
+    if (retryErr) return { ok: false, error: retryErr.message }
+    return { ok: true }
+  }
 
   if (error) return { ok: false, error: error.message }
   return { ok: true }

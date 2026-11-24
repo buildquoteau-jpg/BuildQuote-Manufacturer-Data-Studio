@@ -430,7 +430,7 @@ export async function publishSystem(
       sheet_format: sys.sheet_format,
       fire_rating: sys.fire_rating,
       acoustic_rating: sys.acoustic_rating,
-      moisture_resistant: sys.moisture_resistant,
+      moisture_resistant: sys.moisture_resistant ?? false,
       structural_grade: sys.structural_grade,
       install_guide_urls: sys.install_guide_urls,
       design_guide_url: sys.design_guide_url,

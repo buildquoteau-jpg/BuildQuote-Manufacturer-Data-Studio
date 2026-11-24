@@ -81,7 +81,7 @@ export type PlannedStagedSystem = {
   description: string | null
   bal_rating: string | null          // migration 008
   acoustic_rating: string | null
-  moisture_resistant: boolean
+  moisture_resistant: boolean | null
   structural_grade: string | null
   double_sided: boolean
   sheet_format: string | null
@@ -476,7 +476,7 @@ function planSystem(
       description: s.description ?? null,
       bal_rating: s.bal_rating ?? null,
       acoustic_rating: s.acoustic_rating ?? null,
-      moisture_resistant: s.moisture_resistant ?? false,
+      moisture_resistant: s.moisture_resistant ?? null,
       structural_grade: s.structural_grade ?? null,
       double_sided: s.double_sided ?? false,
       sheet_format: s.sheet_format ?? null,

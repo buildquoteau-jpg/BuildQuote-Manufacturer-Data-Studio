@@ -653,6 +653,19 @@ export function buildFactsForCanonicalSystem(bundle: CanonicalSystemBundle): Sys
     const raw = (bundle.system as unknown as Record<string, unknown>)[d.fieldName]
     if (raw === null || raw === undefined || raw === '') continue
     if (d.isBoolean && typeof raw !== 'boolean') continue
+    // Legacy schema default on staged_systems.moisture_resistant was `false`
+    // (NOT NULL DEFAULT false before migration 071). Never emit an unverified
+    // "Moisture resistant: false" claim unless a parser extraction or human
+    // reviewer explicitly recorded `false`.
+    if (d.isBoolean && raw === false) {
+      const hasExplicitVerif = bundle.fieldVerifications.some(
+        (f) => f.field_name === d.fieldName && (f.status === 'approved' || f.status === 'edited') && f.verified_value === 'false',
+      )
+      const hasParserEv = bundle.parserEvidence.some(
+        (p) => p.field_name === d.fieldName && p.extracted_value === 'false',
+      )
+      if (!hasExplicitVerif && !hasParserEv) continue
+    }
     const built = buildDescriptorFact(d, raw as string | boolean, inputs)
     compactAssertions.push(built.compact)
     atomicAssertions.push(built.atomic)
