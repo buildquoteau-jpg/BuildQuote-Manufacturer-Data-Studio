@@ -28,6 +28,7 @@ import { publishSystem } from '@/lib/studio-admin/publish'
 
 const V6_ORIGIN = process.env.BUILDQUOTE_PUBLIC_ORIGIN || 'https://buildquote.com.au'
 const DECKS_WA_ORIGIN = process.env.DECKS_WA_PUBLIC_ORIGIN || 'https://decks-wa.vercel.app'
+const STUDIO_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || 'https://studio.buildquote.com.au').replace(/\/$/, '')
 
 export type PublishCardLiveResult =
   | { ok: true; liveUrl: string; version: string; warnings: string[] }
@@ -168,8 +169,21 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     .limit(1)
   const nextCvVersion = (((cvRows ?? [])[0] as { version: number } | undefined)?.version ?? 0) + 1
 
+  // ── Freeze the JSON-LD knowledge object for this version (fails soft) ──
+  // Mirrors package-actions.ts so hybrid live-publishes also freeze an immutable
+  // bq:knowledge snapshot on card_versions and backfill knowledge_assertions.
+  let frozenKnowledge: unknown = null
+  try {
+    const { fetchCanonicalSystemBundle } = await import('@/lib/knowledge/fetchCanonicalKnowledgeData')
+    const { buildFromCanonical } = await import('@/lib/knowledge/buildSystemKnowledge')
+    const bundle = await fetchCanonicalSystemBundle(snap.mfrSlug, snap.slug)
+    if (bundle) frozenKnowledge = buildFromCanonical(bundle)
+  } catch {
+    // Non-fatal — card publish still succeeds even if knowledge assembly fails.
+  }
+
   // ── Staging history (card_versions) — insert-only, fails soft ──
-  const { error: cvErr } = await supabase.from('card_versions').insert({
+  const cvBaseRow = {
     manufacturer_id: snap.manufacturerId,
     card_id: stagedSystemId,
     package_id: null,
@@ -183,7 +197,15 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     content_md: snap.container?.content_md ?? null,
     content_hash: snap.container?.content_hash ?? null,
     sources_json: snap.container?.sources_json ?? null,
+  }
+  let { error: cvErr } = await supabase.from('card_versions').insert({
+    ...cvBaseRow,
+    knowledge_json: frozenKnowledge,
   })
+  if (cvErr && (cvErr.code === '42703' || /knowledge_json|does not exist/i.test(cvErr.message ?? ''))) {
+    const retry = await supabase.from('card_versions').insert(cvBaseRow)
+    cvErr = retry.error
+  }
   if (cvErr) warnings.push(`Version history not recorded (${cvErr.message}).`)
 
   // ── Production snapshot via the atomic publish_card RPC ──
@@ -287,10 +309,36 @@ export async function publishCardLive(stagedSystemId: string): Promise<PublishCa
     }
   } else {
     warnings.push('No source document linked — this card won’t appear in the supplier "My Products" picker until one is attached and re-published.')
+    // Still stamp knowledge_url on any already-linked production systems row (fails soft)
+    if (snap.stagedSystem.production_system_id) {
+      try {
+        const knowledgeUrl = `${STUDIO_ORIGIN}/api/cards/${snap.slug}/knowledge.jsonld?m=${snap.mfrSlug}`
+        await production
+          .from('systems')
+          .update({ knowledge_url: knowledgeUrl })
+          .eq('id', snap.stagedSystem.production_system_id)
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+
+  // ── Backfill knowledge_assertions for this system (idempotent, fails soft) ──
+  try {
+    const { createStudioServiceClient } = await import('@/lib/supabase/service')
+    const { backfillKnowledgeAssertions } = await import('@/lib/knowledge/backfillAssertions')
+    await backfillKnowledgeAssertions(createStudioServiceClient(), {
+      dryRun: false,
+      manufacturerId: snap.manufacturerId,
+      systemSlug: snap.slug,
+    })
+  } catch {
+    // Non-fatal — live /knowledge.jsonld still generates dynamically.
   }
 
   revalidatePath('/manufacturer/review')
   revalidatePath('/manufacturer/cms')
+  revalidatePath('/manufacturer/agent-ready')
 
   return {
     ok: true,
