@@ -808,7 +808,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
   const extracted = extractPageAssets(html, finalUrl, systemName)
 
   // ── 1) Photos & Links (full or photos_only) ────────────────────────────────
-  const existingGallery: GalleryPhoto[] = replacePhotos ? [] : (Array.isArray(sys.gallery_images) ? sys.gallery_images : [])
+  const priorGallery: GalleryPhoto[] = Array.isArray(sys.gallery_images) ? sys.gallery_images : []
+  const existingGallery: GalleryPhoto[] = replacePhotos ? [] : priorGallery
   const existingImgUrls = new Set(existingGallery.map((g) => g.url.split(/[?#]/)[0].toLowerCase()))
   const addedPhotos: GalleryPhoto[] = []
 
@@ -828,7 +829,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
       })
     }
   }
-  const nextGallery = [...existingGallery, ...addedPhotos]
+  // Safety guard: if replacePhotos was ticked but the page returned 0 images
+  // (e.g. bot-blocked or JS-rendered), keep the existing gallery rather than wiping it.
+  const replacedGallery = replacePhotos && addedPhotos.length > 0
+  const nextGallery = replacePhotos
+    ? (addedPhotos.length > 0 ? addedPhotos : priorGallery)
+    : [...priorGallery, ...addedPhotos]
 
   const existingLinks: CustomDocumentLink[] = Array.isArray(sys.custom_document_links) ? sys.custom_document_links : []
   const existingLinkUrls = new Set(existingLinks.map((l) => l.url))
@@ -844,10 +850,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
   }
 
   const sysPatch: Record<string, unknown> = {}
-  if ((mode === 'full' || mode === 'photos_only') && (addedPhotos.length > 0 || replacePhotos)) {
+  if ((mode === 'full' || mode === 'photos_only') && addedPhotos.length > 0) {
     sysPatch.gallery_images = nextGallery
-    if ((replacePhotos || !sys.hero_image_url) && nextGallery[0]?.url) {
+    if ((replacedGallery || !sys.hero_image_url) && nextGallery[0]?.url) {
       sysPatch.hero_image_url = nextGallery[0].url
+      if (replacedGallery) {
+        // Clear any previously uploaded hero asset so Publish uses the new hero_image_url
+        sysPatch.hero_image_asset_id = null
+      }
     }
   }
   if (!sys.website_url) sysPatch.website_url = finalUrl.toString()
@@ -883,11 +893,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
       const key = sw.name.trim().toLowerCase()
       const existing = byName.get(key)
       if (existing) {
-        if (!existing.image_url && sw.imageUrl) {
-          await supabase
+        if (sw.imageUrl && (!existing.image_url || replacePhotos)) {
+          const updatePayload = replacePhotos
+            ? { image_url: sw.imageUrl, image_asset_id: null }
+            : { image_url: sw.imageUrl }
+          const { error: swErr } = await supabase
             .from('staged_system_colours')
-            .update({ image_url: sw.imageUrl })
+            .update(updatePayload)
             .eq('id', existing.id)
+          if (swErr && replacePhotos && swErr.code === '42703') {
+            await supabase
+              .from('staged_system_colours')
+              .update({ image_url: sw.imageUrl })
+              .eq('id', existing.id)
+          }
           swatchesAdded += 1
           addedSwatches.push(sw)
         }

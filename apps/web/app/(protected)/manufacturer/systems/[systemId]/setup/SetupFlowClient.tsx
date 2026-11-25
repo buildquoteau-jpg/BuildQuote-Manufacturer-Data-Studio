@@ -300,7 +300,7 @@ export function SetupFlowClient({
       const res = await fetch(`/api/manufacturer/systems/${systemId}/import-from-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manufacturerId, url: trimmed, mode: 'swatches_only', autoExtract: false }),
+        body: JSON.stringify({ manufacturerId, url: trimmed, mode: 'swatches_only', autoExtract: false, replacePhotos }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -430,7 +430,7 @@ export function SetupFlowClient({
             {quickBusy ? 'Importing…' : 'Auto-Fill'}
           </button>
         </div>
-        {photosCount > 0 && (
+        {(photosCount > 0 || coloursCount > 0) && (
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', fontSize: '0.76rem', color: 'var(--ds-text-muted)', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -438,7 +438,7 @@ export function SetupFlowClient({
               onChange={(e) => setReplacePhotos(e.target.checked)}
               style={{ accentColor: '#185D7A' }}
             />
-            Replace existing photos with photos from this page
+            Replace existing photos &amp; swatches with images from this page
           </label>
         )}
         {quickMsg && <div style={{ fontSize: '0.78rem', color: '#16a34a', marginTop: '0.5rem', fontWeight: 600 }}>{quickMsg}</div>}
