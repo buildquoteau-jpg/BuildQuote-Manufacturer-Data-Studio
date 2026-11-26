@@ -49,30 +49,132 @@ def split_pdf_chunk(input_path: Path, start: int, end: int, out_path: Path):
     new_doc.close()
 
 
+def _page_needs_vision_fallback(page_md: str) -> bool:
+    """Detect scanned/graphic spec pages or mangled multi-column tables where
+    pymupdf4llm drops column alignment (e.g. 'Col1'/'Col2' synthetic headers)."""
+    stripped = (page_md or "").strip()
+    if len(stripped) < 150:
+        return True
+    # pymupdf4llm emits '|Col1|Col2|...' when it cannot detect real column headers
+    if re.search(r"\|\s*Col\d+\s*\|", stripped):
+        return True
+    # Detect heavily broken pipe tables (many empty cells like '| | | |')
+    broken_rows = len(re.findall(r"(\|\s*){4,}", stripped))
+    if broken_rows >= 4:
+        return True
+    return False
+
+
+def _vision_transcribe_page(input_path: Path, page_index_0: int, page_no: int) -> str | None:
+    """Render one complex/scanned PDF page at 150 DPI via PyMuPDF (fitz) and
+    transcribe tables & specs into clean Markdown via Claude Vision. Fails soft."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key or os.environ.get("ENABLE_VISION_TABLE_FALLBACK", "1").lower() in ("0", "false", "no"):
+        return None
+    try:
+        import base64  # noqa: PLC0415
+        import anthropic  # noqa: PLC0415
+        import fitz  # noqa: PLC0415
+
+        doc = fitz.open(str(input_path))
+        page = doc.load_page(page_index_0)
+        # Skip blank or purely decorative full-bleed photo pages with no text at all
+        # unless there is at least some graphic/vector structure; cap DPI at 150 to keep RAM low.
+        pix = page.get_pixmap(dpi=150)
+        png_bytes = pix.tobytes("png")
+        doc.close()
+        if not png_bytes or len(png_bytes) > 4_500_000:
+            return None
+
+        b64 = base64.standard_b64encode(png_bytes).decode("ascii")
+        client = anthropic.Anthropic(api_key=api_key)
+        model_id = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-5-5"
+        prompt = (
+            f"Transcribe page {page_no} of this construction product document into clean GitHub-Flavoured Markdown.\n"
+            "Rules:\n"
+            "1. Preserve EVERY product name, column header, table cell, dimension, SKU, BAL rating, slip rating, joist span, clearance, warranty, warning, and footnote verbatim.\n"
+            "2. For multi-product comparison tables, keep exact column-to-product alignment so sibling products are never mixed up.\n"
+            "3. If this page is purely decorative photography with no technical text or specs, reply with exactly: [DECORATIVE_IMAGE_PAGE]\n"
+            "4. Output Markdown only — no preamble or commentary."
+        )
+        for attempt_model in (model_id, "claude-sonnet-5", "claude-sonnet-4-6"):
+            try:
+                resp = client.messages.create(
+                    model=attempt_model,
+                    max_tokens=4000,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {"type": "base64", "media_type": "image/png", "data": b64},
+                            },
+                            {"type": "text", "text": prompt},
+                        ],
+                    }],
+                )
+                text = next((b.text for b in resp.content if b.type == "text"), "").strip()
+                if not text or "[DECORATIVE_IMAGE_PAGE]" in text:
+                    return None
+                return text
+            except Exception as e:
+                if ("404" in str(e) or "not_found" in str(e).lower()) and attempt_model != "claude-sonnet-4-6":
+                    continue
+                raise
+    except Exception as e:
+        print(f"  [vision-fallback] p.{page_no} skipped ({e})")
+    return None
+
+
 def run_chunk_pymupdf(input_path: Path, page_start: int, page_end: int, out_dir: Path, chunk_no: int) -> dict:
-    """Fast, low-memory PDF-to-Markdown + table extraction via pymupdf4llm (~50 MB RAM)."""
+    """Fast, low-memory PDF-to-Markdown + table extraction via pymupdf4llm (~50 MB RAM),
+    with selective Vision fallback for mangled comparison tables or scanned spec pages."""
     import pymupdf4llm  # noqa: PLC0415
 
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n[chunked] Extracting chunk {chunk_no} (pages {page_start}-{page_end}) via pymupdf4llm")
     page_indices = list(range(page_start - 1, page_end))
-    md_text = pymupdf4llm.to_markdown(str(input_path), pages=page_indices)
-    if isinstance(md_text, list):
-        md_text = "\n\n".join(str(x.get("text", x) if isinstance(x, dict) else x) for x in md_text)
-    md_text = (md_text or "").strip()
+
+    # Extract page-by-page so we can detect & upgrade individual broken table pages
+    # without re-processing clean text pages.
+    page_mds: list[str] = []
+    vision_used = 0
+    max_vision_per_chunk = int(os.environ.get("MAX_VISION_PAGES_PER_CHUNK", "4"))
+
+    for idx in page_indices:
+        page_no = idx + 1
+        raw_page = pymupdf4llm.to_markdown(str(input_path), pages=[idx])
+        if isinstance(raw_page, list):
+            page_md = "\n\n".join(str(x.get("text", x) if isinstance(x, dict) else x) for x in raw_page)
+        else:
+            page_md = str(raw_page or "")
+        page_md = page_md.strip()
+
+        if vision_used < max_vision_per_chunk and _page_needs_vision_fallback(page_md):
+            transcribed = _vision_transcribe_page(input_path, idx, page_no)
+            if transcribed:
+                print(f"  [vision-fallback] Upgraded p.{page_no} ({len(page_md)} -> {len(transcribed)} chars)")
+                page_md = transcribed
+                vision_used += 1
+
+        if page_md:
+            page_mds.append(f"<!-- page {page_no} -->\n{page_md}")
+
+    md_text = "\n\n".join(page_mds).strip()
 
     (out_dir / "output.md").write_text(md_text, encoding="utf-8")
     table_count = len(re.findall(r"^\|.+\|\s*\n\|[\s:\-|]+\|", md_text, flags=re.MULTILINE))
     summary = {
         "input_filename": input_path.name,
-        "engine": "pymupdf4llm",
+        "engine": "pymupdf4llm+vision" if vision_used > 0 else "pymupdf4llm",
         "page_count": len(page_indices),
+        "vision_pages": vision_used,
         "character_count": len(md_text),
         "table_count": table_count,
         "extraction_complete": True,
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"  [pymupdf4llm] Pages: {len(page_indices)}, Chars: {len(md_text):,}, Tables: {table_count}")
+    print(f"  [pymupdf4llm] Pages: {len(page_indices)}, Chars: {len(md_text):,}, Tables: {table_count}, Vision: {vision_used}")
     return summary
 
 

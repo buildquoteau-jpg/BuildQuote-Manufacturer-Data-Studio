@@ -69,6 +69,22 @@ CLAIM_TYPES = {
     "certification", "maintenance", "safety",
 }
 
+VALID_RELATIONS = {
+    "compatible_with", "incompatible_with", "requires_system",
+    "supersedes", "superseded_by", "substitute_for",
+}
+
+DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-5-5"
+FALLBACK_MODELS = ("claude-sonnet-5", "claude-sonnet-4-6")
+
+
+def _norm(s: str | None) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def _is_other_product(item: dict) -> bool:
+    return _norm(item.get("product_scope")) == "other_product"
+
 
 # ── Env / Supabase REST (same shape as pipeline_worker.py's sb_* helpers) ──
 
@@ -129,9 +145,10 @@ def sb_patch(supabase_url: str, headers: dict, table: str, params: str, data: di
 def call_claude(client, system_prompt: str, user_prompt: str, label: str, max_retries: int = 3):
     delay = 30
     for attempt in range(1, max_retries + 1):
+        model_id = getattr(client, "_model", DEFAULT_MODEL)
         try:
             with client.messages.stream(
-                model=getattr(client, "_model", "claude-sonnet-5"),
+                model=model_id,
                 max_tokens=8000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -139,6 +156,12 @@ def call_claude(client, system_prompt: str, user_prompt: str, label: str, max_re
                 response = stream.get_final_message()
         except Exception as e:
             err = str(e)
+            if "404" in err or "not_found" in err.lower():
+                next_model = next((m for m in FALLBACK_MODELS if m != model_id), None)
+                if next_model:
+                    print(f"    [MODEL FALLBACK] {model_id} unavailable — switching to {next_model}")
+                    client._model = next_model
+                    continue
             if "429" in err or "rate limit" in err.lower():
                 if attempt < max_retries:
                     print(f"    [RATE LIMIT] {label} attempt {attempt} — waiting {delay}s")
@@ -167,25 +190,57 @@ def call_claude(client, system_prompt: str, user_prompt: str, label: str, max_re
 
 # ── Extraction ───────────────────────────────────────────────────────────
 
-def user_prompt_for_chunk(chunk: dict, manufacturer_name: str, document_name: str) -> str:
+def user_prompt_for_chunk(
+    chunk: dict,
+    manufacturer_name: str,
+    document_name: str,
+    system_name: str = "",
+    sibling_products: list[str] | None = None,
+) -> str:
     page = chunk.get("page_number")
     heading = chunk.get("heading") or ""
     text = chunk.get("raw_text") or ""
+    target_line = f"Product you are extracting: {system_name}\n" if system_name else ""
+    sibling_line = (
+        f"Other products in this brand to EXCLUDE (unless explicitly shared across all ranges): "
+        f"{', '.join(sibling_products)}\n"
+        if sibling_products
+        else ""
+    )
+    scope_guard = (
+        f"ONLY extract facts and relationships that apply to {system_name} specifically "
+        f"(or explicitly to ALL products in this brand). NEVER attach facts from sibling products. "
+        if system_name
+        else ""
+    )
     return (
+        f"{target_line}"
+        f"{sibling_line}"
         f"Manufacturer: {manufacturer_name}\n"
         f"Document: {document_name}\n"
         f"Page: {page}\n"
         f"Section heading: {heading}\n\n"
         f"--- CHUNK TEXT ---\n{text}\n--- END CHUNK ---\n\n"
-        f"Extract every fact this chunk supports per the system prompt. "
+        f"Extract every fact, negative constraint, and explicit compatibility relationship this chunk supports per the system prompt. "
+        f"{scope_guard}"
         f"page_number in your output MUST be {page} for facts from this chunk. "
         f"Return JSON only."
     )
 
 
-def extract_facts(client, chunks: list, manufacturer_name: str, document_name: str, reporter: PipelineReporter | None) -> list[dict]:
+def extract_facts(
+    client,
+    chunks: list,
+    manufacturer_name: str,
+    document_name: str,
+    reporter: PipelineReporter | None,
+    system_name: str = "",
+    sibling_products: list[str] | None = None,
+) -> tuple[list[dict], list[dict], int]:
     system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
     all_facts: list[dict] = []
+    all_relationships: list[dict] = []
+    rejected_other = 0
     total = len(chunks)
     for i, chunk in enumerate(chunks, start=1):
         label = f"chunk {i}/{total} (p.{chunk.get('page_number')})"
@@ -193,13 +248,27 @@ def extract_facts(client, chunks: list, manufacturer_name: str, document_name: s
         if reporter:
             reporter.progress({"stage": "extracting", "chunk": i, "totalChunks": total}, log_line=label)
 
-        result = call_claude(client, system_prompt, user_prompt_for_chunk(chunk, manufacturer_name, document_name), label)
-        if not result or "facts" not in result:
+        result = call_claude(
+            client,
+            system_prompt,
+            user_prompt_for_chunk(chunk, manufacturer_name, document_name, system_name, sibling_products),
+            label,
+        )
+        if not result:
             continue
-        for fact in result["facts"]:
+        for fact in result.get("facts") or []:
+            if _is_other_product(fact):
+                rejected_other += 1
+                continue
             fact["_chunk_id"] = chunk["id"]
             all_facts.append(fact)
-    return all_facts
+        for rel in result.get("relationships") or []:
+            if _is_other_product(rel):
+                rejected_other += 1
+                continue
+            if rel.get("relation") in VALID_RELATIONS and (rel.get("target_name") or "").strip():
+                all_relationships.append(rel)
+    return all_facts, all_relationships, rejected_other
 
 
 # ── Document summary — design doc addendum 3 §C6, un-deferred ──────────────
@@ -259,35 +328,92 @@ def build_plan(
     source_document_id: str,
     extraction_run_id: str | None,
     document_summary: dict | None = None,
+    relationships: list[dict] | None = None,
+    own_systems_by_name: dict[str, str] | None = None,
+    system_name: str = "",
+    origin: str = "document_extracted",
+    source_kind: str = "document",
+    source_url: str | None = None,
 ) -> dict:
     assertions = []
+    seen_assertion_keys: set[tuple[str, str]] = set()
     for fact in facts:
         claim_type = fact.get("claim_type")
         if claim_type not in CLAIM_TYPES:
             claim_type = "unknown"
+        predicate = fact.get("predicate") or "bq:unknown"
+        val_norm = _norm(str(fact.get("value") or ""))
+        if val_norm:
+            key = (_norm(predicate), val_norm)
+            if key in seen_assertion_keys:
+                continue
+            seen_assertion_keys.add(key)
+
+        reviewer_note = fact.get("note")
+        if _norm(fact.get("product_scope")) == "ambiguous":
+            prefix = f"[Review product scope — confirm this applies to {system_name or 'this product'}]"
+            reviewer_note = f"{prefix} {reviewer_note}".strip() if reviewer_note else prefix
+
         assertions.append({
             "manufacturer_id": manufacturer_id,
             "staged_system_id": staged_system_id,
             "subject_kind": fact.get("subject_kind") or "unknown",
             "subject_local_id": fact.get("subject_local_id"),
-            "predicate": fact.get("predicate") or "bq:unknown",
+            "predicate": predicate,
             "object_kind": "literal",
             "object_value": {"value": fact.get("value"), "condition": fact.get("condition")},
             "claim_type": claim_type,
-            "origin": "document_extracted",
-            "epistemic_status": "unverified" if not fact.get("uncertain") else "unverified",
+            "origin": origin,
+            "epistemic_status": "unverified",
             "confidence": fact.get("confidence"),
             "extraction_run_id": extraction_run_id,
-            "reviewer_notes": fact.get("note"),
+            "reviewer_notes": reviewer_note,
             # evidence, attached after insert once we have real assertion ids:
             "_evidence": {
-                "source_kind": "document",
+                "source_kind": source_kind,
                 "source_document_id": source_document_id,
                 "document_chunk_id": fact.get("_chunk_id"),
                 "page_start": fact.get("page_number"),
                 "quote": fact.get("quote"),
+                "source_url": source_url,
             },
         })
+
+    own_map = own_systems_by_name or {}
+    rel_rows = []
+    seen_rel_keys: set[tuple[str, str]] = set()
+    for i, rel in enumerate(relationships or []):
+        relation = rel.get("relation")
+        target_name = (rel.get("target_name") or "").strip()
+        if relation not in VALID_RELATIONS or not target_name:
+            continue
+        rkey = (relation, _norm(target_name))
+        if rkey in seen_rel_keys:
+            continue
+        seen_rel_keys.add(rkey)
+
+        matched_own_id = own_map.get(_norm(target_name))
+        if matched_own_id == staged_system_id:
+            continue  # never link a product to itself
+
+        target_kind_raw = _norm(rel.get("target_kind"))
+        ext_kind = "generic_class" if target_kind_raw == "generic_class" else "product"
+        quote = (rel.get("quote") or "").strip()
+        page_num = rel.get("page_number")
+        note = f"p.{page_num}: \"{quote}\"" if (page_num and quote) else (quote or None)
+
+        rel_rows.append({
+            "manufacturer_id": manufacturer_id,
+            "staged_system_id": staged_system_id,
+            "relation": relation,
+            "target_staged_system_id": matched_own_id,
+            "target_external": None if matched_own_id else {"name": target_name, "kind": ext_kind},
+            "note": note,
+            "reason": (rel.get("reason") or "").strip() or None,
+            "epistemic_status": "unverified",
+            "sort_order": i,
+        })
+
     return {
         "kind": "knowledge_parser_plan_v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -295,6 +421,7 @@ def build_plan(
         "staged_system_id": staged_system_id,
         "source_document_id": source_document_id,
         "assertions": assertions,
+        "relationships": rel_rows,
         "document_summary": document_summary,
     }
 
@@ -326,10 +453,33 @@ def insert_document_summary(supabase_url: str, headers: dict, plan: dict) -> boo
 
 
 def insert_plan(supabase_url: str, headers: dict, plan: dict) -> dict:
+    staged_system_id = plan["staged_system_id"]
+
+    # Fetch existing assertions on this system so re-extracting is idempotent
+    # and never duplicates verified or previously extracted facts.
+    existing_assertions = sb_get(
+        supabase_url, headers, "knowledge_assertions",
+        f"staged_system_id=eq.{staged_system_id}&select=predicate,object_value",
+    )
+    seen_existing: set[tuple[str, str]] = set()
+    for ea in existing_assertions:
+        ov = ea.get("object_value")
+        val = ov.get("value") if isinstance(ov, dict) else ov
+        seen_existing.add((_norm(ea.get("predicate")), _norm(str(val or ""))))
+
     inserted = 0
+    skipped_dupes = 0
     for a in plan["assertions"]:
-        evidence = a.pop("_evidence")
-        row = sb_post(supabase_url, headers, "knowledge_assertions", [a])
+        a_copy = dict(a)
+        evidence = a_copy.pop("_evidence")
+        ov = a_copy.get("object_value")
+        val = ov.get("value") if isinstance(ov, dict) else ov
+        key = (_norm(a_copy.get("predicate")), _norm(str(val or "")))
+        if key in seen_existing:
+            skipped_dupes += 1
+            continue
+        seen_existing.add(key)
+        row = sb_post(supabase_url, headers, "knowledge_assertions", [a_copy])
         if not row:
             continue
         assertion_id = row[0]["id"]
@@ -338,8 +488,48 @@ def insert_plan(supabase_url: str, headers: dict, plan: dict) -> dict:
             "assertion_id": assertion_id,
             **evidence,
         }])
+
+    # Insert candidate relationships (idempotent, fails soft if table absent)
+    relationships_inserted = 0
+    rel_candidates = plan.get("relationships") or []
+    if rel_candidates:
+        try:
+            existing_rels = sb_get(
+                supabase_url, headers, "system_relationships",
+                f"staged_system_id=eq.{staged_system_id}&select=relation,target_staged_system_id,target_external",
+            )
+            seen_rels: set[tuple[str, str]] = set()
+            for er in existing_rels:
+                tgt = er.get("target_staged_system_id") or (
+                    (er.get("target_external") or {}).get("name")
+                    if isinstance(er.get("target_external"), dict)
+                    else ""
+                )
+                seen_rels.add((_norm(er.get("relation")), _norm(str(tgt or ""))))
+
+            for rel in rel_candidates:
+                tgt = rel.get("target_staged_system_id") or (
+                    (rel.get("target_external") or {}).get("name")
+                    if isinstance(rel.get("target_external"), dict)
+                    else ""
+                )
+                rkey = (_norm(rel.get("relation")), _norm(str(tgt or "")))
+                if rkey in seen_rels:
+                    continue
+                seen_rels.add(rkey)
+                sb_post(supabase_url, headers, "system_relationships", [rel])
+                relationships_inserted += 1
+        except Exception as e:
+            print(f"  [knowledge-parser] warning: could not save candidate relationships: {e}")
+
     summary_saved = insert_document_summary(supabase_url, headers, plan)
-    return {"inserted": inserted, "total": len(plan["assertions"]), "summarySaved": summary_saved}
+    return {
+        "inserted": inserted,
+        "skippedDupes": skipped_dupes,
+        "total": len(plan["assertions"]),
+        "relationshipsInserted": relationships_inserted,
+        "summarySaved": summary_saved,
+    }
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -350,8 +540,8 @@ def main():
     parser.add_argument("--staged-system-id")
     parser.add_argument("--manufacturer-id")
     parser.add_argument("--manufacturer-name", default="")
-    parser.add_argument("--system-name", default="", help="Product name, used only for the document-summary synopsis")
-    parser.add_argument("--model", default="claude-sonnet-5")
+    parser.add_argument("--system-name", default="", help="Product name used to isolate facts to this specific product")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--from-plan", default=None, help="Skip extraction: insert a previously saved plan JSON")
     args = parser.parse_args()
@@ -370,7 +560,7 @@ def main():
             result = insert_plan(supabase_url, headers, plan)
         except Exception as e:
             sys.exit(f"[ERROR] Insert failed — plan preserved at {plan_file}: {e}")
-        print(f"[knowledge-parser] Inserted {result['inserted']}/{result['total']} assertions from saved plan.")
+        print(f"[knowledge-parser] Inserted {result['inserted']}/{result['total']} assertions, {result['relationshipsInserted']} relationships from saved plan.")
         return
 
     if not args.source_document_id or not args.staged_system_id or not args.manufacturer_id:
@@ -398,8 +588,36 @@ def main():
 
         headers = sb_headers(service_key) if supabase_url and service_key else None
 
-        doc_rows = sb_get(supabase_url, headers, "source_documents", f"id=eq.{args.source_document_id}&select=document_name") if headers else []
-        document_name = doc_rows[0]["document_name"] if doc_rows else "(unknown document)"
+        doc_rows = sb_get(
+            supabase_url, headers, "source_documents",
+            f"id=eq.{args.source_document_id}&select=document_name,document_type,source_url",
+        ) if headers else []
+        doc_meta = doc_rows[0] if doc_rows else {}
+        document_name = doc_meta.get("document_name") or "(unknown document)"
+        is_webpage = doc_meta.get("document_type") == "website"
+        origin = "web_extracted" if is_webpage else "document_extracted"
+        source_kind = "web_page" if is_webpage else "document"
+        source_url = doc_meta.get("source_url")
+
+        # Resolve target system name + sibling products under this manufacturer
+        # so multi-product install guides never contaminate sibling products.
+        brand_systems = sb_get(
+            supabase_url, headers, "staged_systems",
+            f"manufacturer_id=eq.{args.manufacturer_id}&select=id,name",
+        ) if headers else []
+        system_name = args.system_name
+        sibling_products: list[str] = []
+        own_systems_by_name: dict[str, str] = {}
+        for s in brand_systems:
+            sname = (s.get("name") or "").strip()
+            if not sname:
+                continue
+            own_systems_by_name[_norm(sname)] = s["id"]
+            if s["id"] == args.staged_system_id:
+                if not system_name:
+                    system_name = sname
+            else:
+                sibling_products.append(sname)
 
         chunks = sb_get(
             supabase_url, headers, "document_chunks",
@@ -411,17 +629,32 @@ def main():
             reporter.fail(msg)
             sys.exit(f"[ERROR] {msg}")
 
-        print(f"[knowledge-parser] {document_name}: {len(chunks)} chunks")
-        facts = extract_facts(client, chunks, args.manufacturer_name, document_name, reporter)
-        print(f"[knowledge-parser] Extracted {len(facts)} candidate facts.")
+        print(
+            f"[knowledge-parser] {document_name}: {len(chunks)} chunks for '{system_name}' "
+            f"(excluding {len(sibling_products)} sibling products)"
+        )
+        facts, relationships, rejected_other = extract_facts(
+            client, chunks, args.manufacturer_name, document_name, reporter,
+            system_name=system_name, sibling_products=sibling_products,
+        )
+        print(
+            f"[knowledge-parser] Extracted {len(facts)} candidate facts, "
+            f"{len(relationships)} candidate relationships (rejected_other_product={rejected_other})."
+        )
 
         document_summary = synthesize_document_summary(
-            client, chunks, args.manufacturer_name, document_name, args.system_name, reporter,
+            client, chunks, args.manufacturer_name, document_name, system_name, reporter,
         )
 
         plan = build_plan(
             facts, args.manufacturer_id, args.staged_system_id, args.source_document_id, None,
             document_summary=document_summary,
+            relationships=relationships,
+            own_systems_by_name=own_systems_by_name,
+            system_name=system_name,
+            origin=origin,
+            source_kind=source_kind,
+            source_url=source_url,
         )
 
         DRY_RUN_DIR.mkdir(parents=True, exist_ok=True)
@@ -432,7 +665,13 @@ def main():
 
         if args.dry_run:
             print(f"\n[knowledge-parser] Dry run — no Supabase writes. Insert later with:\n  --from-plan \"{plan_path}\"")
-            reporter.done({"factCount": len(facts), "dryRun": True, "planPath": str(plan_path)})
+            reporter.done({
+                "factCount": len(facts),
+                "relationshipCount": len(relationships),
+                "rejectedOtherProduct": rejected_other,
+                "dryRun": True,
+                "planPath": str(plan_path),
+            })
             return
 
         try:
@@ -442,10 +681,19 @@ def main():
             reporter.fail(msg)
             sys.exit(f"[ERROR] {msg}")
 
-        print(f"[knowledge-parser] Inserted {result['inserted']}/{result['total']} assertions. Document summary saved: {result['summarySaved']}.")
+        print(
+            f"[knowledge-parser] Inserted {result['inserted']}/{result['total']} assertions "
+            f"(skipped {result['skippedDupes']} dupes), {result['relationshipsInserted']} relationships. "
+            f"Document summary saved: {result['summarySaved']}."
+        )
         reporter.done({
-            "factCount": len(facts), "inserted": result["inserted"],
-            "summarySaved": result["summarySaved"], "planPath": str(plan_path),
+            "factCount": len(facts),
+            "inserted": result["inserted"],
+            "skippedDupes": result["skippedDupes"],
+            "relationshipsInserted": result["relationshipsInserted"],
+            "rejectedOtherProduct": rejected_other,
+            "summarySaved": result["summarySaved"],
+            "planPath": str(plan_path),
         })
 
     except Exception as e:

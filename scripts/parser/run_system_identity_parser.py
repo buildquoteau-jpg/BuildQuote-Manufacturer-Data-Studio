@@ -131,12 +131,58 @@ def sb_patch(supabase_url: str, headers: dict, table: str, match: str, fields: d
 
 # ── Claude call (identical shape to run_knowledge_parser.py's call_claude) ─
 
+DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-5-5"
+FALLBACK_MODELS = ("claude-sonnet-5", "claude-sonnet-4-6")
+
+PACK_UOMS = {"pack", "box", "roll", "carton", "bag", "kit", "tub", "bucket", "bundle"}
+_PACK_COUNT_RE = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:pcs?|pieces?|lengths?|boards?|clips?|screws?|fasteners?|strips?|sheets?|units?|caps?|m\b|lm\b|metres?|meters?|kg\b|g\b|l\b|ml\b)"
+    r"|\b(?:pack|box|roll|carton|bag|kit|tub)\s+of\s+\d+"
+    r"|\bper\s+(?:pack|box|roll|carton|bag|kit|tub)\b",
+    re.IGNORECASE,
+)
+
+
+def _enforce_uom_rule(
+    uom: str | None,
+    description: str | None,
+    name: str | None = None,
+    supplier_pack_qty=None,
+    supplier_pack_uom: str | None = None,
+    pack_format: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Enforce customer-facing UOM clarity:
+    If uom is pack/box/roll/carton/etc., description MUST state how many pieces/lengths/m
+    are in it (e.g. '5 lengths per pack', '250 pieces per box', '50 m per roll').
+    Otherwise normalize uom to 'each' (per piece)."""
+    raw_uom = (uom or "").strip()
+    uom_lc = raw_uom.lower()
+    desc = (description or "").strip() or None
+    if uom_lc not in PACK_UOMS:
+        return (raw_uom or None), desc
+
+    combined = f"{name or ''} {desc or ''} {pack_format or ''}"
+    if _PACK_COUNT_RE.search(combined):
+        return raw_uom, desc
+
+    if supplier_pack_qty:
+        unit_label = (supplier_pack_uom or "pieces").strip()
+        qty_str = str(int(supplier_pack_qty)) if float(supplier_pack_qty).is_integer() else str(supplier_pack_qty)
+        note = f"{qty_str} {unit_label} per {uom_lc}"
+        desc = f"{desc} ({note})" if desc else note
+        return raw_uom, desc
+
+    # No pack count stated anywhere — default to 'each' (per piece)
+    return "each", desc
+
+
 def call_claude(client, system_prompt: str, user_prompt: str, label: str, max_retries: int = 3):
     delay = 30
     for attempt in range(1, max_retries + 1):
+        model_id = getattr(client, "_model", DEFAULT_MODEL)
         try:
             with client.messages.stream(
-                model=getattr(client, "_model", "claude-sonnet-5"),
+                model=model_id,
                 max_tokens=8000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -144,6 +190,12 @@ def call_claude(client, system_prompt: str, user_prompt: str, label: str, max_re
                 response = stream.get_final_message()
         except Exception as e:
             err = str(e)
+            if "404" in err or "not_found" in err.lower():
+                next_model = next((m for m in FALLBACK_MODELS if m != model_id), None)
+                if next_model:
+                    print(f"    [MODEL FALLBACK] {model_id} unavailable — switching to {next_model}")
+                    client._model = next_model
+                    continue
             if "429" in err or "rate limit" in err.lower():
                 if attempt < max_retries:
                     print(f"    [RATE LIMIT] {label} attempt {attempt} — waiting {delay}s")
@@ -172,12 +224,25 @@ def call_claude(client, system_prompt: str, user_prompt: str, label: str, max_re
 
 # ── Extraction ───────────────────────────────────────────────────────────
 
-def user_prompt_for_chunk(chunk: dict, system_name: str, manufacturer_name: str, document_name: str) -> str:
+def user_prompt_for_chunk(
+    chunk: dict,
+    system_name: str,
+    manufacturer_name: str,
+    document_name: str,
+    sibling_products: list[str] | None = None,
+) -> str:
     page = chunk.get("page_number")
     heading = chunk.get("heading") or ""
     text = chunk.get("raw_text") or ""
+    sibling_line = (
+        f"Other products in this brand to EXCLUDE (unless explicitly shared across all ranges): "
+        f"{', '.join(sibling_products)}\n"
+        if sibling_products
+        else ""
+    )
     return (
         f"Product you are extracting: {system_name}\n"
+        f"{sibling_line}"
         f"Manufacturer: {manufacturer_name}\n"
         f"Document: {document_name}\n"
         f"Page: {page}\n"
@@ -185,12 +250,21 @@ def user_prompt_for_chunk(chunk: dict, system_name: str, manufacturer_name: str,
         f"--- CHUNK TEXT ---\n{text}\n--- END CHUNK ---\n\n"
         f"Extract every System Card identity fact this chunk states about "
         f"{system_name} specifically, per the system prompt. "
+        f"NEVER attach specs, colours, profiles, or components belonging to another product. "
         f"page_number in your output MUST be {page} for facts from this chunk. "
         f"Return JSON only."
     )
 
 
-def extract_identity(client, chunks: list, system_name: str, manufacturer_name: str, document_name: str, reporter: PipelineReporter | None) -> list[dict]:
+def extract_identity(
+    client,
+    chunks: list,
+    system_name: str,
+    manufacturer_name: str,
+    document_name: str,
+    reporter: PipelineReporter | None,
+    sibling_products: list[str] | None = None,
+) -> list[dict]:
     system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
     results: list[dict] = []
     total = len(chunks)
@@ -200,7 +274,12 @@ def extract_identity(client, chunks: list, system_name: str, manufacturer_name: 
         if reporter:
             reporter.progress({"stage": "extracting", "chunk": i, "totalChunks": total}, log_line=label)
 
-        result = call_claude(client, system_prompt, user_prompt_for_chunk(chunk, system_name, manufacturer_name, document_name), label)
+        result = call_claude(
+            client,
+            system_prompt,
+            user_prompt_for_chunk(chunk, system_name, manufacturer_name, document_name, sibling_products),
+            label,
+        )
         if result:
             results.append(result)
     return results
@@ -221,6 +300,10 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
 
 
+def _is_other_product(item: dict) -> bool:
+    return _norm(item.get("product_scope")) == "other_product"
+
+
 SCALAR_SYSTEM_FIELDS = (
     "description", "category", "subcategory", "deck_type",
     "bal_rating", "fire_rating", "acoustic_rating",
@@ -234,24 +317,37 @@ def merge_chunk_results(chunk_results: list[dict]) -> dict:
     colours: dict[str, dict] = {}
     components: dict[str, dict] = {}
     attributes: dict[str, dict] = {}
+    rejected_other = 0
 
     for r in chunk_results:
         for f in SCALAR_SYSTEM_FIELDS:
             if scalars[f] is None and r.get(f) is not None and r.get(f) != "":
                 scalars[f] = r[f]
         for p in r.get("profiles") or []:
+            if _is_other_product(p):
+                rejected_other += 1
+                continue
             key = _norm(p.get("product_code")) or _norm(p.get("profile_name"))
             if key and key not in profiles:
                 profiles[key] = p
         for c in r.get("colours") or []:
+            if _is_other_product(c):
+                rejected_other += 1
+                continue
             key = _norm(c.get("colour_name"))
             if key and key not in colours:
                 colours[key] = c
         for comp in r.get("components") or []:
+            if _is_other_product(comp):
+                rejected_other += 1
+                continue
             key = _norm(comp.get("sku")) or _norm(comp.get("name"))
             if key and key not in components:
                 components[key] = comp
         for a in r.get("attributes") or []:
+            if _is_other_product(a):
+                rejected_other += 1
+                continue
             key = _norm(a.get("label"))
             if key and key not in attributes:
                 attributes[key] = a
@@ -262,6 +358,7 @@ def merge_chunk_results(chunk_results: list[dict]) -> dict:
         "colours": list(colours.values()),
         "components": list(components.values()),
         "attributes": list(attributes.values()),
+        "rejected_other_product": rejected_other,
     }
 
 
@@ -301,21 +398,39 @@ def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source
     if new_attrs:
         system_update["custom_technical_attributes"] = existing_attrs + new_attrs
 
-    profiles = [
-        {
+    profiles = []
+    for i, p in enumerate(merged["profiles"]):
+        prof_uom, prof_pack_fmt = _enforce_uom_rule(
+            p.get("uom"),
+            p.get("pack_format"),
+            name=p.get("profile_name"),
+            supplier_pack_qty=p.get("supplier_pack_qty"),
+            supplier_pack_uom=p.get("supplier_pack_uom"),
+            pack_format=p.get("pack_format"),
+        )
+        profiles.append({
             "staged_system_id": staged_system_id,
             "profile_name": p.get("profile_name") or "Profile",
             "product_code": p.get("product_code"),
+            "dimensions": p.get("dimensions"),
             "length_mm": p.get("length_mm"),
             "width_mm": p.get("width_mm"),
             "height_mm": p.get("height_mm"),
             "thickness_mm": p.get("thickness_mm"),
-            "uom": p.get("uom"),
+            "length_m": p.get("length_m"),
+            "weight_kg": p.get("weight_kg"),
+            "uom": prof_uom,
+            "pack_format": prof_pack_fmt,
+            "supplier_pack_qty": p.get("supplier_pack_qty"),
+            "supplier_pack_uom": p.get("supplier_pack_uom"),
+            "bal_rating": p.get("bal_rating"),
             "sort_order": i,
-            "parser_notes": json.dumps({"page_number": p.get("page_number"), "quote": p.get("quote")}),
-        }
-        for i, p in enumerate(merged["profiles"])
-    ]
+            "parser_notes": json.dumps({
+                "page_number": p.get("page_number"),
+                "quote": p.get("quote"),
+                "product_scope": p.get("product_scope"),
+            }),
+        })
     colours = [
         {
             "staged_system_id": staged_system_id,
@@ -326,21 +441,30 @@ def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source
         }
         for i, c in enumerate(merged["colours"]) if c.get("colour_name")
     ]
-    components = [
-        {
+    components = []
+    for i, c in enumerate(merged["components"]):
+        comp_uom, comp_desc = _enforce_uom_rule(
+            c.get("uom"),
+            c.get("description"),
+            name=c.get("name"),
+            supplier_pack_qty=c.get("supplier_pack_qty"),
+            supplier_pack_uom=c.get("supplier_pack_uom"),
+            pack_format=c.get("pack_format"),
+        )
+        components.append({
             "manufacturer_id": manufacturer_id,
             "source_document_id": source_document_id,
             "sku": c.get("sku"),
             "name": c.get("name") or "Component",
-            "description": c.get("description"),
+            "category": c.get("category"),
+            "uom": comp_uom,
+            "description": comp_desc,
             "sort_order": i,
             "extraction_confidence": 0.8,
             # role/notes attach to the staged_system_components link row,
             # created after this row's real id is known — see insert_plan.
             "_role": c.get("role") or "accessory",
-        }
-        for i, c in enumerate(merged["components"])
-    ]
+        })
 
     return {
         "kind": "system_identity_parser_plan_v1",
@@ -469,7 +593,7 @@ def main():
     parser.add_argument("--manufacturer-id")
     parser.add_argument("--manufacturer-name", default="")
     parser.add_argument("--system-name", default="")
-    parser.add_argument("--model", default="claude-sonnet-5")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--from-plan", default=None, help="Skip extraction: write a previously saved plan JSON")
     args = parser.parse_args()
@@ -521,13 +645,25 @@ def main():
 
         system_rows = sb_get(
             supabase_url, headers, "staged_systems",
-            f"id=eq.{args.staged_system_id}&select=slug,description,category,subcategory,deck_type,bal_rating,fire_rating,acoustic_rating,moisture_resistant,structural_grade,australian_made,custom_technical_attributes",
+            f"id=eq.{args.staged_system_id}&select=name,slug,description,category,subcategory,deck_type,bal_rating,fire_rating,acoustic_rating,moisture_resistant,structural_grade,australian_made,custom_technical_attributes",
         )
         if not system_rows:
             msg = f"staged_systems row {args.staged_system_id} not found"
             reporter.fail(msg)
             sys.exit(f"[ERROR] {msg}")
         existing_system = system_rows[0]
+        system_name = args.system_name or existing_system.get("name") or ""
+
+        # Fetch sibling products under this manufacturer so Claude strictly isolates
+        # facts belonging to this product vs other ranges in shared brochures.
+        brand_systems = sb_get(
+            supabase_url, headers, "staged_systems",
+            f"manufacturer_id=eq.{args.manufacturer_id}&select=id,name",
+        )
+        sibling_products = [
+            s["name"] for s in brand_systems
+            if s.get("id") != args.staged_system_id and s.get("name")
+        ]
 
         chunks = sb_get(
             supabase_url, headers, "document_chunks",
@@ -538,16 +674,20 @@ def main():
             reporter.fail(msg)
             sys.exit(f"[ERROR] {msg}")
 
-        print(f"[identity-parser] {document_name}: {len(chunks)} chunks for '{args.system_name}'")
-        chunk_results = extract_identity(client, chunks, args.system_name, args.manufacturer_name, document_name, reporter)
+        print(f"[identity-parser] {document_name}: {len(chunks)} chunks for '{system_name}' (excluding {len(sibling_products)} sibling products)")
+        chunk_results = extract_identity(
+            client, chunks, system_name, args.manufacturer_name, document_name, reporter,
+            sibling_products=sibling_products,
+        )
         merged = merge_chunk_results(chunk_results)
         print(
             f"[identity-parser] Merged: description={'yes' if merged['description'] else 'no'}, "
             f"{len(merged['profiles'])} profiles, {len(merged['colours'])} colours, "
-            f"{len(merged['components'])} components, {len(merged['attributes'])} attributes"
+            f"{len(merged['components'])} components, {len(merged['attributes'])} attributes, "
+            f"rejected_other_product={merged.get('rejected_other_product', 0)}"
         )
 
-        plan = build_plan(merged, args.manufacturer_id, args.staged_system_id, args.source_document_id, existing_system, args.system_name)
+        plan = build_plan(merged, args.manufacturer_id, args.staged_system_id, args.source_document_id, existing_system, system_name)
 
         DRY_RUN_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

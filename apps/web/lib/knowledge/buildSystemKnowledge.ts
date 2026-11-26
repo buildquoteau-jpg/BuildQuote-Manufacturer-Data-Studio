@@ -418,39 +418,55 @@ export type ApplicationFactSource = {
   sourceDocumentId: string | null
   sourcePageNumber: number | null
   sourceLine: string | null
+  quote: string | null
+  conditions: string[]
   isCompanyLevel: boolean
 }
 
-export function buildApplicationFacts(bundle: CanonicalSystemBundle): ApplicationFactSource[] {
-  return bundle.knowledgeAssertions.map((row) => {
-    const evidenceRows = bundle.assertionEvidence.get(row.id) ?? []
-    const primary = evidenceRows[0]
-    const sourceDoc = primary?.source_document_id ? bundle.sourceDocuments.get(primary.source_document_id) : undefined
-    const objectValue = row.object_value
-    const valuePart = objectValue && typeof objectValue === 'object' && 'value' in (objectValue as Record<string, unknown>)
-      ? (objectValue as Record<string, unknown>).value
-      : objectValue
-    const value = valuePart == null ? '' : String(valuePart)
+const CORE_SYSTEM_PREDICATES = new Set(SYSTEM_FIELD_DESCRIPTORS.map((d) => d.predicate))
 
-    return {
-      assertionId: row.id,
-      predicate: row.predicate,
-      claimType: row.claim_type as ClaimType,
-      label: humanizePredicate(row.predicate),
-      value,
-      rawValue: objectValue,
-      origin: (row.origin as AssertionOrigin) ?? 'document_extracted',
-      epistemicStatus: row.epistemic_status as EpistemicStatus,
-      sourceDocumentId: primary?.source_document_id ?? null,
-      sourcePageNumber: primary?.page_start ?? null,
-      sourceLine: sourceDoc
-        ? `${sourceDoc.document_name}${primary?.page_start ? `, page ${primary.page_start}` : ''}`
-        : row.staged_system_id === null
-          ? 'Company knowledge — manufacturer-supplied'
-          : null,
-      isCompanyLevel: row.staged_system_id === null,
-    }
-  })
+export function buildApplicationFacts(bundle: CanonicalSystemBundle): ApplicationFactSource[] {
+  return bundle.knowledgeAssertions
+    // Exclude core identity/attribute predicates that already render in Identity or Attributes & performance
+    .filter((row) => !(row.staged_system_id !== null && CORE_SYSTEM_PREDICATES.has(row.predicate)))
+    .map((row) => {
+      const evidenceRows = bundle.assertionEvidence.get(row.id) ?? []
+      const primary = evidenceRows[0]
+      const sourceDoc = primary?.source_document_id ? bundle.sourceDocuments.get(primary.source_document_id) : undefined
+      const objectValue = row.object_value
+      const objRec = objectValue && typeof objectValue === 'object' ? (objectValue as Record<string, unknown>) : null
+      const valuePart = objRec && 'value' in objRec ? objRec.value : objectValue
+      const value = valuePart == null ? '' : String(valuePart)
+
+      const conditions: string[] = []
+      if (objRec && typeof objRec.condition === 'string' && objRec.condition.trim()) {
+        conditions.push(objRec.condition.trim())
+      }
+      if (row.reviewer_notes && row.reviewer_notes.trim()) {
+        conditions.push(row.reviewer_notes.trim())
+      }
+
+      return {
+        assertionId: row.id,
+        predicate: row.predicate,
+        claimType: row.claim_type as ClaimType,
+        label: humanizePredicate(row.predicate),
+        value,
+        rawValue: objectValue,
+        origin: (row.origin as AssertionOrigin) ?? 'document_extracted',
+        epistemicStatus: row.epistemic_status as EpistemicStatus,
+        sourceDocumentId: primary?.source_document_id ?? null,
+        sourcePageNumber: primary?.page_start ?? null,
+        sourceLine: sourceDoc
+          ? `${sourceDoc.document_name}${primary?.page_start ? `, page ${primary.page_start}` : ''}`
+          : row.staged_system_id === null
+            ? 'Company knowledge — manufacturer-supplied'
+            : null,
+        quote: primary?.quote ?? null,
+        conditions,
+        isCompanyLevel: row.staged_system_id === null,
+      }
+    })
 }
 
 // ─── Relationships — system_relationships → bq:ProductRelationship ─────────

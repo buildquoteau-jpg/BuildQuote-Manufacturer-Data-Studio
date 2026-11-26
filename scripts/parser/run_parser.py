@@ -190,7 +190,8 @@ RULES:
 3. All dimension values must be numeric.
 4. Use "uom" not "unit".
 5. supplier_pack_qty is the manufacturer pack size, not the customer order quantity.
-6. Every staged_system_match "system_name" you emit must be copied VERBATIM (same casing, same trademark symbols) from the "Known systems" list provided below — do not paraphrase or abbreviate it. This is the join key used to link the component to its system."""
+6. STRICT UOM RULE: Only use pack/box/roll/carton/bag/kit as uom if the description explicitly states how many pieces/lengths/metres are inside (e.g. '5 lengths per pack', '250 pieces per box', '50 m per roll'). Otherwise set uom to 'each' (per piece).
+7. Every staged_system_match "system_name" you emit must be copied VERBATIM (same casing, same trademark symbols) from the "Known systems" list provided below — do not paraphrase or abbreviate it. This is the join key used to link the component to its system."""
 
 STAGE2_USER_TEMPLATE = """Manufacturer: {manufacturer_name}
 Catalogue section (pages {page_start}–{page_end}):
@@ -1438,7 +1439,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Write plan JSON locally, skip Supabase")
     parser.add_argument("--stage", choices=["1", "2", "both"], default="both")
     parser.add_argument("--openai-model", default=None, help="Use OpenAI instead of Anthropic (e.g. gpt-4.5-preview, gpt-4o)")
-    parser.add_argument("--model", default="claude-sonnet-5", help="Anthropic model ID (ignored when --openai-model is set; must support structured outputs)")
+    parser.add_argument("--model", default=os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-5-5", help="Anthropic model ID (ignored when --openai-model is set)")
     parser.add_argument("--interactive", action="store_true",
                          help="Use the old one-call-per-chunk loop with inter-call pacing instead of the "
                               "Message Batches API (always used automatically for --openai-model)")

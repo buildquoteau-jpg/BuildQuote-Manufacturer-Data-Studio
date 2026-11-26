@@ -23,6 +23,8 @@ export type FactViewModel = {
   // bulk verification).
   sourceDocumentId: string | null
   sourcePageNumber: number | null
+  quote?: string | null
+  conditions?: string[]
   // True for a company-wide answer (Company Knowledge panel, design doc
   // §9.2) inherited onto this system rather than authored for it directly.
   // Optional/undefined for every pre-existing caller — only the Applications

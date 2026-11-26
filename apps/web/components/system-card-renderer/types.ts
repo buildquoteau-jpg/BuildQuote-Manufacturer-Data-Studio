@@ -69,6 +69,21 @@ export type SystemCardComponentEntry = {
   } | null
 }
 
+export type SystemCardRelationship = {
+  relation: 'compatible_with' | 'incompatible_with' | 'requires_system' | 'supersedes' | 'superseded_by' | 'substitute_for'
+  target_name: string
+  target_kind?: 'internal' | 'product' | 'generic_class'
+  reason?: string | null
+}
+
+export type SystemCardConstraint = {
+  kind: 'not_suitable_for' | 'limitation' | 'environmental' | 'requirement'
+  label: string
+  value: string
+  condition?: string | null
+  source?: string | null
+}
+
 export type SystemCardSystem = {
   id: string
   name: string
@@ -117,6 +132,8 @@ export type SystemCardSystem = {
   system_colours: SystemCardColour[]
   system_profiles: SystemCardProfile[]
   system_components: SystemCardComponentEntry[]
+  system_relationships?: SystemCardRelationship[] | null
+  negative_constraints?: SystemCardConstraint[] | null
 }
 
 // Manufacturer info for the v6-style manufacturer landing page (breadcrumb,

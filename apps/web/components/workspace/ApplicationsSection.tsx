@@ -71,7 +71,6 @@ export function ApplicationsSection({
   }
 
   async function run(dryRun: boolean) {
-    if (!sourceDocumentId) return
     setState('running')
     setMessage(null)
     try {
@@ -80,7 +79,7 @@ export function ApplicationsSection({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           manufacturerId, manufacturerName, stagedSystemId,
-          sourceDocumentId, dryRun,
+          sourceDocumentId, dryRun, includeIdentity: true,
         }),
       })
       const data = await res.json()
@@ -89,11 +88,13 @@ export function ApplicationsSection({
         setMessage(data.error ?? 'Could not start extraction.')
         return
       }
+      const docCount = Number(data.documentsQueued ?? 1)
+      const docLabel = `${docCount} linked document${docCount === 1 ? '' : 's'}`
       setState('done')
       setMessage(
         dryRun
-          ? `Dry run started (job ${data.jobId}) — check the Pipeline page for the extracted plan.`
-          : `Extraction started (job ${data.jobId}) — refresh this page in a minute or two to see the facts land.`,
+          ? `Dry run started across ${docLabel} (${data.jobIds?.length ?? 1} jobs) — check the Pipeline page for the extracted plan.`
+          : `Deep re-extraction started across ${docLabel} (identity, attributes, relationships & applications) — refresh in a minute or two.`,
       )
     } catch (e) {
       setState('error')
@@ -184,7 +185,8 @@ export function ApplicationsSection({
                           label={f.isCompanyLevel ? `${f.label} · Company-wide` : f.label}
                           predicate={f.predicate} claimType={f.claimType}
                           value={f.value} rawValue={f.rawValue} origin={f.origin} epistemicStatus={f.epistemicStatus}
-                          sourceLine={f.sourceLine} systemId={stagedSystemId} manufacturerId={manufacturerId}
+                          sourceLine={f.sourceLine} quote={f.quote} conditions={f.conditions}
+                          systemId={stagedSystemId} manufacturerId={manufacturerId}
                           readOnly={f.isCompanyLevel}
                         />
                       ))}
@@ -197,37 +199,28 @@ export function ApplicationsSection({
         </div>
       )}
 
-      {!sourceDocumentId && facts.length === 0 && (
-        <p style={{ fontSize: '0.82rem', color: 'var(--ds-text-muted, #6b7280)', margin: '0.4rem 0' }}>
-          Link a source document to this system (Setup &amp; PDFs) before extracting installation
-          and application facts from it.
+      <div style={{ borderTop: facts.length > 0 ? '1px solid var(--ds-border, #e5e7eb)' : 'none', paddingTop: facts.length > 0 ? '0.8rem' : 0 }}>
+        <p style={{ fontSize: '0.8rem', color: 'var(--ds-text-muted, #6b7280)', margin: '0 0 0.6rem', lineHeight: 1.55 }}>
+          {facts.length > 0
+            ? 'Re-run deep AI extraction across all linked PDFs & product pages (attributes, specs, negative constraints, relationships & installation facts).'
+            : 'Installation methods, negative constraints, relationships and applications aren’t extracted for this system yet. Run deep AI extraction across its linked documents — every fact carries its exact page and verbatim quote.'}
         </p>
-      )}
-
-      {sourceDocumentId && (
-        <div style={{ borderTop: facts.length > 0 ? '1px solid var(--ds-border, #e5e7eb)' : 'none', paddingTop: facts.length > 0 ? '0.8rem' : 0 }}>
-          <p style={{ fontSize: '0.8rem', color: 'var(--ds-text-muted, #6b7280)', margin: '0 0 0.6rem', lineHeight: 1.55 }}>
-            {facts.length > 0
-              ? 'Re-run the knowledge parser if you’ve updated the linked source document.'
-              : 'Installation methods, fixing requirements and applications aren’t extracted for this system yet. Run the knowledge parser over its linked source document to pull them out — each fact will carry its page and verbatim source text, same as the sections above.'}
-          </p>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button type="button" onClick={() => run(true)} disabled={state === 'running'}
-              style={{ padding: '0.4rem 0.8rem', borderRadius: 6, border: '1.5px solid #d1d5db', background: '#fff', fontSize: '0.8rem', fontWeight: 600, cursor: state === 'running' ? 'not-allowed' : 'pointer', opacity: state === 'running' ? 0.5 : 1 }}>
-              Preview (dry run)
-            </button>
-            <button type="button" onClick={() => run(false)} disabled={state === 'running'}
-              style={{ padding: '0.4rem 0.8rem', borderRadius: 6, border: 'none', background: '#185D7A', color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: state === 'running' ? 'not-allowed' : 'pointer', opacity: state === 'running' ? 0.5 : 1 }}>
-              {state === 'running' ? 'Starting…' : facts.length > 0 ? 'Re-extract' : 'Extract now'}
-            </button>
-          </div>
-          {message && (
-            <div style={{ fontSize: '0.8rem', marginTop: '0.6rem', color: state === 'error' ? '#b91c1c' : '#16a34a' }}>
-              {message}
-            </div>
-          )}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button type="button" onClick={() => run(true)} disabled={state === 'running'}
+            style={{ padding: '0.4rem 0.8rem', borderRadius: 6, border: '1.5px solid #d1d5db', background: '#fff', fontSize: '0.8rem', fontWeight: 600, cursor: state === 'running' ? 'not-allowed' : 'pointer', opacity: state === 'running' ? 0.5 : 1 }}>
+            Preview (dry run)
+          </button>
+          <button type="button" onClick={() => run(false)} disabled={state === 'running'}
+            style={{ padding: '0.4rem 0.8rem', borderRadius: 6, border: 'none', background: '#185D7A', color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: state === 'running' ? 'not-allowed' : 'pointer', opacity: state === 'running' ? 0.5 : 1 }}>
+            {state === 'running' ? 'Starting…' : facts.length > 0 ? 'Re-extract all linked docs' : 'Extract now'}
+          </button>
         </div>
-      )}
+        {message && (
+          <div style={{ fontSize: '0.8rem', marginTop: '0.6rem', color: state === 'error' ? '#b91c1c' : '#16a34a' }}>
+            {message}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -25,8 +25,19 @@ export function hasAttributesContent(system: SystemCardSystem): boolean {
   if (system.description) return true
   if (system.moisture_resistant || system.bal_rating || system.fire_rating || system.acoustic_rating || system.structural_grade || system.australian_made != null) return true
   if (system.custom_technical_attributes && system.custom_technical_attributes.length > 0) return true
+  if (system.system_relationships && system.system_relationships.length > 0) return true
+  if (system.negative_constraints && system.negative_constraints.length > 0) return true
   if (system.notes) return true
   return false
+}
+
+const REL_LABELS: Record<string, { label: string; isNegative: boolean }> = {
+  compatible_with: { label: 'Works with', isNegative: false },
+  requires_system: { label: 'Requires', isNegative: false },
+  incompatible_with: { label: 'Do not use with', isNegative: true },
+  supersedes: { label: 'Replaces', isNegative: false },
+  superseded_by: { label: 'Replaced by', isNegative: true },
+  substitute_for: { label: 'Substitute for', isNegative: false },
 }
 
 type PillTone = 'moisture' | 'bal' | 'fire' | 'acoustic' | 'structural' | 'australian' | 'colourways'
@@ -69,6 +80,52 @@ export function AttributesInfoReveal({ system }: { system: SystemCardSystem }) {
             {pills.map((p, i) => (
               <span key={`${p.tone}-${i}`} className={styles.attributePill} data-tone={p.tone}>{p.text}</span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {((system.system_relationships && system.system_relationships.length > 0) ||
+        (system.negative_constraints && system.negative_constraints.length > 0)) && (
+        <div className={styles.specGroup}>
+          <p className={styles.specGroupLabel}>Compatibility &amp; Limitations</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+            {system.negative_constraints?.map((c, i) => (
+              <div
+                key={`nc-${i}`}
+                style={{
+                  padding: '0.5rem 0.65rem',
+                  borderRadius: 8,
+                  border: '1px solid #f1d4c8',
+                  background: '#fdf6f3',
+                }}
+              >
+                <div style={{ fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9a3412' }}>
+                  {c.kind === 'not_suitable_for' ? 'Not suitable for' : c.kind === 'environmental' ? 'Environmental limit' : 'Limitation'}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#1e293b', marginTop: 2, lineHeight: 1.4 }}>{c.value}</div>
+                {c.condition && <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>{c.condition}</div>}
+              </div>
+            ))}
+            {system.system_relationships?.map((r, i) => {
+              const meta = REL_LABELS[r.relation] ?? { label: r.relation, isNegative: false }
+              return (
+                <div
+                  key={`rel-${i}`}
+                  style={{
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: 8,
+                    border: meta.isNegative ? '1px solid #f1d4c8' : '1px solid #d7e5ec',
+                    background: meta.isNegative ? '#fdf6f3' : '#f4f8fa',
+                  }}
+                >
+                  <div style={{ fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: meta.isNegative ? '#9a3412' : '#185D7A' }}>
+                    {meta.label}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a', marginTop: 2 }}>{r.target_name}</div>
+                  {r.reason && <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>{r.reason}</div>}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

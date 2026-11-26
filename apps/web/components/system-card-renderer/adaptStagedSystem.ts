@@ -22,7 +22,43 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+const PACK_UOMS = new Set(['pack', 'box', 'roll', 'carton', 'bag', 'kit', 'tub', 'bucket', 'bundle'])
+const PACK_COUNT_RE =
+  /\b\d+(?:\.\d+)?\s*(?:pcs?|pieces?|lengths?|boards?|clips?|screws?|fasteners?|strips?|sheets?|units?|caps?|m\b|lm\b|metres?|meters?|kg\b|g\b|l\b|ml\b)|\b(?:pack|box|roll|carton|bag|kit|tub)\s+of\s+\d+|\bper\s+(?:pack|box|roll|carton|bag|kit|tub)\b/i
+
+// Enforces customer UOM clarity: pack/box/roll/carton MUST state the piece/length count
+// in its description (e.g. "5 lengths per pack", "250 pieces per box", "50 m per roll"),
+// otherwise display "each" (per piece).
+export function normalizeCustomerUom(opts: {
+  uom: string | null | undefined
+  description?: string | null
+  name?: string | null
+  supplierPackQty?: number | null
+  supplierPackUom?: string | null
+}): { uom: string | null; description: string | null } {
+  const rawUom = (opts.uom ?? '').trim()
+  const desc = (opts.description ?? '').trim() || null
+  if (!rawUom || !PACK_UOMS.has(rawUom.toLowerCase())) {
+    return { uom: rawUom || null, description: desc }
+  }
+  const combined = `${opts.name ?? ''} ${desc ?? ''}`
+  if (PACK_COUNT_RE.test(combined)) {
+    return { uom: rawUom, description: desc }
+  }
+  if (opts.supplierPackQty && opts.supplierPackQty > 0) {
+    const unit = (opts.supplierPackUom ?? 'pieces').trim()
+    const note = `${opts.supplierPackQty} ${unit} per ${rawUom.toLowerCase()}`
+    return { uom: rawUom, description: desc ? `${desc} (${note})` : note }
+  }
+  return { uom: 'each', description: desc }
+}
+
 function adaptComponent(c: VerificationSystemComponent, i: number): SystemCardComponentEntry {
+  const norm = normalizeCustomerUom({
+    uom: c.uom,
+    description: c.description,
+    name: c.name,
+  })
   return {
     id: c.id ?? `staged-comp-${i}`,
     // Staged components have no system "role" label — the category is the
@@ -33,9 +69,9 @@ function adaptComponent(c: VerificationSystemComponent, i: number): SystemCardCo
     components: {
       name: c.name,
       sku: c.sku,
-      description: c.description,
+      description: norm.description,
       category: c.category,
-      uom: c.uom,
+      uom: norm.uom,
       procurement_route: c.procurement_route,
       image_url: c.image_url ?? null,
     },
@@ -90,23 +126,32 @@ export function adaptStagedSystem(
       })),
     system_profiles: [...system.profiles]
       .sort(bySort)
-      .map((p, i) => ({
-        id: p.id ?? `staged-profile-${i}`,
-        profile_name: p.profile_name,
-        name: null,
-        product_code: p.product_code,
-        description: p.description,
-        dimensions: p.dimensions,
-        length_mm: p.length_mm,
-        width_mm: p.width_mm,
-        height_mm: p.height_mm,
-        thickness_mm: p.thickness_mm,
-        uom: p.uom,
-        supplier_pack_qty: p.supplier_pack_qty,
-        supplier_pack_uom: p.supplier_pack_uom,
-        sort_order: p.sort_order ?? i,
-        image_url: p.image_url ?? null,
-      })),
+      .map((p, i) => {
+        const norm = normalizeCustomerUom({
+          uom: p.uom,
+          description: p.description,
+          name: p.profile_name,
+          supplierPackQty: p.supplier_pack_qty,
+          supplierPackUom: p.supplier_pack_uom,
+        })
+        return {
+          id: p.id ?? `staged-profile-${i}`,
+          profile_name: p.profile_name,
+          name: null,
+          product_code: p.product_code,
+          description: norm.description,
+          dimensions: p.dimensions,
+          length_mm: p.length_mm,
+          width_mm: p.width_mm,
+          height_mm: p.height_mm,
+          thickness_mm: p.thickness_mm,
+          uom: norm.uom,
+          supplier_pack_qty: p.supplier_pack_qty,
+          supplier_pack_uom: p.supplier_pack_uom,
+          sort_order: p.sort_order ?? i,
+          image_url: p.image_url ?? null,
+        }
+      }),
     system_components: [...system.components]
       .sort(bySort)
       .map(adaptComponent),

@@ -1052,6 +1052,133 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
       if (job) queuedJobIds.push((job as { id: string }).id)
       addedPdfs.push(pdf)
     }
+
+    // ── 3b) Webpage spec-text fallback when no new PDFs were discovered ─────
+    // Many brand product pages (e.g. Trex AU) publish dimensions, BAL ratings,
+    // warranties, and limitations in HTML rather than direct PDF links. Persist
+    // cleaned page text as `website` document_chunks and queue the identity +
+    // knowledge parsers so specs/constraints still populate (tagged web_extracted).
+    if (autoExtract && addedPdfs.length === 0) {
+      const pageUrlStr = finalUrl.toString()
+      const { data: existingWebSource } = await supabase
+        .from('system_sources')
+        .select('id, source_document_id')
+        .eq('staged_system_id', systemId)
+        .eq('role', 'website')
+        .eq('url', pageUrlStr)
+        .maybeSingle()
+
+      const cleanedText = html
+        .replace(/<(script|style|noscript|svg|nav|footer)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<\/(td|th)>/gi, ' | ')
+        .replace(/<\/(p|div|li|tr|h[1-6]|section|article|dd|dt)>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
+        .replace(/&deg;/gi, '°')
+        .replace(/&times;/gi, '×')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+        .slice(0, 24000)
+
+      if (cleanedText.length >= 400 && !(existingWebSource as { source_document_id?: string | null } | null)?.source_document_id) {
+        const webLabel = `${extracted.title || systemName} — Official Product Page`
+        const { data: webDoc } = await supabase
+          .from('source_documents')
+          .insert({
+            manufacturer_id: manufacturerId,
+            original_filename: `${systemName.replace(/[^\w\-]+/g, '_')}_webpage.html`,
+            document_name: webLabel,
+            document_type: 'website',
+            storage_provider: 'cloudflare_r2',
+            source_url: pageUrlStr,
+            ingest_kind: 'url_fetch',
+            status: 'extracted',
+            uploaded_by: session.user.id,
+          })
+          .select('id')
+          .single()
+
+        if (webDoc) {
+          const webDocId = (webDoc as { id: string }).id
+          await supabase
+            .from('system_sources')
+            .upsert(
+              {
+                manufacturer_id: manufacturerId,
+                staged_system_id: systemId,
+                role: 'website',
+                label: webLabel,
+                url: pageUrlStr,
+                source_document_id: webDocId,
+                ingest_status: 'extracted',
+                include_in_container: true,
+              },
+              { onConflict: 'staged_system_id,role,url' },
+            )
+
+          // Split into ~6,000-char chunks so parsers process cleanly
+          const chunkSize = 6000
+          const webChunks: {
+            source_document_id: string
+            page_number: number
+            chunk_index: number
+            heading: string
+            chunk_type: string
+            raw_text: string
+          }[] = []
+          for (let offset = 0, idx = 0; offset < cleanedText.length; offset += chunkSize, idx += 1) {
+            webChunks.push({
+              source_document_id: webDocId,
+              page_number: idx + 1,
+              chunk_index: idx,
+              heading: `${webLabel} (section ${idx + 1})`,
+              chunk_type: 'specification_table',
+              raw_text: cleanedText.slice(offset, offset + chunkSize),
+            })
+          }
+          if (webChunks.length > 0) {
+            await supabase.from('document_chunks').insert(webChunks)
+            const chainPayload = {
+              manufacturer_id: manufacturerId,
+              manufacturer_name: manufacturerName,
+              staged_system_id: systemId,
+              source_document_id: webDocId,
+              system_name: systemName,
+              dry_run: false,
+            }
+            const { data: webJobs } = await supabase
+              .from('pipeline_jobs')
+              .insert([
+                {
+                  manufacturer_id: manufacturerId,
+                  document_id: webDocId,
+                  job_type: 'system_identity_parser',
+                  status: 'pending',
+                  payload: chainPayload,
+                },
+                {
+                  manufacturer_id: manufacturerId,
+                  document_id: webDocId,
+                  job_type: 'knowledge_parser',
+                  status: 'pending',
+                  payload: chainPayload,
+                },
+              ])
+              .select('id')
+            for (const wj of (webJobs ?? []) as { id: string }[]) {
+              queuedJobIds.push(wj.id)
+            }
+          }
+        }
+      }
+    }
   }
 
   // ── 4) Match profile & component thumbnails (full or item_images) ──────────

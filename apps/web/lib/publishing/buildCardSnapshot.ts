@@ -243,6 +243,65 @@ export async function buildCardSnapshot(
     warnings.push(`Stockists unavailable (${err instanceof Error ? err.message : 'error'}).`)
   }
 
+  // ── Relationships & Negative Constraints (AI schema → customer card). Fails soft. ──
+  try {
+    const { fetchCanonicalSystemBundleById } = await import('@/lib/knowledge/fetchCanonicalKnowledgeData')
+    const { buildApplicationFacts } = await import('@/lib/knowledge/buildSystemKnowledge')
+    const bundle = await fetchCanonicalSystemBundleById(stagedSystemId)
+    if (bundle) {
+      const cardRels = bundle.systemRelationships
+        .map((r) => {
+          const targetName = r.target_staged_system_id
+            ? bundle.relationshipTargets.get(r.target_staged_system_id)?.name ?? null
+            : r.target_external?.name ?? null
+          if (!targetName) return null
+          return {
+            relation: r.relation as NonNullable<SystemCardSystem['system_relationships']>[number]['relation'],
+            target_name: targetName,
+            target_kind: r.target_staged_system_id
+              ? ('internal' as const)
+              : r.target_external?.kind === 'generic_class'
+                ? ('generic_class' as const)
+                : ('product' as const),
+            reason: r.reason ?? null,
+          }
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+      if (cardRels.length > 0) system.system_relationships = cardRels
+
+      const hiddenStatuses = new Set(['disputed', 'not_applicable', 'superseded'])
+      const cardConstraints = buildApplicationFacts(bundle)
+        .filter((f) => {
+          if (hiddenStatuses.has(f.epistemicStatus)) return false
+          const p = f.predicate.toLowerCase()
+          return (
+            p.includes('notsuitable') ||
+            p.includes('limitation') ||
+            f.claimType === 'limitation' ||
+            f.claimType === 'environmental_constraint'
+          )
+        })
+        .map((f) => {
+          const p = f.predicate.toLowerCase()
+          const kind = p.includes('notsuitable')
+            ? ('not_suitable_for' as const)
+            : f.claimType === 'environmental_constraint'
+              ? ('environmental' as const)
+              : ('limitation' as const)
+          return {
+            kind,
+            label: f.label,
+            value: f.value,
+            condition: f.conditions[0] ?? null,
+            source: f.sourceLine ?? null,
+          }
+        })
+      if (cardConstraints.length > 0) system.negative_constraints = cardConstraints
+    }
+  } catch {
+    // Non-fatal — pre-065 environments simply omit these optional sections.
+  }
+
   // ── Sourced-card container (content_md / hash / provenance). Fails soft. ──
   let container: CardContainer | null = null
   try {
