@@ -477,6 +477,7 @@ def handle_docling(job: dict):
     auto_chain_staged_system_id = payload.get("staged_system_id")
     auto_chain_system_name = payload.get("system_name", "")
     auto_chain_dry_run = payload.get("dry_run", False)
+    auto_chain_refresh_unverified = payload.get("refresh_unverified", False)
 
     log: list[str] = []
     progress = {"totalChunks": None, "totalPages": None, "completedChunks": [], "currentChunk": None}
@@ -653,6 +654,7 @@ def handle_docling(job: dict):
             "source_document_id": document_id,
             "system_name": auto_chain_system_name,
             "dry_run": auto_chain_dry_run,
+            "refresh_unverified": auto_chain_refresh_unverified,
         }
         try:
             rows = sb_post("pipeline_jobs", [
@@ -884,6 +886,7 @@ def handle_system_identity_parser(job: dict):
     system_name = payload.get("system_name", "")
     source_document_id = payload["source_document_id"]
     dry_run = payload.get("dry_run", False)
+    refresh_unverified = payload.get("refresh_unverified", False)
 
     log: list[str] = []
 
@@ -902,6 +905,8 @@ def handle_system_identity_parser(job: dict):
     ]
     if dry_run:
         cmd.append("--dry-run")
+    if refresh_unverified:
+        cmd.append("--refresh-unverified")
 
     log_line(f"Running identity parser: {system_name} ({'dry run' if dry_run else 'live'})")
     update_progress(job_id, {"currentStage": "extracting"}, log)

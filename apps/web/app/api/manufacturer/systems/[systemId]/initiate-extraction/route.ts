@@ -45,9 +45,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 })
   }
 
-  const body = (await req.json().catch(() => null)) as { manufacturerId?: string; dryRun?: boolean } | null
+  const body = (await req.json().catch(() => null)) as {
+    manufacturerId?: string
+    dryRun?: boolean
+    forceReextract?: boolean
+  } | null
   const manufacturerId = body?.manufacturerId
   const dryRun = body?.dryRun === true
+  const forceReextract = body?.forceReextract === true
   if (!manufacturerId || !UUID_RE.test(manufacturerId)) {
     return NextResponse.json({ error: 'manufacturerId is required.' }, { status: 400 })
   }
@@ -151,6 +156,49 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
   const enqueuedJobIds: string[] = []
   const skipped: { documentId: string; reason: string }[] = []
 
+  // Clean Re-extract mode: clear ONLY unverified AI-extracted staging rows for this system
+  // before enqueueing fresh Docling (Vision tables) + claude-sonnet-5-5 parser passes.
+  // Never deletes manufacturer-verified/approved rows, field_verifications, photos, or colour swatches.
+  const cleared: Record<string, number> = {}
+  if (forceReextract && !dryRun) {
+    const safeClear = async (label: string, fn: () => PromiseLike<{ count: number | null; error: { message: string } | null }>) => {
+      try {
+        const { count, error } = await fn()
+        if (!error && typeof count === 'number') cleared[label] = count
+      } catch {
+        // Non-fatal on environments without optional tables (e.g. pre-065).
+      }
+    }
+    await safeClear('unverifiedAssertions', () =>
+      supabase
+        .from('knowledge_assertions')
+        .delete({ count: 'exact' })
+        .eq('staged_system_id', systemId)
+        .eq('epistemic_status', 'unverified'),
+    )
+    await safeClear('extractedRelationships', () =>
+      supabase
+        .from('system_relationships')
+        .delete({ count: 'exact' })
+        .eq('staged_system_id', systemId)
+        .in('epistemic_status', ['unverified', 'document_extracted']),
+    )
+    await safeClear('pendingProfiles', () =>
+      supabase
+        .from('staged_system_profiles')
+        .delete({ count: 'exact' })
+        .eq('staged_system_id', systemId)
+        .eq('verification_status', 'pending_review'),
+    )
+    await safeClear('pendingComponents', () =>
+      supabase
+        .from('staged_system_components')
+        .delete({ count: 'exact' })
+        .eq('staged_system_id', systemId)
+        .eq('verification_status', 'pending_review'),
+    )
+  }
+
   for (const { documentId, doc } of chunkableDocs) {
     const { count: chunkCount } = await supabase
       .from('document_chunks')
@@ -164,9 +212,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
       source_document_id: documentId,
       system_name: systemName,
       dry_run: dryRun,
+      refresh_unverified: forceReextract,
     }
 
-    if (chunkCount && chunkCount > 0) {
+    // When forceReextract is enabled and the PDF is in R2, re-run Docling first so
+    // the new Vision table transcription replaces any older mangled text chunks.
+    const shouldRechunkPdf = forceReextract && Boolean(doc?.storage_key)
+
+    if (!shouldRechunkPdf && chunkCount && chunkCount > 0) {
       // Already chunked (a prior extraction ran on this document) — go
       // straight to both parser passes, no need to re-run Docling.
       const { data: rows, error } = await supabase
@@ -201,9 +254,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
       continue
     }
 
-    // Not yet chunked — enqueue Docling with auto_chain so the worker
-    // enqueues both parser jobs itself once chunks exist (pipeline_worker.py
-    // handle_docling's auto_chain block).
+    // Not yet chunked (or Clean Re-extract forcing Vision re-chunk) — enqueue Docling with
+    // auto_chain so the worker enqueues both parser jobs itself once fresh chunks exist.
     const { data: job, error } = await supabase
       .from('pipeline_jobs')
       .insert({
@@ -222,6 +274,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
           staged_system_id: systemId,
           system_name: systemName,
           dry_run: dryRun,
+          refresh_unverified: forceReextract,
         },
       })
       .select('id')
@@ -241,5 +294,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sys
     )
   }
 
-  return NextResponse.json({ ok: true, jobStarted: true, jobIds: enqueuedJobIds, skipped })
+  return NextResponse.json({
+    ok: true,
+    jobStarted: true,
+    jobIds: enqueuedJobIds,
+    skipped,
+    ...(forceReextract ? { forceReextract: true, cleared } : {}),
+  })
 }

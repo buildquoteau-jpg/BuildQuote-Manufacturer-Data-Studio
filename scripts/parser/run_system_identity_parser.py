@@ -370,12 +370,26 @@ VALID_DECK_TYPES = {
 }
 
 
-def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source_document_id: str, existing_system: dict, system_name: str = "") -> dict:
-    # Only fill fields the system doesn't already have a value for — never
-    # clobber a prior extraction or a manufacturer's own edit.
+def build_plan(
+    merged: dict,
+    manufacturer_id: str,
+    staged_system_id: str,
+    source_document_id: str,
+    existing_system: dict,
+    system_name: str = "",
+    refresh_unverified: bool = False,
+    protected_fields: set[str] | None = None,
+) -> dict:
+    # By default, only fill fields the system doesn't already have a value for.
+    # With refresh_unverified=True (Clean Re-extract), allow updating unverified
+    # AI-extracted scalar fields while NEVER clobbering manufacturer-verified or
+    # manually-edited fields (protected_fields from field_verifications).
+    protected = protected_fields or set()
     system_update = {}
     for f in SCALAR_SYSTEM_FIELDS:
-        if existing_system.get(f) is None or existing_system.get(f) == "":
+        is_empty = existing_system.get(f) is None or existing_system.get(f) == ""
+        can_refresh = refresh_unverified and f not in protected
+        if is_empty or can_refresh:
             val = merged.get(f)
             if f == "deck_type" and isinstance(val, str):
                 val = val.strip().lower().replace("_", "-")
@@ -389,14 +403,37 @@ def build_plan(merged: dict, manufacturer_id: str, staged_system_id: str, source
             system_update["slug"] = slug
 
     existing_attrs = existing_system.get("custom_technical_attributes") or []
-    existing_attr_labels = {_norm(a.get("label")) for a in existing_attrs}
-    new_attrs = [
-        {"label": a["label"], "value": a["value"]}
-        for a in merged["attributes"]
-        if a.get("label") and a.get("value") and _norm(a["label"]) not in existing_attr_labels
-    ]
-    if new_attrs:
-        system_update["custom_technical_attributes"] = existing_attrs + new_attrs
+    if refresh_unverified and "custom_technical_attributes" not in protected:
+        # Refresh matching attribute values from the new extraction while preserving any extra labels.
+        attr_map: dict[str, dict] = {}
+        attr_order: list[str] = []
+        for a in existing_attrs:
+            k = _norm(a.get("label"))
+            if k and a.get("value"):
+                attr_map[k] = {"label": a["label"], "value": a["value"]}
+                attr_order.append(k)
+        changed = False
+        for a in merged["attributes"]:
+            k = _norm(a.get("label"))
+            if not k or not a.get("value"):
+                continue
+            if k not in attr_map:
+                attr_order.append(k)
+                changed = True
+            elif attr_map[k].get("value") != a["value"]:
+                changed = True
+            attr_map[k] = {"label": a["label"], "value": a["value"]}
+        if changed:
+            system_update["custom_technical_attributes"] = [attr_map[k] for k in attr_order]
+    else:
+        existing_attr_labels = {_norm(a.get("label")) for a in existing_attrs}
+        new_attrs = [
+            {"label": a["label"], "value": a["value"]}
+            for a in merged["attributes"]
+            if a.get("label") and a.get("value") and _norm(a["label"]) not in existing_attr_labels
+        ]
+        if new_attrs:
+            system_update["custom_technical_attributes"] = existing_attrs + new_attrs
 
     profiles = []
     for i, p in enumerate(merged["profiles"]):
@@ -595,6 +632,11 @@ def main():
     parser.add_argument("--system-name", default="")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--refresh-unverified",
+        action="store_true",
+        help="Update unverified scalar/attribute fields on staged_systems while preserving approved/edited field_verifications",
+    )
     parser.add_argument("--from-plan", default=None, help="Skip extraction: write a previously saved plan JSON")
     args = parser.parse_args()
 
@@ -687,7 +729,29 @@ def main():
             f"rejected_other_product={merged.get('rejected_other_product', 0)}"
         )
 
-        plan = build_plan(merged, args.manufacturer_id, args.staged_system_id, args.source_document_id, existing_system, system_name)
+        protected_fields: set[str] = set()
+        if args.refresh_unverified:
+            try:
+                fv_rows = sb_get(
+                    supabase_url, headers, "field_verifications",
+                    f"entity_type=eq.system&entity_id=eq.{args.staged_system_id}&status=in.(approved,edited)&select=field_name",
+                )
+                protected_fields = {r["field_name"] for r in fv_rows if r.get("field_name")}
+                print(f"[identity-parser] refresh-unverified mode: protecting {len(protected_fields)} verified/edited field(s)")
+            except Exception as e:
+                print(f"[identity-parser] warning: could not read field_verifications ({e}); falling back to fill-empty-only")
+                args.refresh_unverified = False
+
+        plan = build_plan(
+            merged,
+            args.manufacturer_id,
+            args.staged_system_id,
+            args.source_document_id,
+            existing_system,
+            system_name,
+            refresh_unverified=args.refresh_unverified,
+            protected_fields=protected_fields,
+        )
 
         DRY_RUN_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

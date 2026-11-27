@@ -321,14 +321,14 @@ export function SetupFlowClient({
     }
   }
 
-  async function startExtraction() {
+  async function startExtraction(forceReextract = false) {
     setExtraction('starting')
     setExtractionError(null)
     try {
       const res = await fetch(`/api/manufacturer/systems/${systemId}/initiate-extraction`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manufacturerId }),
+        body: JSON.stringify({ manufacturerId, forceReextract }),
       })
       const data = await res.json()
       if (!res.ok) { setExtraction('error'); setExtractionError(data.error ?? 'Could not start extraction.'); return }
@@ -554,7 +554,7 @@ export function SetupFlowClient({
               </Link>
               <button
                 type="button"
-                onClick={startExtraction}
+                onClick={() => startExtraction(false)}
                 disabled={!canExtract}
                 style={{
                   fontSize: '0.8rem', fontWeight: 600, color: 'var(--ds-text-muted)',
@@ -563,6 +563,19 @@ export function SetupFlowClient({
                 }}
               >
                 Re-run extraction
+              </button>
+              <button
+                type="button"
+                onClick={() => startExtraction(true)}
+                disabled={!canExtract}
+                title="Re-scans PDFs with Vision table transcription and refreshes unverified AI fields, profiles, components & assertions. Keeps approved/edited fields, photos, and colour swatches safe."
+                style={{
+                  fontSize: '0.8rem', fontWeight: 700, color: '#185D7A',
+                  background: '#f0f9ff', border: '1px solid rgba(24,93,122,0.35)',
+                  borderRadius: 8, padding: '9px 14px', cursor: canExtract ? 'pointer' : 'default',
+                }}
+              >
+                Clean re-extract (Vision + refresh unverified)
               </button>
             </div>
           </>
@@ -575,7 +588,7 @@ export function SetupFlowClient({
             </p>
             <button
               type="button"
-              onClick={startExtraction}
+              onClick={() => startExtraction(false)}
               disabled={!canExtract}
               style={{
                 fontSize: '0.88rem', fontWeight: 700, color: '#fff',
