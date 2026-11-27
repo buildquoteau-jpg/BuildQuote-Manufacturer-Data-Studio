@@ -20,6 +20,7 @@ export type FieldVerificationRow = {
 
 export type ParserEvidenceRow = {
   field_name: string
+  extracted_value?: string | null
   source_document_id: string | null
   source_page_number: number | null
   source_chunk_id: string | null
@@ -298,7 +299,7 @@ export async function fetchCanonicalSystemBundle(
     try {
       const { data } = await supabase
         .from('parser_field_evidence')
-        .select('field_name, source_document_id, source_page_number, source_chunk_id, confidence, is_uncertain, parser_note, created_at')
+        .select('field_name, extracted_value, source_document_id, source_page_number, source_chunk_id, confidence, is_uncertain, parser_note, created_at')
         .eq('entity_type', 'staged_system')
         .eq('entity_id', systemId)
         .order('created_at', { ascending: false })
